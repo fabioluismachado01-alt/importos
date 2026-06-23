@@ -350,7 +350,7 @@ export function RecompraView({ workspaceId = 'default' }: { workspaceId?: string
                         onChange={e => setProduto(prod.id, 'nome', e.target.value)}
                         className="text-base font-black text-slate-900 bg-transparent border-b border-transparent hover:border-slate-200 focus:border-emerald-400 focus:outline-none w-full"
                       />
-                      <button onClick={() => removeProduto(prod.id)} className="text-slate-300 hover:text-red-400 transition-colors shrink-0">
+                      <button onClick={() => removeProduto(prod.id)} title="Remover produto" className="text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg p-1 transition-colors shrink-0">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
