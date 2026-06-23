@@ -3,7 +3,7 @@ import { getIronSession } from 'iron-session'
 import { SESSION_OPTIONS } from '@/lib/auth'
 import type { SessionData } from '@/types/auth'
 
-const PUBLIC_PATHS = ['/login', '/api/auth', '/api/ml-proxy', '/api/ml/callback']
+const PUBLIC_PATHS = ['/login', '/api/auth', '/api/ml-proxy', '/api/ml/callback', '/api/ping']
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
