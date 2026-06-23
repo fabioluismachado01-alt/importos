@@ -487,7 +487,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais }
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-black text-slate-800">Pedidos</h1>
+          <h1 className="text-xl font-black text-slate-800">Vendas</h1>
           <p className="text-xs text-slate-400 mt-0.5">
             {filtrados.length} pedidos · imposto {pct(aliquotaSimples * 100)}
             {isPending && <span className="ml-2 text-emerald-500 animate-pulse">sincronizando...</span>}
@@ -533,7 +533,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais }
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {/* Pedidos */}
         <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Pedidos</p>
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Vendas</p>
           <p className="text-sm font-black mt-0.5 text-slate-800">{vis >= 3 ? '█' : filtrados.length}</p>
           <Delta atual={filtrados.length} anterior={antVendas} />
         </div>

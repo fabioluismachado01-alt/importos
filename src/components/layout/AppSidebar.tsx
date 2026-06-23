@@ -39,7 +39,7 @@ const NAV_ITEMS: NavItem[] = [
     icon: ShoppingBag,
     children: [
       { href: '/marketplaces', label: 'Contas Conectadas' },
-      { href: '/marketplaces/pedidos', label: 'Pedidos' },
+      { href: '/marketplaces/pedidos', label: 'Vendas' },
       { href: '/marketplaces/curva-abc', label: 'Curva ABC' },
     ],
   },

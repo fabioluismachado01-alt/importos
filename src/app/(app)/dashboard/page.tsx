@@ -204,7 +204,7 @@ export default async function DashboardPage() {
           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Acesso Rápido</p>
 
           {[
-            { href: '/marketplaces/pedidos', label: 'Pedidos',           desc: 'ML, Shopee e demais canais',      Icon: ShoppingBag, color: 'bg-emerald-500' },
+            { href: '/marketplaces/pedidos', label: 'Vendas',           desc: 'ML, Shopee e demais canais',      Icon: ShoppingBag, color: 'bg-emerald-500' },
             { href: '/faturamento',          label: 'Faturamento',       desc: 'Receitas, DAS e despesas',        Icon: DollarSign,  color: 'bg-blue-500' },
             { href: '/vendas',               label: 'Análise de Vendas', desc: 'Importar relatórios dos canais',  Icon: BarChart3,   color: 'bg-violet-500' },
             { href: '/produtos',             label: 'Produtos / SKUs',   desc: 'Catálogo com custos e margens',   Icon: Package,     color: 'bg-amber-500' },

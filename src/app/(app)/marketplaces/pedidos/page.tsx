@@ -4,7 +4,7 @@ import { AutoRefresh } from '@/components/AutoRefresh'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Pedidos — ImportOS',
+  title: 'Vendas — ImportOS',
   description: 'Pedidos do Mercado Livre sincronizados via API.',
 }
 
