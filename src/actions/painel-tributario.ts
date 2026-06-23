@@ -86,8 +86,11 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
   const mesRef = fatAtual?.mes ?? mesAtual
   const faturamentoMes = fatAtual?.receita_total ?? 0
   const regime = empresa?.regime_tributario ?? null
+  const isSimples = regime?.toLowerCase().includes('simples') ?? false
   const anexoSimples: AnexoSimples = 'comercio'
-  const aliquotaSimples = empresa?.aliquota_simples ?? 0.06
+  // aliquota_simples pode ser 6.0 (%) ou 0.06 (decimal) dependendo do cliente
+  const rawAliq = empresa?.aliquota_simples ?? 6
+  const aliquotaSimples = rawAliq > 1 ? rawAliq / 100 : rawAliq
 
   // RBT12 — soma dos 12 meses anteriores ao mês de referência
   const histOrdenado = [...historico].sort((a, b) =>
@@ -100,7 +103,7 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
 
   function estimarDAS(fat: number, rbt: number): number {
     if (!fat) return 0
-    if (regime !== 'simples') return fat * aliquotaSimples
+    if (!isSimples) return fat * aliquotaSimples
     const res = calcularSimples({ faturamentoMes: fat, rbt12: rbt > 0 ? rbt : fat * 12, anexo: anexoSimples })
     return res.ok ? res.valorDAS : fat * aliquotaSimples
   }

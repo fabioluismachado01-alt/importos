@@ -61,7 +61,7 @@ const NAV_ITEMS: NavItem[] = [
       { href: '/ferramentas/documentacao', label: 'Documentação' },
     ],
   },
-  { href: '/central', label: 'Central de Operações', icon: Sigma },
+  { href: '/central', label: 'Central de Importação', icon: Sigma },
 ]
 
 const BOTTOM_ITEMS: NavItem[] = [
