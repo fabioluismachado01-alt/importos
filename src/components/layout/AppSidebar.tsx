@@ -102,6 +102,14 @@ export function AppSidebar() {
   const { mobileOpen, setMobileOpen } = useSidebar()
   const [collapsed, setCollapsed] = useState(false)
   const [expanded, setExpanded] = useState<string[]>(['/faturamento', '/ferramentas'])
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY)
@@ -135,28 +143,29 @@ export function AppSidebar() {
     return item.children?.some(c => pathname.startsWith(c.href)) ?? false
   }
 
-  function renderItem(item: NavItem) {
+  function renderItem(item: NavItem, forceFull = false) {
     const Icon = item.icon
     const active = isActive(item.href)
     const groupActive = isGroupActive(item)
-    const isExpanded = expanded.includes(item.href) && !collapsed
+    const isCol = collapsed && !forceFull
+    const isExpanded = expanded.includes(item.href) && !isCol
 
     if (item.children) {
       return (
         <div key={item.href}>
           <button
             onClick={() => toggleExpand(item.href)}
-            title={collapsed ? item.label : undefined}
+            title={isCol ? item.label : undefined}
             className={cn(
               'w-full flex items-center gap-3 rounded-xl text-sm font-semibold transition-all',
-              collapsed ? 'px-2 py-2.5 justify-center' : 'px-3 py-2.5',
+              isCol ? 'px-2 py-2.5 justify-center' : 'px-3 py-2.5',
               groupActive
                 ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
                 : 'text-slate-400 hover:bg-slate-800 hover:text-white'
             )}
           >
             <Icon className="w-4 h-4 shrink-0" />
-            {!collapsed && (
+            {!isCol && (
               <>
                 <span className="flex-1 text-left">{item.label}</span>
                 {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
@@ -184,16 +193,16 @@ export function AppSidebar() {
 
     return (
       <Link key={item.href} href={item.href}
-        title={collapsed ? item.label : undefined}
+        title={isCol ? item.label : undefined}
         className={cn(
           'flex items-center gap-3 rounded-xl text-sm font-semibold transition-all',
-          collapsed ? 'px-2 py-2.5 justify-center' : 'px-3 py-2.5',
+          isCol ? 'px-2 py-2.5 justify-center' : 'px-3 py-2.5',
           active
             ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
             : 'text-slate-400 hover:bg-slate-800 hover:text-white'
         )}>
         <Icon className="w-4 h-4 shrink-0" />
-        {!collapsed && item.label}
+        {!isCol && item.label}
       </Link>
     )
   }
@@ -252,12 +261,12 @@ export function AppSidebar() {
 
       {/* Nav principal */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto overflow-x-hidden">
-        {NAV_ITEMS.map(item => renderItem(item))}
+        {NAV_ITEMS.map(item => renderItem(item, isMobile))}
       </nav>
 
       {/* Bottom */}
       <div className="p-3 border-t border-slate-800 space-y-1">
-        {BOTTOM_ITEMS.map(item => renderItem(item))}
+        {BOTTOM_ITEMS.map(item => renderItem(item, isMobile))}
 
         {/* Botão colapsar — só desktop */}
         <button
