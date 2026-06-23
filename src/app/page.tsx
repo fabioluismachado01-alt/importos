@@ -125,7 +125,7 @@ export default function LandingPage() {
 
         {/* Marketplace badges */}
         <div className="max-w-3xl mx-auto mt-16 text-center">
-          <p className="text-zinc-500 text-sm mb-4 uppercase tracking-widest">Integrado com</p>
+          <p className="text-zinc-500 text-sm mb-4 uppercase tracking-widest">Compatível com</p>
           <div className="flex flex-wrap gap-3 justify-center">
             {marketplaces.map((m) => (
               <span key={m} className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-sm px-4 py-2 rounded-full">
