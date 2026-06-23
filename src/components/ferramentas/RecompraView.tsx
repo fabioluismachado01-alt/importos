@@ -43,11 +43,11 @@ const DEFAULT_LEAD: LeadTimeParams = {
 }
 
 const INITIAL_PRODUTOS: Produto[] = [
-  { id: 1, nome: 'Cadeira Gamer Pro RGB',        estoqueAtual: 48,  estoqueSeguranca: 15, vendasDia: 6.5, modalidade: 'maritimo'    },
-  { id: 2, nome: 'Headset Gamer 7.1 Surround',   estoqueAtual: 92,  estoqueSeguranca: 25, vendasDia: 11,  modalidade: 'maritimo'    },
-  { id: 3, nome: 'Webcam Full HD Ring Light',     estoqueAtual: 135, estoqueSeguranca: 30, vendasDia: 13,  modalidade: 'simplificada' },
-  { id: 4, nome: 'Hub USB-C 7 em 1',             estoqueAtual: 210, estoqueSeguranca: 40, vendasDia: 16,  modalidade: 'simplificada' },
-  { id: 5, nome: 'Mesa Gamer LED RGB 120×60cm',  estoqueAtual: 31,  estoqueSeguranca: 10, vendasDia: 4.5, modalidade: 'maritimo'    },
+  { id: 1, nome: 'Cadeira Gamer Pro RGB',        estoqueAtual: 135, estoqueSeguranca: 15, vendasDia: 1.5, modalidade: 'maritimo'    },
+  { id: 2, nome: 'Headset Gamer 7.1 Surround',   estoqueAtual: 275, estoqueSeguranca: 25, vendasDia: 2.5, modalidade: 'maritimo'    },
+  { id: 3, nome: 'Webcam Full HD Ring Light',     estoqueAtual: 261, estoqueSeguranca: 30, vendasDia: 3.0, modalidade: 'simplificada' },
+  { id: 4, nome: 'Hub USB-C 7 em 1',             estoqueAtual: 196, estoqueSeguranca: 40, vendasDia: 4.0, modalidade: 'simplificada' },
+  { id: 5, nome: 'Mesa Gamer LED RGB 120×60cm',  estoqueAtual: 122, estoqueSeguranca: 10, vendasDia: 1.2, modalidade: 'maritimo'    },
 ]
 
 // ─── Cálculo ──────────────────────────────────────────────────────────────────
