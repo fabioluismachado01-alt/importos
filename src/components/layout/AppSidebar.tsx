@@ -101,7 +101,7 @@ export function AppSidebar() {
   const pathname = usePathname()
   const { mobileOpen, setMobileOpen } = useSidebar()
   const [collapsed, setCollapsed] = useState(false)
-  const [expanded, setExpanded] = useState<string[]>(['/faturamento', '/ferramentas'])
+  const [expanded, setExpanded] = useState<string[]>([])
   const [isMobile, setIsMobile] = useState(false)
 
   useEffect(() => {
@@ -114,7 +114,13 @@ export function AppSidebar() {
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved === 'true') setCollapsed(true)
-  }, [])
+    // Expande automaticamente o grupo da rota atual
+    const allItems = [...NAV_ITEMS, ...BOTTOM_ITEMS]
+    const active = allItems.find(item =>
+      item.children?.some(c => pathname.startsWith(c.href))
+    )
+    if (active) setExpanded([active.href])
+  }, [pathname])
 
   // Fecha sidebar mobile ao mudar de rota
   useEffect(() => { setMobileOpen(false) }, [pathname, setMobileOpen])
