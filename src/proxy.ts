@@ -8,6 +8,11 @@ const PUBLIC_PATHS = ['/login', '/api/auth', '/api/ml-proxy', '/api/ml/callback'
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // Landing page pública
+  if (pathname === '/') {
+    return NextResponse.next()
+  }
+
   // Rotas públicas sempre passam
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next()
