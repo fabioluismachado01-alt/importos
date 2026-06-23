@@ -27,7 +27,7 @@ export async function saveProduto(data: {
   sku_interno?: string
   custo_brl?: number
   descricao?: string
-  // campos opcionais que ainda existem no schema mas não usamos na UI simplificada
+  ncm?: string
   custo_medio_usd?: number
   peso_medio_kg?: number
   fornecedor_id?: string
@@ -40,6 +40,7 @@ export async function saveProduto(data: {
     sku_interno: data.sku_interno ?? null,
     custo_brl: data.custo_brl ?? null,
     descricao: data.descricao ?? null,
+    ncm: data.ncm ?? null,
   }
 
   if (data.id) {

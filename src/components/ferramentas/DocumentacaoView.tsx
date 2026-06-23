@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useTransition } from 'react'
 import { usePersistedState } from '@/hooks/usePersistedState'
 import { cn } from '@/lib/utils'
-import { Plus, Trash2, Printer, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Trash2, Printer, ChevronDown, ChevronUp, Building2, Search, Save, X } from 'lucide-react'
+import { getFornecedores, saveFornecedor, deleteFornecedor, getProdutoPorSku } from '@/actions/fornecedores'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -146,6 +147,8 @@ function G2({ children }: { children: React.ReactNode }) {
 
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
+type FornDB = { id: string; nome_empresa: string; contato: string | null; email: string | null; endereco: string | null; pais: string }
+
 export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: string }) {
   const [docType,   setDocType]   = usePersistedState<DocType>(`${workspaceId}_doc_type`, 'PI')
   const [mode,      setMode]      = usePersistedState<ImportMode>(`${workspaceId}_doc_mode`, 'simplified')
@@ -155,6 +158,92 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
   const [bank,      setBank]      = usePersistedState<BankDetails>(`${workspaceId}_doc_bank`, DEFAULT_BANK)
   const [items,     setItems]     = usePersistedState<DocItem[]>(`${workspaceId}_doc_items`, [{ ...DEFAULT_ITEM(), id: 1, qtyCtns: 100, unitPerCtn: 1, productName: 'SMARTWATCH ULTRA', description: 'DIGITAL SMART WATCH BRACELET', price: 12.50, hsCode: '9102.12.00', ncmCode: '9102.12.00' }])
   const [logistics, setLogistics] = usePersistedState<SimplifiedLogistics>(`${workspaceId}_doc_logistics`, { totalNetW: 0, totalGrossW: 0, totalVolumes: 0 })
+
+  // ── Fornecedores ──────────────────────────────────────────────────────────
+  const [fornecedores, setFornecedores] = useState<FornDB[]>([])
+  const [showFornModal, setShowFornModal] = useState(false)
+  const [editingForn, setEditingForn] = useState<Partial<FornDB> | null>(null)
+  const [fornMsg, setFornMsg] = useState('')
+  const [isPending, startTransition] = useTransition()
+
+  useEffect(() => {
+    getFornecedores().then(setFornecedores)
+  }, [])
+
+  function carregarFornecedor(f: FornDB) {
+    setSupplier(p => ({
+      ...p,
+      name: f.nome_empresa,
+      address: f.endereco ?? '',
+      contact: f.contato ?? '',
+      email: f.email ?? '',
+      originCountry: f.pais ?? 'CHINA',
+    }))
+  }
+
+  function abrirNovoForn() {
+    setEditingForn({ nome_empresa: '', contato: '', email: '', endereco: '', pais: 'CHINA' })
+    setFornMsg('')
+    setShowFornModal(true)
+  }
+
+  function salvarFornecedorAtual() {
+    const f: Partial<FornDB> = {
+      nome_empresa: supplier.name,
+      contato: supplier.contact,
+      email: supplier.email,
+      endereco: supplier.address,
+      pais: supplier.originCountry || 'CHINA',
+    }
+    setEditingForn(f)
+    setFornMsg('')
+    setShowFornModal(true)
+  }
+
+  function submitForn() {
+    if (!editingForn?.nome_empresa?.trim()) { setFornMsg('Nome obrigatório'); return }
+    startTransition(async () => {
+      try {
+        await saveFornecedor({ id: editingForn.id, nome_empresa: editingForn.nome_empresa!, contato: editingForn.contato ?? '', email: editingForn.email ?? '', endereco: editingForn.endereco ?? '', pais: editingForn.pais ?? 'CHINA' })
+        const lista = await getFornecedores()
+        setFornecedores(lista)
+        setShowFornModal(false)
+        setEditingForn(null)
+      } catch (e: unknown) {
+        setFornMsg(e instanceof Error ? e.message : 'Erro ao salvar')
+      }
+    })
+  }
+
+  function excluirForn(id: string) {
+    startTransition(async () => {
+      await deleteFornecedor(id)
+      setFornecedores(await getFornecedores())
+    })
+  }
+
+  // ── SKU Lookup ────────────────────────────────────────────────────────────
+  const [skuSearch, setSkuSearch] = useState<Record<number, string>>({})
+  const [skuLoading, setSkuLoading] = useState<Record<number, boolean>>({})
+
+  async function buscarSku(itemId: number, sku: string) {
+    setSkuSearch(p => ({ ...p, [itemId]: sku }))
+    if (sku.length < 3) return
+    setSkuLoading(p => ({ ...p, [itemId]: true }))
+    const prod = await getProdutoPorSku(sku)
+    setSkuLoading(p => ({ ...p, [itemId]: false }))
+    if (prod) {
+      setItems(prev => prev.map(i => i.id === itemId ? {
+        ...i,
+        code: sku,
+        productName: prod.nome.toUpperCase(),
+        description: prod.descricao?.toUpperCase() ?? '',
+        ncmCode: prod.ncm ?? '',
+        hsCode: prod.ncm ?? '',
+      } : i))
+      setSkuSearch(p => ({ ...p, [itemId]: '' }))
+    }
+  }
 
   function setSup<K extends keyof Supplier>(k: K, v: string) { setSupplier(p => ({ ...p, [k]: v })) }
   function setImp<K extends keyof Importer>(k: K, v: string) { setImporter(p => ({ ...p, [k]: v })) }
@@ -262,6 +351,27 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
 
             {/* 01. Exportador */}
             <FormSection title="01 · Exportador (Supplier)" accent="blue" collapsible>
+              {/* Atalhos de fornecedor */}
+              <div className="flex gap-1.5 flex-wrap">
+                {fornecedores.map(f => (
+                  <button key={f.id} onClick={() => carregarFornecedor(f)}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 border border-blue-200 text-[9px] font-bold text-blue-700 hover:bg-blue-100 transition-all max-w-[120px] truncate"
+                    title={f.nome_empresa}>
+                    <Building2 className="w-2.5 h-2.5 shrink-0" />
+                    <span className="truncate">{f.nome_empresa}</span>
+                  </button>
+                ))}
+                <button onClick={abrirNovoForn}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg border border-dashed border-blue-300 text-[9px] font-bold text-blue-500 hover:border-blue-500 transition-all">
+                  <Plus className="w-2.5 h-2.5" /> Novo
+                </button>
+                {supplier.name && (
+                  <button onClick={salvarFornecedorAtual}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-[9px] font-bold text-emerald-700 hover:bg-emerald-100 transition-all">
+                    <Save className="w-2.5 h-2.5" /> Salvar atual
+                  </button>
+                )}
+              </div>
               <div><FL>Exporter Name</FL><FI value={supplier.name} onChange={v => setSup('name', v)} /></div>
               <div><FL>Address</FL><FI value={supplier.address} onChange={v => setSup('address', v)} /></div>
               <G2>
@@ -300,9 +410,25 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
                       <Trash2 className="w-3 h-3" />
                     </button>
                     <p className="text-[8px] font-black text-slate-400 uppercase">Item {idx + 1}</p>
+                    {/* SKU Lookup */}
+                    <div className="relative">
+                      <FL>Buscar por SKU do catálogo</FL>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Digite o SKU e pressione Enter..."
+                          value={skuSearch[item.id] ?? ''}
+                          onChange={e => setSkuSearch(p => ({ ...p, [item.id]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter') buscarSku(item.id, skuSearch[item.id] ?? '') }}
+                          className="w-full pl-7 pr-2 py-1.5 rounded-lg border border-slate-200 text-[11px] focus:outline-none focus:border-emerald-500 bg-emerald-50/40"
+                        />
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                        {skuLoading[item.id] && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] text-emerald-600 font-bold">buscando...</span>}
+                      </div>
+                    </div>
                     <G2>
                       {mode === 'formal' && <div><FL>CTN Range</FL><FI value={item.ctnRange} onChange={v => setItem(item.id, 'ctnRange', v)} className="bg-blue-50" /></div>}
-                      <div><FL>Prod Code</FL><FI value={item.code} onChange={v => setItem(item.id, 'code', v)} /></div>
+                      <div><FL>Prod Code / SKU</FL><FI value={item.code} onChange={v => setItem(item.id, 'code', v)} /></div>
                     </G2>
                     <div><FL>Product Name *</FL><FI value={item.productName} onChange={v => setItem(item.id, 'productName', v)} className="font-bold uppercase" /></div>
                     <div><FL>Product Description</FL><FI value={item.description} onChange={v => setItem(item.id, 'description', v)} className="uppercase" /></div>
@@ -418,6 +544,79 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
           </div>
         </div>
       </div>
+
+      {/* ── Modal Fornecedor ── */}
+      {showFornModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-black text-slate-800 text-sm">
+                {editingForn?.id ? 'Editar Fornecedor' : 'Salvar Fornecedor'}
+              </h2>
+              <button onClick={() => setShowFornModal(false)}><X className="w-4 h-4 text-slate-400" /></button>
+            </div>
+
+            {/* Lista de salvos */}
+            {fornecedores.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Fornecedores Salvos ({fornecedores.length}/5)</p>
+                {fornecedores.map(f => (
+                  <div key={f.id} className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
+                    <Building2 className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-slate-800 truncate">{f.nome_empresa}</p>
+                      <p className="text-[9px] text-slate-400 truncate">{f.pais} {f.contato ? `· ${f.contato}` : ''}</p>
+                    </div>
+                    <button onClick={() => { setEditingForn(f); setFornMsg('') }}
+                      className="text-[9px] font-bold text-blue-600 hover:text-blue-800 shrink-0">Editar</button>
+                    <button onClick={() => excluirForn(f.id)}
+                      className="text-[9px] font-bold text-red-500 hover:text-red-700 shrink-0">Excluir</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Form novo/edição */}
+            <div className="space-y-2 border-t border-slate-100 pt-3">
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                {editingForn?.id ? 'Editando' : 'Novo Fornecedor'}
+              </p>
+              <div>
+                <FL>Nome da Empresa *</FL>
+                <input value={editingForn?.nome_empresa ?? ''} onChange={e => setEditingForn(p => ({ ...p!, nome_empresa: e.target.value }))}
+                  className="w-full px-2 py-1.5 rounded-lg border border-slate-200 text-[11px] focus:outline-none focus:border-emerald-500" />
+              </div>
+              <G2>
+                <div>
+                  <FL>Contato</FL>
+                  <input value={editingForn?.contato ?? ''} onChange={e => setEditingForn(p => ({ ...p!, contato: e.target.value }))}
+                    className="w-full px-2 py-1.5 rounded-lg border border-slate-200 text-[11px] focus:outline-none focus:border-emerald-500" />
+                </div>
+                <div>
+                  <FL>País</FL>
+                  <input value={editingForn?.pais ?? 'CHINA'} onChange={e => setEditingForn(p => ({ ...p!, pais: e.target.value }))}
+                    className="w-full px-2 py-1.5 rounded-lg border border-slate-200 text-[11px] focus:outline-none focus:border-emerald-500" />
+                </div>
+              </G2>
+              <div>
+                <FL>Endereço</FL>
+                <input value={editingForn?.endereco ?? ''} onChange={e => setEditingForn(p => ({ ...p!, endereco: e.target.value }))}
+                  className="w-full px-2 py-1.5 rounded-lg border border-slate-200 text-[11px] focus:outline-none focus:border-emerald-500" />
+              </div>
+              <div>
+                <FL>E-mail</FL>
+                <input type="email" value={editingForn?.email ?? ''} onChange={e => setEditingForn(p => ({ ...p!, email: e.target.value }))}
+                  className="w-full px-2 py-1.5 rounded-lg border border-slate-200 text-[11px] focus:outline-none focus:border-emerald-500" />
+              </div>
+              {fornMsg && <p className="text-[10px] text-red-600 font-bold">{fornMsg}</p>}
+              <button onClick={submitForn} disabled={isPending}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all">
+                {isPending ? 'Salvando...' : 'Salvar Fornecedor'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

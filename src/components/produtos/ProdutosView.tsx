@@ -37,7 +37,7 @@ export function ProdutosView({ produtos: inicial }: Props) {
     )
   })
 
-  async function handleSave(data: { id?: string; nome: string; sku_interno: string; custo_brl: number; descricao?: string }) {
+  async function handleSave(data: { id?: string; nome: string; sku_interno: string; custo_brl: number; descricao?: string; ncm?: string }) {
     setLoading(true)
     try {
       await saveProduto({
@@ -46,6 +46,7 @@ export function ProdutosView({ produtos: inicial }: Props) {
         sku_interno: data.sku_interno,
         custo_brl: data.custo_brl,
         descricao: data.descricao,
+        ncm: data.ncm,
       })
       window.location.reload()
     } finally {
@@ -167,13 +168,14 @@ export function ProdutosView({ produtos: inicial }: Props) {
 function ProdutoModal({ produto, onClose, onSave, loading }: {
   produto: Produto | null
   onClose: () => void
-  onSave: (data: { id?: string; nome: string; sku_interno: string; custo_brl: number; descricao?: string }) => void
+  onSave: (data: { id?: string; nome: string; sku_interno: string; custo_brl: number; descricao?: string; ncm?: string }) => void
   loading: boolean
 }) {
   const [nome, setNome] = useState(produto?.nome ?? '')
   const [sku, setSku] = useState(produto?.sku_interno ?? '')
   const [custo, setCusto] = useState(produto?.custo_brl?.toFixed(2) ?? '')
   const [obs, setObs] = useState(produto?.descricao ?? '')
+  const [ncm, setNcm] = useState((produto as { ncm?: string | null })?.ncm ?? '')
   const [erro, setErro] = useState('')
 
   function handleSave() {
@@ -188,6 +190,7 @@ function ProdutoModal({ produto, onClose, onSave, loading }: {
       sku_interno: sku.trim().toUpperCase(),
       custo_brl: custoNum,
       descricao: obs.trim() || undefined,
+      ncm: ncm.trim() || undefined,
     })
   }
 
@@ -252,17 +255,36 @@ function ProdutoModal({ produto, onClose, onSave, loading }: {
             </p>
           </div>
 
-          {/* Observações */}
+          {/* NCM */}
           <div>
             <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Observações (opcional)
+              NCM (opcional)
+            </Label>
+            <Input
+              value={ncm}
+              onChange={e => setNcm(e.target.value)}
+              placeholder="Ex: 9102.12.00"
+              className="mt-1.5 font-mono"
+            />
+            <p className="text-[10px] text-slate-400 mt-1">
+              Código NCM — usado automaticamente na geração de documentos (PI/CI)
+            </p>
+          </div>
+
+          {/* Descrição */}
+          <div>
+            <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              Descrição do Produto (opcional)
             </Label>
             <Input
               value={obs}
               onChange={e => setObs(e.target.value)}
-              placeholder="Ex: Produto principal, kit com 4 unidades..."
+              placeholder="Ex: DIGITAL SMART WATCH BRACELET"
               className="mt-1.5"
             />
+            <p className="text-[10px] text-slate-400 mt-1">
+              Descrição em inglês para uso na Proforma/Commercial Invoice
+            </p>
           </div>
 
           {erro && (
