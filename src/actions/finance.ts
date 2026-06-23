@@ -543,10 +543,10 @@ export async function updateFinanceConfig(ano: number, data: {
   revalidatePath('/faturamento')
 }
 
-export async function getHistoricoAnual(anos: number[]) {
+export async function getHistoricoAnual(anos?: number[]) {
   const { workspaceId } = await getAuthContext()
   return prisma.historico_faturamento_anual.findMany({
-    where: { workspace_id: workspaceId, ano: { in: anos } },
+    where: { workspace_id: workspaceId, ...(anos ? { ano: { in: anos } } : {}) },
     orderBy: [{ ano: 'asc' }, { mes: 'asc' }],
   })
 }

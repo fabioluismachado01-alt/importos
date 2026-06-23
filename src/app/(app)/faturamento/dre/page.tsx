@@ -5,12 +5,11 @@ export const metadata = { title: 'DRE Anual — ImportOS' }
 
 export default async function DREPage() {
   const anoAtual = new Date().getFullYear()
-  const anos = [anoAtual - 2, anoAtual - 1, anoAtual]
 
   const [meses, config, historico] = await Promise.all([
     getDREAnual(anoAtual),
     getFinanceConfig(anoAtual),
-    getHistoricoAnual(anos),
+    getHistoricoAnual(), // todos os anos disponíveis no banco
   ])
 
   return (

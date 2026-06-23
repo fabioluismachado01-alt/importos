@@ -9,16 +9,9 @@ export const metadata: Metadata = {
 
 export default async function CrescimentoPage() {
   const anoAtual = new Date().getFullYear()
-  const anosHist = [anoAtual - 3, anoAtual - 2, anoAtual - 1] // ex: [2023, 2024, 2025]
-
-  // Roda seed se não tiver os 36 registros completos (12 meses × 3 anos)
-  const historicoBruto = await getHistoricoAnual(anosHist)
-  if (historicoBruto.length < 36) {
-    await seedHistorico2023a2025()
-  }
 
   const [historico, mesAtual] = await Promise.all([
-    getHistoricoAnual(anosHist), // apenas anos históricos, 2026 vem só do sistema ao vivo
+    getHistoricoAnual(), // todos os anos disponíveis no banco
     getFaturamentoAnual(anoAtual),
   ])
 
