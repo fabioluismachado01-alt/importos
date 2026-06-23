@@ -16,6 +16,7 @@ interface Produto {
   sku_interno: string | null
   custo_brl: number | null
   descricao: string | null
+  foto_url: string | null
   ativo: boolean
   fornecedor: { nome_empresa: string } | null
 }
@@ -104,8 +105,13 @@ export function ProdutosView({ produtos: inicial }: Props) {
             <Card key={p.id} className="border-0 shadow-sm hover:shadow-md transition-all group cursor-default">
               <CardContent className="p-5">
                 <div className="flex items-start justify-between mb-3">
-                  <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">
-                    <Package className="w-5 h-5 text-slate-500" />
+                  <div className="w-14 h-14 bg-slate-100 rounded-xl flex items-center justify-center shrink-0 overflow-hidden">
+                    {p.foto_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={p.foto_url} alt={p.nome} className="w-full h-full object-contain p-1" />
+                    ) : (
+                      <Package className="w-6 h-6 text-slate-400" />
+                    )}
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button

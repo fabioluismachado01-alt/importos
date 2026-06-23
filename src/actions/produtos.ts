@@ -6,11 +6,33 @@ import { getAuthContext } from '@/lib/auth'
 
 export async function getProdutos() {
   const { workspaceId } = await getAuthContext()
-  return prisma.produto_catalogo.findMany({
-    where: { workspace_id: workspaceId, ativo: true },
-    include: { fornecedor: { select: { nome_empresa: true } } },
-    orderBy: { nome: 'asc' },
-  })
+
+  const [produtos, estoques, pedidos] = await Promise.all([
+    prisma.produto_catalogo.findMany({
+      where: { workspace_id: workspaceId, ativo: true },
+      include: { fornecedor: { select: { nome_empresa: true } } },
+      orderBy: { nome: 'asc' },
+    }),
+    prisma.ml_estoque.findMany({
+      where: { workspace_id: workspaceId, foto_url: { not: null } },
+      select: { sku: true, foto_url: true },
+    }),
+    prisma.ml_pedido.findMany({
+      where: { workspace_id: workspaceId, foto_url: { not: null }, sku: { not: null } },
+      select: { sku: true, foto_url: true },
+      distinct: ['sku'],
+    }),
+  ])
+
+  // Monta mapa SKU → foto_url (estoque tem prioridade)
+  const fotoMap = new Map<string, string>()
+  for (const p of pedidos) { if (p.sku && p.foto_url) fotoMap.set(p.sku, p.foto_url) }
+  for (const e of estoques) { if (e.sku && e.foto_url) fotoMap.set(e.sku, e.foto_url) }
+
+  return produtos.map(p => ({
+    ...p,
+    foto_url: p.sku_interno ? (fotoMap.get(p.sku_interno) ?? null) : null,
+  }))
 }
 
 export async function getProduto(id: string) {
