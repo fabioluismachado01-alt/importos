@@ -1,0 +1,804 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "sqlite"
+  url       = env("DATABASE_URL")
+}
+
+// =============================================
+// AUTH LOCAL
+// =============================================
+
+model user {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  password   String
+  nome       String
+  avatar     String?
+  role       String   @default("USER")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  sessoes sessao[]
+  membros workspace_membro[]
+}
+
+model sessao {
+  id         String   @id @default(cuid())
+  user_id    String
+  token      String   @unique
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  user user @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([user_id])
+}
+
+// =============================================
+// WORKSPACE E IDENTIDADE
+// =============================================
+
+model workspace {
+  id         String   @id @default(cuid())
+  nome       String
+  slug       String   @unique
+  plano      String   @default("FREE")
+  mentor_id  String?
+  ativo      Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  membros                  workspace_membro[]
+  empresa                  empresa?
+  canais                   canal[]
+  produtos                 produto_catalogo[]
+  fornecedores             fornecedor[]
+  simulacoes               simulacao[]
+  rateios                  rateio[]
+  calculadoras             calculadora_marketplace[]
+  invoices                 invoice[]
+  faturamentos             faturamento_mes[]
+  despesas_fixas_templates despesa_fixa_template[]
+  finance_configs          finance_config[]
+  historicos_anuais        historico_faturamento_anual[]
+  socios                   socio_config[]
+  aliquotas_historico      aliquota_historico[]
+  relatorios_marketplace   relatorio_marketplace[]
+  ml_analises              ml_analise_relatorio[]
+  ml_conexoes              ml_conexao[]
+  ml_pedidos               ml_pedido[]
+  ml_estoques              ml_estoque[]
+}
+
+model workspace_membro {
+  id           String   @id @default(cuid())
+  workspace_id String
+  user_id      String
+  role         String   @default("MEMBRO")
+  created_at   DateTime @default(now())
+
+  workspace workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  user      user      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([workspace_id, user_id])
+  @@index([user_id])
+}
+
+model empresa {
+  id                String   @id @default(cuid())
+  workspace_id      String   @unique
+  razao_social      String
+  nome_fantasia     String?
+  cnpj              String?
+  regime_tributario String   @default("SIMPLES_NACIONAL")
+  estado_uf         String   @default("SP")
+  icms_padrao       Float    @default(17.0)
+  aliquota_simples  Float    @default(6.0)
+  created_at        DateTime @default(now())
+
+  workspace workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+}
+
+// =============================================
+// FINANCE — CONFIGURAÇÃO
+// =============================================
+
+model finance_config {
+  id                       String   @id @default(cuid())
+  workspace_id             String
+  ano                      Int
+  meta_faturamento_anual   Float    @default(0)
+  percentual_dlr_socio     Float    @default(0.5)
+  percentual_reinvestimento Float   @default(0.5)
+  formula_previdencia      String   @default("PRO_LABORE*0.20+LUCRO_BRUTO*0.11")
+  created_at               DateTime @default(now())
+  updated_at               DateTime @updatedAt
+
+  workspace workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  @@unique([workspace_id, ano])
+}
+
+// =============================================
+// FINANCE — DESPESAS FIXAS TEMPLATES
+// =============================================
+
+model despesa_fixa_template {
+  id                  String   @id @default(cuid())
+  workspace_id        String
+  categoria           String
+  nome                String
+  valor_padrao        Float    @default(0)
+  formula             String?
+  recorrente          Boolean  @default(true)
+  ativo               Boolean  @default(true)
+  ordem               Int      @default(0)
+  amortizacao_mensal  Float?   // LEGADO — não usar para PRONAMPE
+  observacoes         String?
+
+  // PRONAMPE — campos específicos para empréstimo com SELIC variável
+  is_pronampe         Boolean  @default(false)
+  pronampe_saldo_devedor Float? // saldo atual devedor
+  pronampe_meses_restantes Int? // parcelas restantes
+  pronampe_taxa_fixa  Float?   @default(0.06) // 6% a.a (fixo PRONAMPE)
+  // A taxa SELIC é buscada em tempo real via API BCB
+
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  workspace workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+}
+
+// =============================================
+// CONFIGURAÇÃO DE SÓCIOS
+// =============================================
+
+model socio_config {
+  id                       String   @id @default(cuid())
+  workspace_id             String
+  nome                     String
+  email                    String?
+  percentual_participacao  Float    @default(50.0) // % do lucro líquido
+  ativo                    Boolean  @default(true)
+  ordem                    Int      @default(0)
+  created_at               DateTime @default(now())
+  updated_at               DateTime @updatedAt
+
+  workspace workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+}
+
+// =============================================
+// ALÍQUOTAS HISTÓRICAS POR MÊS
+// =============================================
+
+model aliquota_historico {
+  id           String   @id @default(cuid())
+  workspace_id String
+  ano          Int
+  mes          Int
+  aliquota     Float
+  fonte        String   @default("MANUAL") // MANUAL | PGDAS
+  created_at   DateTime @default(now())
+
+  workspace workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  @@unique([workspace_id, ano, mes])
+}
+
+// =============================================
+// RELATÓRIOS DE MARKETPLACE IMPORTADOS
+// =============================================
+
+model relatorio_marketplace {
+  id              String   @id @default(cuid())
+  workspace_id    String
+  marketplace     String   // MERCADO_LIVRE | SHOPEE | AMAZON | MAGALU | OUTRO
+  ano             Int
+  mes             Int
+  total_pedidos   Int      @default(0)
+  receita_bruta   Float    @default(0)
+  tarifas         Float    @default(0)
+  receita_liquida Float    @default(0)
+  arquivo_nome    String
+  status          String   @default("IMPORTADO") // IMPORTADO | PROCESSADO | ERRO
+  created_at      DateTime @default(now())
+
+  workspace workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  @@index([workspace_id, ano, mes])
+}
+
+// =============================================
+// FATURAMENTO E CONTROLE FINANCEIRO
+// =============================================
+
+model faturamento_mes {
+  id               String    @id @default(cuid())
+  workspace_id     String
+  ano              Int
+  mes              Int
+  // Configuração
+  aliquota_simples Float     @default(6.0)
+  meta_mes         Float     @default(0)
+  dias_no_mes      Int       @default(30)
+
+  // Receitas por canal (calculadas dos lançamentos)
+  receita_total        Float @default(0)
+  receita_ml           Float @default(0)
+  receita_magalu       Float @default(0)
+  receita_casas_bahia  Float @default(0)
+  receita_amazon       Float @default(0)
+  receita_shopee       Float @default(0)
+  receita_tiktok       Float @default(0)
+  receita_presencial   Float @default(0)
+  receita_outros       Float @default(0)
+
+  // Despesas variáveis
+  desp_armazenagem    Float @default(0)
+  desp_ads_ml         Float @default(0)
+  desp_ads_outros     Float @default(0)
+  desp_custo_produtos Float @default(0)
+  desp_tarifas        Float @default(0)
+  desp_frete          Float @default(0)
+  desp_fatura_ml      Float @default(0)
+  desp_outras_taxas   Float @default(0)
+
+  // Impostos
+  das_valor_calc  Float     @default(0)
+  das_valor_real  Float?
+  das_status      String    @default("PENDENTE")
+  das_vencimento  DateTime?
+
+  // Despesas fixas
+  desp_pro_labore          Float @default(0)
+  desp_inss                Float @default(0)
+  desp_contabilidade       Float @default(0)
+  desp_erp                 Float @default(0)
+  desp_emprestimo          Float @default(0)
+  desp_aluguel             Float @default(0)
+  desp_pagina_ml           Float @default(0)
+  desp_previdencia_privada Float @default(0)
+  desp_fixas_outras        Float @default(0)
+
+  // KPIs calculados
+  ticket_medio          Float @default(0)
+  lucro_bruto           Float @default(0)
+  lucro_liquido         Float @default(0)
+  margem_contribuicao   Float @default(0)
+  break_even            Float @default(0)
+  roas_atual            Float @default(0)
+  dlr_socio             Float @default(0)
+  reinvestimento        Float @default(0)
+  dias_com_venda        Int   @default(0)
+
+  // Retirada do sócio — configurável por mês (sobrepõe a config global)
+  // dlr_modo: "PERCENTUAL" (usa percentual_dlr_socio global ou dlr_percentual_custom)
+  //           ou "FIXO" (usa dlr_valor_fixo, restante vira reinvestimento)
+  dlr_modo              String  @default("PERCENTUAL")
+  dlr_percentual_custom Float?
+  dlr_valor_fixo        Float?
+
+  fechado     Boolean  @default(false)
+  observacoes String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  workspace   workspace    @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  lancamentos lancamento[]
+  das_registros das[]
+
+  @@unique([workspace_id, ano, mes])
+  @@index([workspace_id, ano])
+}
+
+model lancamento {
+  id             String   @id @default(cuid())
+  faturamento_id String
+  tipo           String   // RECEITA | DESPESA_VARIAVEL | DESPESA_FIXA | DAS
+  categoria      String   // ver enums abaixo
+  canal          String?  // MERCADO_LIVRE | MAGALU | CASAS_BAHIA | AMAZON | SHOPEE | TIKTOK | PRESENCIAL (só receita)
+  descricao      String
+  valor          Float    // sempre positivo — tipo define o sinal
+  data           DateTime
+  e_fixo         Boolean  @default(false)
+  status         String   @default("CONFIRMADO")
+  comprovante_url String?
+  observacoes    String?
+  created_at     DateTime @default(now())
+
+  faturamento faturamento_mes @relation(fields: [faturamento_id], references: [id], onDelete: Cascade)
+
+  @@index([faturamento_id])
+  @@index([tipo])
+  @@index([canal])
+  @@index([data])
+}
+
+model das {
+  id              String    @id @default(cuid())
+  faturamento_id  String
+  periodo         String
+  competencia     DateTime
+  valor           Float
+  vencimento      DateTime
+  data_pagamento  DateTime?
+  status          String    @default("PENDENTE")
+  comprovante_url String?
+  observacoes     String?
+  created_at      DateTime  @default(now())
+
+  faturamento faturamento_mes @relation(fields: [faturamento_id], references: [id])
+
+  @@index([faturamento_id])
+  @@index([status])
+}
+
+// =============================================
+// HISTÓRICO MULTI-ANO
+// =============================================
+
+model historico_faturamento_anual {
+  id           String   @id @default(cuid())
+  workspace_id String
+  ano          Int
+  mes          Int
+  faturamento  Float    @default(0)
+  lucro_bruto  Float?
+  lucro_liquido Float?
+  fonte        String   @default("MANUAL") // MANUAL | SISTEMA | IMPORTADO
+  created_at   DateTime @default(now())
+
+  workspace workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  @@unique([workspace_id, ano, mes])
+  @@index([workspace_id, ano])
+}
+
+// =============================================
+// SIMULADOR DE IMPORTAÇÃO
+// =============================================
+
+model simulacao {
+  id           String   @id @default(cuid())
+  workspace_id String
+  nome         String
+  modalidade   String
+  cambio       Float
+  frete_usd    Float    @default(0)
+  seguro_usd   Float    @default(0)
+  status       String   @default("RASCUNHO")
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  created_by   String
+
+  workspace   workspace         @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  params      simulacao_params?
+  itens       simulacao_item[]
+  comentarios comentario[]
+
+  @@index([workspace_id])
+}
+
+model simulacao_params {
+  id           String @id @default(cuid())
+  simulacao_id String @unique
+  icms_rate    Float  @default(17.0)
+  ii_rate      Float?
+  ipi_rate     Float?
+  pis_rate     Float?
+  cofins_rate  Float?
+  sea_thc      Float?
+  sea_storage  Float?
+  sea_unclog   Float?
+  sea_decon    Float?
+  sea_nat_frete Float?
+  sea_siscomex  Float?
+  sea_afrmm     Float?
+  sea_bl_release Float?
+  sea_xml       Float?
+  sea_broker    Float?
+  sea_sda       Float?
+  air_siscomex  Float?
+  air_broker    Float?
+  air_storage   Float?
+  air_sda       Float?
+  air_outros    Float?
+
+  simulacao simulacao @relation(fields: [simulacao_id], references: [id], onDelete: Cascade)
+}
+
+model simulacao_item {
+  id              String  @id @default(cuid())
+  simulacao_id    String
+  produto_id      String?
+  nome            String
+  qty             Int
+  fob_unit_usd    Float
+  peso_total_kg   Float
+  custo_final_brl Float?
+  fator_mult      Float?
+  share_peso      Float?
+  share_valor     Float?
+
+  simulacao simulacao         @relation(fields: [simulacao_id], references: [id], onDelete: Cascade)
+  produto   produto_catalogo? @relation(fields: [produto_id], references: [id])
+
+  @@index([simulacao_id])
+}
+
+// =============================================
+// RATEIO DE LOTE
+// =============================================
+
+model rateio {
+  id                  String   @id @default(cuid())
+  workspace_id        String
+  nome                String
+  modo                String   @default("SIMPLIFICADA")
+  cambio              Float
+  frete_usd           Float    @default(0)
+  imposto_simpl_brl   Float?
+  siscomex_brl        Float?
+  extras_brl          Float?
+  venda_imposto_perc  Float    @default(6.0)
+  venda_taxa_mkt_perc Float    @default(16.5)
+  venda_taxa_fixa_brl Float    @default(5.50)
+  status              String   @default("RASCUNHO")
+  // Mês de referência para integração com Simulador Tributário
+  ano_ref             Int?
+  mes_ref             Int?
+  // Valor aduaneiro total do lote (CIF em R$) — calculado ao salvar
+  valor_aduaneiro_brl Float?
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+  created_by          String
+
+  workspace   workspace     @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  itens       rateio_item[]
+  comentarios comentario[]
+
+  @@index([workspace_id])
+}
+
+model rateio_item {
+  id             String  @id @default(cuid())
+  rateio_id      String
+  produto_id     String?
+  nome           String
+  qty            Int
+  unit_usd       Float
+  peso           Float   @default(0)
+  dim_c          Float?
+  dim_l          Float?
+  dim_a          Float?
+  ii             Float   @default(60)
+  ipi            Float   @default(0)
+  pis            Float   @default(2.1)
+  cofins         Float   @default(9.65)
+  icms           Float   @default(17)
+  target_price             Float   @default(0)
+  custo_unit_brl           Float?
+  // CIF por unidade (FOB + frete proporcional) em R$ — base dos créditos PIS/COFINS
+  valor_aduaneiro_unit_brl Float?
+  margem_perc              Float?
+  lucro_unit               Float?
+
+  rateio  rateio            @relation(fields: [rateio_id], references: [id], onDelete: Cascade)
+  produto produto_catalogo? @relation(fields: [produto_id], references: [id])
+
+  @@index([rateio_id])
+}
+
+// =============================================
+// CALCULADORA DE MARKETPLACE
+// =============================================
+
+model calculadora_marketplace {
+  id            String   @id @default(cuid())
+  workspace_id  String
+  produto_id    String?
+  nome_produto  String
+  custo_produto Float
+  imposto_perc  Float    @default(4.0)
+  embalagem_brl Float    @default(0)
+  volume_mensal Int      @default(1)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  created_by    String
+
+  workspace   workspace               @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  produto     produto_catalogo?        @relation(fields: [produto_id], references: [id])
+  canais      calculadora_canal[]
+  comentarios comentario[]
+
+  @@index([workspace_id])
+}
+
+model calculadora_canal {
+  id             String  @id @default(cuid())
+  calculadora_id String
+  canal_id       String
+  preco_venda    Float
+  comissao_perc  Float
+  taxa_fixa      Float
+  lucro_unit     Float?
+  roi            Float?
+  margem_perc    Float?
+  roas_minimo    Float?
+  acos_limite    Float?
+  lucro_volume   Float?
+  status_roas    String?
+
+  calculadora calculadora_marketplace @relation(fields: [calculadora_id], references: [id], onDelete: Cascade)
+  canal       canal                   @relation(fields: [canal_id], references: [id])
+
+  @@unique([calculadora_id, canal_id])
+}
+
+// =============================================
+// INVOICE (PROFORMA)
+// =============================================
+
+model invoice {
+  id             String   @id @default(cuid())
+  workspace_id   String
+  fornecedor_id  String?
+  invoice_number String
+  invoice_date   DateTime
+  exporter_info  String
+  importer_info  String
+  status         String   @default("RASCUNHO")
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+  created_by     String
+
+  workspace  workspace         @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  fornecedor fornecedor?       @relation(fields: [fornecedor_id], references: [id])
+  itens      invoice_item[]
+  servicos   invoice_servico[]
+
+  @@index([workspace_id])
+}
+
+model invoice_item {
+  id         String @id @default(cuid())
+  invoice_id String
+  descricao  String
+  qty        Int
+  unit_price Float
+
+  invoice invoice @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+}
+
+model invoice_servico {
+  id         String @id @default(cuid())
+  invoice_id String
+  descricao  String
+  price      Float
+
+  invoice invoice @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+}
+
+// =============================================
+// CATÁLOGO
+// =============================================
+
+model canal {
+  id            String  @id @default(cuid())
+  workspace_id  String?
+  nome          String
+  slug          String
+  icone         String?
+  comissao_perc Float
+  taxa_fixa     Float
+  ativo         Boolean @default(true)
+
+  workspace          workspace?          @relation(fields: [workspace_id], references: [id])
+  calculadora_canais calculadora_canal[]
+
+  @@unique([workspace_id, slug])
+}
+
+model produto_catalogo {
+  id              String   @id @default(cuid())
+  workspace_id    String
+  fornecedor_id   String?
+  nome            String
+  ncm             String?
+  descricao       String?
+  custo_medio_usd Float?
+  custo_brl       Float?   // custo já nacionalizado em R$ (análise de vendas ML)
+  sku_interno     String?  // código SKU para vincular com relatórios ML
+  ean             String?  // código EAN-13 para etiquetas
+  preco_venda     Float?   // preço de venda sugerido para etiquetas
+  peso_medio_kg   Float?
+  ativo           Boolean  @default(true)
+  created_at      DateTime @default(now())
+
+  workspace       workspace                 @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  fornecedor      fornecedor?               @relation(fields: [fornecedor_id], references: [id])
+  simulacao_itens simulacao_item[]
+  rateio_itens    rateio_item[]
+  calculadoras    calculadora_marketplace[]
+
+  @@index([workspace_id])
+}
+
+model fornecedor {
+  id           String   @id @default(cuid())
+  workspace_id String
+  nome_empresa String
+  contato      String?
+  email        String?
+  endereco     String?
+  pais         String   @default("China")
+  ativo        Boolean  @default(true)
+
+  workspace workspace          @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  produtos  produto_catalogo[]
+  invoices  invoice[]
+}
+
+// =============================================
+// COMENTÁRIOS (MENTOR)
+// =============================================
+// ANÁLISE DE VENDAS MARKETPLACE (ML, Shopee, etc.)
+// =============================================
+
+model ml_analise_relatorio {
+  id               String   @id @default(cuid())
+  workspace_id     String
+  marketplace      String   @default("MERCADO_LIVRE")
+  arquivo_nome     String
+  periodo_inicio   DateTime
+  periodo_fim      DateTime
+  ano              Int
+  mes              Int      // mês de competência (ciclo ML: 30→29)
+
+  // Totais do relatório
+  total_pedidos    Int      @default(0)
+  total_cancelados Int      @default(0)
+  total_devolucoes Int      @default(0)
+  total_unidades   Int      @default(0)
+  receita_bruta    Float    @default(0)
+  tarifas_ml       Float    @default(0)
+  frete_custo      Float    @default(0)
+  custo_produtos   Float    @default(0)
+  lucro_bruto      Float    @default(0)
+  margem_perc      Float    @default(0)
+  ticket_medio     Float    @default(0)
+
+  // DIFAL — calculado a partir do estado do comprador (somente ML tem esse dado)
+  receita_interestadual Float    @default(0)
+  difal_estimado        Float    @default(0)
+  pedidos_interestaduais Int     @default(0)
+  difal_por_estado      String?  // JSON: { "SP": { pedidos, receita, difal }, ... }
+
+  created_at       DateTime @default(now())
+
+  workspace workspace          @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  skus      ml_analise_sku[]
+
+  @@index([workspace_id, ano, mes])
+}
+
+model ml_analise_sku {
+  id             String  @id @default(cuid())
+  relatorio_id   String
+  sku            String
+  titulo         String
+  unidades       Int     @default(0)
+  pedidos        Int     @default(0)
+  receita_bruta  Float   @default(0)
+  tarifas_ml     Float   @default(0)
+  frete_custo    Float   @default(0)
+  custo_unitario Float   @default(0)
+  custo_total    Float   @default(0)
+  lucro_bruto    Float   @default(0)
+  margem_perc    Float   @default(0)
+  ticket_medio   Float   @default(0)
+  lucro_unit     Float   @default(0)
+
+  relatorio ml_analise_relatorio @relation(fields: [relatorio_id], references: [id], onDelete: Cascade)
+
+  @@index([relatorio_id])
+}
+
+// =============================================
+// INTEGRAÇÃO API MERCADO LIVRE
+// =============================================
+
+model ml_conexao {
+  id                        String    @id @default(cuid())
+  workspace_id              String
+  ml_user_id                String
+  nickname                  String
+  access_token              String
+  refresh_token             String
+  expires_at                DateTime
+  ativo                     Boolean   @default(true)
+  auto_sync_ativo           Boolean   @default(false)
+  auto_sync_intervalo_horas Int       @default(6)   // 1 | 3 | 6 | 12 | 24
+  last_synced_at            DateTime?
+  created_at                DateTime  @default(now())
+  updated_at                DateTime  @updatedAt
+
+  workspace workspace    @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  pedidos   ml_pedido[]
+  estoques  ml_estoque[]
+
+  @@unique([workspace_id, ml_user_id])
+  @@index([workspace_id])
+}
+
+model ml_pedido {
+  id             String   @id @default(cuid())
+  conexao_id     String
+  workspace_id   String
+  ml_order_id    String   // número do pedido ML
+  ml_item_id     String   // ID do item no anúncio ML (para pedidos multi-item)
+  status         String   @default("paid")
+  data_compra    DateTime
+  comprador_nick String
+  titulo         String
+  foto_url       String?
+  sku            String?  // seller_sku mapeado ao nosso produto_catalogo
+  quantidade     Int      @default(1)
+  valor_venda    Float    @default(0) // unit_price × quantity
+  tarifa         Float    @default(0) // sale_fee
+  frete_vendedor Float    @default(0) // shipping.cost
+  custo_produto  Float?   // puxado do produto_catalogo.custo_brl (editável)
+  produto_id     String?  // FK para produto_catalogo (opcional)
+  logistica_tipo String?  // fulfillment, drop_off, xd_drop_off, self_service, etc.
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  conexao   ml_conexao @relation(fields: [conexao_id], references: [id], onDelete: Cascade)
+  workspace workspace  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  @@unique([workspace_id, ml_order_id, ml_item_id])
+  @@index([workspace_id, data_compra])
+  @@index([conexao_id])
+}
+
+model ml_estoque {
+  id             String   @id @default(cuid())
+  conexao_id     String
+  workspace_id   String
+  ml_item_id     String   // ID do anúncio no ML
+  titulo         String
+  foto_url       String?
+  sku            String?
+  quantidade     Int      @default(0)
+  status         String   @default("active") // active, paused, closed
+  logistica_tipo String?  // fulfillment = Full, self_service = próprio, etc.
+  synced_at      DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  conexao   ml_conexao @relation(fields: [conexao_id], references: [id], onDelete: Cascade)
+  workspace workspace  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  @@unique([workspace_id, ml_item_id])
+  @@index([workspace_id])
+  @@index([conexao_id])
+}
+
+// =============================================
+
+model comentario {
+  id             String   @id @default(cuid())
+  author_id      String
+  simulacao_id   String?
+  rateio_id      String?
+  calculadora_id String?
+  conteudo       String
+  created_at     DateTime @default(now())
+
+  simulacao   simulacao?               @relation(fields: [simulacao_id], references: [id])
+  rateio      rateio?                  @relation(fields: [rateio_id], references: [id])
+  calculadora calculadora_marketplace? @relation(fields: [calculadora_id], references: [id])
+}

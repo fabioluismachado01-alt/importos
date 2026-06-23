@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<body>
+<canvas id="c" width="512" height="512"></canvas>
+<script>
+const c = document.getElementById('c')
+const ctx = c.getContext('2d')
+
+// Fundo gradiente
+const bg = ctx.createLinearGradient(0, 0, 512, 512)
+bg.addColorStop(0, '#0f172a')
+bg.addColorStop(1, '#1e293b')
+ctx.fillStyle = bg
+ctx.roundRect(0, 0, 512, 512, 80)
+ctx.fill()
+
+// Círculo verde glow
+ctx.beginPath()
+ctx.arc(256, 210, 130, 0, Math.PI * 2)
+ctx.fillStyle = '#10b981'
+ctx.shadowColor = '#10b981'
+ctx.shadowBlur = 60
+ctx.fill()
+ctx.shadowBlur = 0
+
+// Caixa (ícone) branca
+ctx.fillStyle = '#fff'
+// Body da caixa
+ctx.beginPath()
+ctx.roundRect(186, 185, 140, 110, 8)
+ctx.fill()
+
+// Tampa da caixa
+ctx.fillStyle = '#e2e8f0'
+ctx.beginPath()
+ctx.moveTo(178, 185)
+ctx.lineTo(334, 185)
+ctx.lineTo(320, 160)
+ctx.lineTo(192, 160)
+ctx.closePath()
+ctx.fill()
+
+// Fita da caixa
+ctx.fillStyle = '#10b981'
+ctx.fillRect(246, 160, 20, 135)
+
+// Seta de entrada (import)
+ctx.strokeStyle = '#fff'
+ctx.lineWidth = 8
+ctx.lineCap = 'round'
+ctx.lineJoin = 'round'
+// Seta esquerda entrando
+ctx.beginPath()
+ctx.moveTo(148, 240)
+ctx.lineTo(186, 240)
+ctx.stroke()
+ctx.beginPath()
+ctx.moveTo(168, 222)
+ctx.lineTo(186, 240)
+ctx.lineTo(168, 258)
+ctx.stroke()
+
+// Texto "ImportOS"
+ctx.fillStyle = '#fff'
+ctx.font = 'bold 52px Arial, sans-serif'
+ctx.textAlign = 'center'
+ctx.fillText('Import', 230, 370)
+ctx.fillStyle = '#10b981'
+ctx.fillText('OS', 348, 370)
+
+// Linha decorativa
+ctx.strokeStyle = '#10b981'
+ctx.lineWidth = 3
+ctx.beginPath()
+ctx.moveTo(130, 390)
+ctx.lineTo(382, 390)
+ctx.stroke()
+
+// Subtexto
+ctx.fillStyle = '#94a3b8'
+ctx.font = '22px Arial, sans-serif'
+ctx.fillText('Controle Total', 256, 425)
+
+// Download PNG
+const a = document.createElement('a')
+a.download = 'importos-logo.png'
+a.href = c.toDataURL('image/png')
+a.click()
+document.body.innerHTML = '<p style="font-family:sans-serif;padding:20px">✓ Logo baixado! Feche esta aba e faça o upload do arquivo <b>importos-logo.png</b></p>'
+</script>
+</body>
+</html>
