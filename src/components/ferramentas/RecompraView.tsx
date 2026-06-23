@@ -181,7 +181,7 @@ export function RecompraView({ workspaceId = 'default' }: { workspaceId?: string
   }
 
   function removeProduto(id: number) {
-    if (produtos.length > 1) setProdutos(prev => prev.filter(p => p.id !== id))
+    setProdutos(prev => prev.filter(p => p.id !== id))
   }
 
   function setProduto<K extends keyof Produto>(id: number, field: K, value: Produto[K]) {
