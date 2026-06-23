@@ -879,10 +879,13 @@ function RateioSalvoRow({ rateio, onEditar }: {
 function TdNum({ value, onChange, step = '0.01', className = '' }: {
   value: number; onChange: (v: number) => void; step?: string; className?: string
 }) {
+  const [raw, setRaw] = useState(String(value))
+  useEffect(() => { setRaw(String(value)) }, [value])
   return (
     <input
-      type="number" step={step} min="0" value={value}
-      onChange={e => onChange(parseFloat(e.target.value) || 0)}
+      type="number" step={step} min="0" value={raw}
+      onChange={e => { setRaw(e.target.value); const n = parseFloat(e.target.value); if (!isNaN(n)) onChange(n) }}
+      onBlur={() => { const n = parseFloat(raw); onChange(isNaN(n) ? 0 : n); setRaw(String(isNaN(n) ? 0 : n)) }}
       className={cn(
         'w-16 text-center bg-slate-50 rounded-lg text-[10px] font-mono font-bold py-1 focus:outline-none focus:bg-emerald-50 focus:ring-1 focus:ring-emerald-400 border-0',
         className
