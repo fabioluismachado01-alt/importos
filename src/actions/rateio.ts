@@ -117,6 +117,31 @@ export async function getValorAduaneiroMes(ano: number, mes: number): Promise<nu
   return rateios.reduce((acc, r) => acc + (r.valor_aduaneiro_brl ?? 0), 0)
 }
 
+// ─── Buscar Rateio completo para edição ──────────────────────────────────────
+
+export async function getRateioCompleto(id: string) {
+  const { workspaceId } = await getAuthContext()
+  return prisma.rateio.findFirst({
+    where: { id, workspace_id: workspaceId },
+    select: {
+      id: true, nome: true, modo: true,
+      cambio: true, frete_usd: true,
+      imposto_simpl_brl: true, siscomex_brl: true, extras_brl: true,
+      venda_imposto_perc: true, venda_taxa_mkt_perc: true, venda_taxa_fixa_brl: true,
+      ano_ref: true, mes_ref: true,
+      itens: {
+        select: {
+          id: true, produto_id: true, nome: true,
+          qty: true, unit_usd: true, peso: true,
+          dim_c: true, dim_l: true, dim_a: true,
+          ii: true, ipi: true, pis: true, cofins: true, icms: true,
+          target_price: true,
+        },
+      },
+    },
+  })
+}
+
 // ─── Deletar Rateio ───────────────────────────────────────────────────────────
 
 export async function deletarRateio(id: string) {

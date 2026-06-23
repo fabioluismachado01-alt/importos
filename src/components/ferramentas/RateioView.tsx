@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useMemo, useEffect, useTransition } from 'react'
+import { useState, useMemo, useEffect, useTransition, useRef } from 'react'
 import { usePersistedState } from '@/hooks/usePersistedState'
 import { cn } from '@/lib/utils'
 import { Plus, Trash2, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, ChevronRight, Printer, Save, X, CheckCheck } from 'lucide-react'
 import { RateioReport } from './reports/RateioReport'
-import { salvarRateio, deletarRateio } from '@/actions/rateio'
+import { salvarRateio, deletarRateio, getRateioCompleto } from '@/actions/rateio'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -209,6 +209,35 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
 
   function setP<K extends keyof GlobalParams>(k: K, v: number) {
     setParams(p => ({ ...p, [k]: v }))
+  }
+
+  function carregarRateio(r: Awaited<ReturnType<typeof getRateioCompleto>>) {
+    if (!r) return
+    setMode(r.modo.toLowerCase() as Mode)
+    setParams({
+      dolar: r.cambio,
+      freightUsd: r.frete_usd,
+      taxesBrl: r.imposto_simpl_brl ?? DEFAULT_PARAMS.taxesBrl,
+      siscomex: r.siscomex_brl ?? DEFAULT_PARAMS.siscomex,
+      extras: r.extras_brl ?? DEFAULT_PARAMS.extras,
+      dasPercent: r.venda_imposto_perc,
+      mktPercent: r.venda_taxa_mkt_perc,
+      mktFixed: r.venda_taxa_fixa_brl,
+    })
+    setItems(r.itens.map((item, i) => ({
+      id: i + 1,
+      name: item.nome,
+      produtoId: item.produto_id ?? null,
+      qty: item.qty,
+      unitUsd: item.unit_usd,
+      weightKg: item.peso ?? 0.15,
+      cCm: item.dim_c ?? 10,
+      lCm: item.dim_l ?? 8,
+      aCm: item.dim_a ?? 5,
+      ii: item.ii, ipi: item.ipi, pis: item.pis, cofins: item.cofins, icms: item.icms,
+      targetPrice: item.target_price ?? 0,
+    })))
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function setItem(id: number, field: keyof RateioItem, value: string | number | null) {
@@ -751,7 +780,7 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
         </div>
         <div className="divide-y divide-slate-100">
           {rateiosSalvos.map(r => (
-            <RateioSalvoRow key={r.id} rateio={r} />
+            <RateioSalvoRow key={r.id} rateio={r} onEditar={carregarRateio} />
           ))}
         </div>
       </div>
@@ -779,9 +808,20 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
 
 // ─── RateioSalvoRow ───────────────────────────────────────────────────────────
 
-function RateioSalvoRow({ rateio }: { rateio: { id: string; nome: string; modo: string; ano_ref: number | null; mes_ref: number | null; valor_aduaneiro_brl: number | null; cambio: number; created_at: Date; itens: { nome: string; qty: number; unit_usd: number; custo_unit_brl: number | null }[] } }) {
+function RateioSalvoRow({ rateio, onEditar }: {
+  rateio: { id: string; nome: string; modo: string; ano_ref: number | null; mes_ref: number | null; valor_aduaneiro_brl: number | null; cambio: number; created_at: Date; itens: { nome: string; qty: number; unit_usd: number; custo_unit_brl: number | null }[] }
+  onEditar: (r: Awaited<ReturnType<typeof getRateioCompleto>>) => void
+}) {
   const [isPending, startTransition] = useTransition()
   const [confirmDel, setConfirmDel] = useState(false)
+  const [isLoadingEdit, setIsLoadingEdit] = useState(false)
+
+  async function handleEditar() {
+    setIsLoadingEdit(true)
+    const full = await getRateioCompleto(rateio.id)
+    onEditar(full)
+    setIsLoadingEdit(false)
+  }
 
   const mesRef = rateio.mes_ref ? `${MESES_ABREV[rateio.mes_ref - 1]}/${rateio.ano_ref}` : null
   const totalItens = rateio.itens.reduce((acc, i) => acc + i.qty, 0)
@@ -811,6 +851,9 @@ function RateioSalvoRow({ rateio }: { rateio: { id: string; nome: string; modo: 
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
+        <button onClick={handleEditar} disabled={isLoadingEdit} className="flex items-center gap-1 text-xs font-semibold text-emerald-600 border border-emerald-200 hover:bg-emerald-50 rounded-lg px-2 py-1.5 transition-colors">
+          {isLoadingEdit ? 'Carregando…' : '✏️ Editar'}
+        </button>
         {confirmDel ? (
           <>
             <span className="text-xs text-slate-500">Confirmar exclusão?</span>
