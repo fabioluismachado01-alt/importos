@@ -5,7 +5,7 @@ import { usePersistedState } from '@/hooks/usePersistedState'
 import { cn } from '@/lib/utils'
 import { Plus, Trash2, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, ChevronRight, Printer, Save, X, CheckCheck } from 'lucide-react'
 import { RateioReport } from './reports/RateioReport'
-import { salvarRateio } from '@/actions/rateio'
+import { salvarRateio, deletarRateio } from '@/actions/rateio'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -188,7 +188,21 @@ interface ProdutoCatalogo {
   sku_interno: string | null
 }
 
-export function RateioView({ workspaceId = 'default', produtos = [] }: { workspaceId?: string; produtos?: ProdutoCatalogo[] }) {
+interface RateioSalvo {
+  id: string
+  nome: string
+  modo: string
+  ano_ref: number | null
+  mes_ref: number | null
+  valor_aduaneiro_brl: number | null
+  cambio: number
+  created_at: Date
+  itens: { nome: string; qty: number; unit_usd: number; custo_unit_brl: number | null }[]
+}
+
+const MESES_ABREV = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+
+export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalvos = [] }: { workspaceId?: string; produtos?: ProdutoCatalogo[]; rateiosSalvos?: RateioSalvo[] }) {
   const [mode, setMode] = usePersistedState<Mode>(`${workspaceId}_rt_mode`, 'simplificada')
   const [params, setParams] = usePersistedState<GlobalParams>(`${workspaceId}_rt_params`, DEFAULT_PARAMS)
   const [items, setItems] = usePersistedState<RateioItem[]>(`${workspaceId}_rt_items`, INITIAL_ITEMS)
@@ -728,6 +742,21 @@ export function RateioView({ workspaceId = 'default', produtos = [] }: { workspa
       </div>
     )}
 
+    {/* ── RATEIOS SALVOS ── */}
+    {rateiosSalvos.length > 0 && (
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4 mt-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-black text-slate-700 uppercase tracking-wider">Lotes Salvos no Sistema</h2>
+          <span className="text-xs text-slate-400">{rateiosSalvos.length} lote{rateiosSalvos.length > 1 ? 's' : ''}</span>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {rateiosSalvos.map(r => (
+            <RateioSalvoRow key={r.id} rateio={r} />
+          ))}
+        </div>
+      </div>
+    )}
+
     {/* ── RELATÓRIO PROFISSIONAL ── */}
     <div id="rt-report">
       {showReport && (
@@ -745,6 +774,60 @@ export function RateioView({ workspaceId = 'default', produtos = [] }: { workspa
       )}
     </div>
     </>
+  )
+}
+
+// ─── RateioSalvoRow ───────────────────────────────────────────────────────────
+
+function RateioSalvoRow({ rateio }: { rateio: { id: string; nome: string; modo: string; ano_ref: number | null; mes_ref: number | null; valor_aduaneiro_brl: number | null; cambio: number; created_at: Date; itens: { nome: string; qty: number; unit_usd: number; custo_unit_brl: number | null }[] } }) {
+  const [isPending, startTransition] = useTransition()
+  const [confirmDel, setConfirmDel] = useState(false)
+
+  const mesRef = rateio.mes_ref ? `${MESES_ABREV[rateio.mes_ref - 1]}/${rateio.ano_ref}` : null
+  const totalItens = rateio.itens.reduce((acc, i) => acc + i.qty, 0)
+  const totalUsd = rateio.itens.reduce((acc, i) => acc + i.qty * i.unit_usd, 0)
+
+  function handleDelete() {
+    startTransition(async () => {
+      await deletarRateio(rateio.id)
+      setConfirmDel(false)
+    })
+  }
+
+  return (
+    <div className="py-4 flex items-start gap-4">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-semibold text-slate-800 truncate">{rateio.nome}</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{rateio.modo}</span>
+          {mesRef && <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">Ref. {mesRef}</span>}
+        </div>
+        <div className="flex items-center gap-4 mt-1 text-xs text-slate-400">
+          <span>{rateio.itens.length} produto{rateio.itens.length !== 1 ? 's' : ''}</span>
+          <span>{totalItens} un. totais</span>
+          <span>USD {totalUsd.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} FOB</span>
+          {rateio.valor_aduaneiro_brl && <span className="text-emerald-600 font-medium">R$ {rateio.valor_aduaneiro_brl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} CIF</span>}
+          <span>Câmbio R$ {rateio.cambio.toFixed(2)}</span>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        {confirmDel ? (
+          <>
+            <span className="text-xs text-slate-500">Confirmar exclusão?</span>
+            <button onClick={handleDelete} disabled={isPending} className="text-xs font-semibold text-red-600 border border-red-300 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+              {isPending ? 'Excluindo…' : 'Sim, excluir'}
+            </button>
+            <button onClick={() => setConfirmDel(false)} className="text-xs font-semibold text-slate-500 border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors">
+              Cancelar
+            </button>
+          </>
+        ) : (
+          <button onClick={() => setConfirmDel(true)} className="flex items-center gap-1 text-xs font-semibold text-red-500 border border-red-200 hover:bg-red-50 rounded-lg px-2 py-1.5 transition-colors">
+            <Trash2 className="w-3.5 h-3.5" /> Excluir
+          </button>
+        )}
+      </div>
+    </div>
   )
 }
 

@@ -1,6 +1,7 @@
 import { RateioView } from '@/components/ferramentas/RateioView'
 import { getAuthContext } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { listarRateios } from '@/actions/rateio'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
@@ -10,10 +11,13 @@ export const metadata: Metadata = {
 
 export default async function RateioPage() {
   const { workspaceId } = await getAuthContext()
-  const produtos = await prisma.produto_catalogo.findMany({
-    where: { workspace_id: workspaceId, ativo: true },
-    select: { id: true, nome: true, sku_interno: true },
-    orderBy: { nome: 'asc' },
-  })
-  return <RateioView workspaceId={workspaceId} produtos={produtos} />
+  const [produtos, rateiossalvos] = await Promise.all([
+    prisma.produto_catalogo.findMany({
+      where: { workspace_id: workspaceId, ativo: true },
+      select: { id: true, nome: true, sku_interno: true },
+      orderBy: { nome: 'asc' },
+    }),
+    listarRateios(),
+  ])
+  return <RateioView workspaceId={workspaceId} produtos={produtos} rateiosSalvos={rateiossalvos} />
 }
