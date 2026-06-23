@@ -4,12 +4,12 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, DollarSign, BarChart3,
-  FileText, Settings, Wrench, Sigma,
+  Settings, Wrench, Sigma,
   Package, ChevronDown, ChevronRight,
-  PanelLeftClose, PanelLeftOpen, ShoppingBag,
+  PanelLeftClose, PanelLeftOpen, ShoppingBag, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, createContext, useContext } from 'react'
 
 interface NavItem {
   href: string
@@ -80,16 +80,36 @@ const BOTTOM_ITEMS: NavItem[] = [
 
 const STORAGE_KEY = 'importos_sidebar_collapsed'
 
+// Context para controlar abertura mobile
+export const SidebarContext = createContext<{
+  mobileOpen: boolean
+  setMobileOpen: (v: boolean) => void
+}>({ mobileOpen: false, setMobileOpen: () => {} })
+
+export function useSidebar() { return useContext(SidebarContext) }
+
+export function SidebarProvider({ children }: { children: React.ReactNode }) {
+  const [mobileOpen, setMobileOpen] = useState(false)
+  return (
+    <SidebarContext.Provider value={{ mobileOpen, setMobileOpen }}>
+      {children}
+    </SidebarContext.Provider>
+  )
+}
+
 export function AppSidebar() {
   const pathname = usePathname()
+  const { mobileOpen, setMobileOpen } = useSidebar()
   const [collapsed, setCollapsed] = useState(false)
   const [expanded, setExpanded] = useState<string[]>(['/faturamento', '/ferramentas'])
 
-  // Carrega preferência salva
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved === 'true') setCollapsed(true)
   }, [])
+
+  // Fecha sidebar mobile ao mudar de rota
+  useEffect(() => { setMobileOpen(false) }, [pathname, setMobileOpen])
 
   function toggleCollapsed() {
     const next = !collapsed
@@ -99,7 +119,6 @@ export function AppSidebar() {
 
   function toggleExpand(href: string) {
     if (collapsed) {
-      // Expandir sidebar automaticamente ao clicar num item com submenu
       setCollapsed(false)
       localStorage.setItem(STORAGE_KEY, 'false')
       setExpanded(prev => prev.includes(href) ? prev : [...prev, href])
@@ -179,22 +198,41 @@ export function AppSidebar() {
     )
   }
 
-  return (
+  const sidebarContent = (
     <aside
       className={cn(
-        'bg-slate-900 text-white flex flex-col shrink-0 border-r border-slate-800 transition-all duration-200',
-        collapsed ? 'w-16' : 'w-64'
+        'bg-slate-900 text-white flex flex-col h-full border-r border-slate-800 transition-all duration-200',
+        // Desktop: respeita collapsed. Mobile: sempre largura completa
+        'md:shrink-0',
+        collapsed ? 'md:w-16' : 'md:w-64',
+        'w-72'
       )}
     >
       {/* Logo */}
       <div className={cn(
         'border-b border-slate-800 flex items-center shrink-0',
-        collapsed ? 'p-3 justify-center' : 'p-5'
+        collapsed ? 'md:p-3 md:justify-center p-5' : 'p-5'
       )}>
         {collapsed ? (
-          <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
-            <Package className="w-5 h-5 text-white" />
-          </div>
+          <>
+            {/* Desktop collapsed */}
+            <div className="hidden md:flex w-9 h-9 bg-emerald-500 rounded-xl items-center justify-center shadow-lg shadow-emerald-500/30">
+              <Package className="w-5 h-5 text-white" />
+            </div>
+            {/* Mobile (nunca collapsed) */}
+            <div className="flex md:hidden items-center gap-3 w-full">
+              <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30 shrink-0">
+                <Package className="w-5 h-5 text-white" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-black text-base tracking-tight text-white">ImportOS</p>
+                <p className="text-[9px] text-emerald-400 font-bold uppercase tracking-widest">Controle Total</p>
+              </div>
+              <button onClick={() => setMobileOpen(false)} className="ml-auto text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </>
         ) : (
           <div className="flex items-center gap-3 w-full">
             <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30 shrink-0">
@@ -204,6 +242,10 @@ export function AppSidebar() {
               <p className="font-black text-base tracking-tight text-white">ImportOS</p>
               <p className="text-[9px] text-emerald-400 font-bold uppercase tracking-widest">Controle Total</p>
             </div>
+            {/* Botão fechar no mobile */}
+            <button onClick={() => setMobileOpen(false)} className="ml-auto text-slate-400 hover:text-white md:hidden">
+              <X className="w-5 h-5" />
+            </button>
           </div>
         )}
       </div>
@@ -217,24 +259,45 @@ export function AppSidebar() {
       <div className="p-3 border-t border-slate-800 space-y-1">
         {BOTTOM_ITEMS.map(item => renderItem(item))}
 
-        {/* Botão de colapsar/expandir */}
+        {/* Botão colapsar — só desktop */}
         <button
           onClick={toggleCollapsed}
           title={collapsed ? 'Expandir sidebar' : 'Recolher sidebar'}
           className={cn(
-            'w-full flex items-center gap-3 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-all mt-2',
+            'hidden md:flex w-full items-center gap-3 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-all mt-2',
             collapsed ? 'px-2 py-2.5 justify-center' : 'px-3 py-2'
           )}
         >
           {collapsed
             ? <PanelLeftOpen className="w-4 h-4" />
-            : <>
-                <PanelLeftClose className="w-4 h-4 shrink-0" />
-                <span>Recolher</span>
-              </>
+            : <><PanelLeftClose className="w-4 h-4 shrink-0" /><span>Recolher</span></>
           }
         </button>
       </div>
     </aside>
+  )
+
+  return (
+    <>
+      {/* Desktop: sidebar normal */}
+      <div className="hidden md:flex h-full">
+        {sidebarContent}
+      </div>
+
+      {/* Mobile: overlay */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 flex md:hidden">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setMobileOpen(false)}
+          />
+          {/* Drawer */}
+          <div className="relative z-10 h-full">
+            {sidebarContent}
+          </div>
+        </div>
+      )}
+    </>
   )
 }
