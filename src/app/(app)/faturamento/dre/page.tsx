@@ -12,6 +12,14 @@ export default async function DREPage() {
     getHistoricoAnual(), // todos os anos disponíveis no banco
   ])
 
+  // Injeta dados do ano atual no histórico para aparecer no gráfico multi-ano
+  const historicoComAtual = [
+    ...historico.filter(h => h.ano !== anoAtual),
+    ...meses
+      .filter(m => m.receita_total > 0)
+      .map(m => ({ ano: anoAtual, mes: m.mes, faturamento: m.receita_total, lucro_bruto: m.lucro_bruto })),
+  ]
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -22,7 +30,7 @@ export default async function DREPage() {
           </p>
         </div>
       </div>
-      <DREAnualView ano={anoAtual} meses={meses} config={config} historico={historico} />
+      <DREAnualView ano={anoAtual} meses={meses} config={config} historico={historicoComAtual} />
     </div>
   )
 }

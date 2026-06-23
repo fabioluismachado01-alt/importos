@@ -448,9 +448,10 @@ export function DREAnualView({ ano, meses, config, historico }: Props) {
                     <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
                     <Tooltip formatter={(v) => formatCurrency(Number(v))} contentStyle={{ borderRadius: '8px', fontSize: '11px', border: '1px solid #E2E8F0' }} />
                     <Legend iconSize={8} wrapperStyle={{ fontSize: '11px' }} />
-                    {anosHistorico.map((a, i) => (
-                      <Bar key={a} dataKey={String(a)} fill={['#CBD5E1', '#94A3B8', '#10B981'][i] || '#10B981'} radius={[3, 3, 0, 0]} />
-                    ))}
+                    {anosHistorico.map((a, i) => {
+                      const cores = ['#CBD5E1', '#94A3B8', '#64748B', '#475569', '#10B981', '#059669']
+                      return <Bar key={a} dataKey={String(a)} fill={cores[i] ?? cores[cores.length - 1]} radius={[3, 3, 0, 0]} />
+                    })}
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
