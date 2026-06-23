@@ -43,9 +43,11 @@ const DEFAULT_LEAD: LeadTimeParams = {
 }
 
 const INITIAL_PRODUTOS: Produto[] = [
-  { id: 1, nome: 'Smartwatch Ultra',  estoqueAtual: 280, estoqueSeguranca: 30, vendasDia: 8,  modalidade: 'maritimo'    },
-  { id: 2, nome: 'Fone Pro ANC',      estoqueAtual: 150, estoqueSeguranca: 20, vendasDia: 12, modalidade: 'simplificada' },
-  { id: 3, nome: 'Carregador 65W',    estoqueAtual:  60, estoqueSeguranca: 15, vendasDia: 6,  modalidade: 'aereo'        },
+  { id: 1, nome: 'Cadeira Gamer Pro RGB',        estoqueAtual: 48,  estoqueSeguranca: 15, vendasDia: 6.5, modalidade: 'maritimo'    },
+  { id: 2, nome: 'Headset Gamer 7.1 Surround',   estoqueAtual: 92,  estoqueSeguranca: 25, vendasDia: 11,  modalidade: 'maritimo'    },
+  { id: 3, nome: 'Webcam Full HD Ring Light',     estoqueAtual: 135, estoqueSeguranca: 30, vendasDia: 13,  modalidade: 'simplificada' },
+  { id: 4, nome: 'Hub USB-C 7 em 1',             estoqueAtual: 210, estoqueSeguranca: 40, vendasDia: 16,  modalidade: 'simplificada' },
+  { id: 5, nome: 'Mesa Gamer LED RGB 120×60cm',  estoqueAtual: 31,  estoqueSeguranca: 10, vendasDia: 4.5, modalidade: 'maritimo'    },
 ]
 
 // ─── Cálculo ──────────────────────────────────────────────────────────────────
