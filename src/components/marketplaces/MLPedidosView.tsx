@@ -159,7 +159,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais }
   }).map(p => {
     const local = custosLocais[p.id]
     const custo = local?.custo ?? p.custo_produto ?? 0
-    const imposto = p.valor_venda * aliquotaSimples
+    const imposto = p.valor_venda * (aliquotaSimples / 100)
     const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - custo - imposto
     const margem = p.valor_venda > 0 ? (lucro / p.valor_venda) * 100 : 0
     return { ...p, custo_produto: custo > 0 ? custo : p.custo_produto, lucro, margem, imposto }
@@ -179,7 +179,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais }
   // KPIs do período anterior (para delta)
   const anterior = filtrarPeriodoAnterior(pedidos, periodo).filter(p => p.status !== 'cancelled').map(p => {
     const custo = p.custo_produto ?? 0
-    const imposto = p.valor_venda * aliquotaSimples
+    const imposto = p.valor_venda * (aliquotaSimples / 100)
     const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - custo - imposto
     return { ...p, lucro }
   })
@@ -337,7 +337,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais }
     const custo = parseFloat(custoTemp.replace(',', '.'))
     if (isNaN(custo) || custo < 0) return
     await editarCustoPedido(pedidoId, custo)
-    const imposto = valorVenda * aliquotaSimples
+    const imposto = valorVenda * (aliquotaSimples / 100)
     const lucro = valorVenda - tarifa - frete - custo - imposto
     setCustosLocais(prev => ({ ...prev, [pedidoId]: { custo, lucro, margem: valorVenda > 0 ? (lucro / valorVenda) * 100 : 0 } }))
     setEditandoId(null)
@@ -489,7 +489,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais }
         <div>
           <h1 className="text-xl font-black text-slate-800">Vendas</h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            {filtrados.length} pedidos · imposto {pct(aliquotaSimples * 100)}
+            {filtrados.length} pedidos · imposto {pct(aliquotaSimples)}
             {isPending && <span className="ml-2 text-emerald-500 animate-pulse">sincronizando...</span>}
           </p>
         </div>
