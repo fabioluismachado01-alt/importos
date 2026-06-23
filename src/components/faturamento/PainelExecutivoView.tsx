@@ -257,15 +257,19 @@ export function PainelExecutivoView({ meses, config, ano }: Props) {
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={mesesComDados.map(m => ({ mes: MESES_ABREV[m.mes - 1], margem: parseFloat(m.margem_contribuicao.toFixed(1)) }))}>
+            <BarChart data={mesesComDados.map(m => {
+                const margem = m.margem_contribuicao !== 0 ? m.margem_contribuicao : m.receita_total > 0 ? (m.lucro_bruto / m.receita_total) * 100 : 0
+                return { mes: MESES_ABREV[m.mes - 1], margem: parseFloat(margem.toFixed(1)), _m: margem }
+              })}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
               <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `${v}%`} domain={[0, 100]} />
               <Tooltip formatter={(v) => `${v}%`} contentStyle={{ borderRadius: '8px', fontSize: '11px', border: '1px solid #E2E8F0' }} />
               <Bar dataKey="margem" radius={[4, 4, 0, 0]}>
-                {mesesComDados.map((m, i) => (
-                  <Cell key={i} fill={m.margem_contribuicao > 25 ? '#10B981' : m.margem_contribuicao > 10 ? '#F59E0B' : '#EF4444'} />
-                ))}
+                {mesesComDados.map((m, i) => {
+                  const margem = m.margem_contribuicao !== 0 ? m.margem_contribuicao : m.receita_total > 0 ? (m.lucro_bruto / m.receita_total) * 100 : 0
+                  return <Cell key={i} fill={margem > 25 ? '#10B981' : margem > 10 ? '#F59E0B' : '#EF4444'} />
+                })}
               </Bar>
             </BarChart>
           </ResponsiveContainer>

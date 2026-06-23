@@ -327,21 +327,21 @@ export function DREAnualView({ ano, meses, config, historico }: Props) {
                 <p className="text-sm text-slate-400 text-center py-12">Nenhum dado ainda</p>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={mesesCompletos.filter(m => m.receita_total > 0).map(m => ({
-                    mes: MESES_ABREV[m.mes - 1],
-                    'Margem %': parseFloat(m.margem_contribuicao.toFixed(1)),
-                  }))}>
+                  <BarChart data={mesesCompletos.filter(m => m.receita_total > 0).map(m => {
+                    const margem = m.margem_contribuicao !== 0
+                      ? m.margem_contribuicao
+                      : m.receita_total > 0 ? (m.lucro_bruto / m.receita_total) * 100 : 0
+                    return { mes: MESES_ABREV[m.mes - 1], 'Margem %': parseFloat(margem.toFixed(1)), _margem: margem }
+                  })}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
                     <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `${v}%`} domain={[0, 100]} />
                     <Tooltip formatter={(v) => `${v}%`} contentStyle={{ borderRadius: '8px', fontSize: '11px', border: '1px solid #E2E8F0' }} />
                     <Bar dataKey="Margem %" radius={[4, 4, 0, 0]}>
-                      {mesesCompletos.filter(m => m.receita_total > 0).map((m, i) => (
-                        <Cell
-                          key={i}
-                          fill={m.margem_contribuicao > 25 ? '#10B981' : m.margem_contribuicao > 10 ? '#F59E0B' : '#EF4444'}
-                        />
-                      ))}
+                      {mesesCompletos.filter(m => m.receita_total > 0).map((m, i) => {
+                        const margem = m.margem_contribuicao !== 0 ? m.margem_contribuicao : m.receita_total > 0 ? (m.lucro_bruto / m.receita_total) * 100 : 0
+                        return <Cell key={i} fill={margem > 25 ? '#10B981' : margem > 10 ? '#F59E0B' : '#EF4444'} />
+                      })}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
