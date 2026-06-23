@@ -487,7 +487,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais }
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-black text-slate-800">Pedidos — Mercado Livre</h1>
+          <h1 className="text-xl font-black text-slate-800">Pedidos</h1>
           <p className="text-xs text-slate-400 mt-0.5">
             {filtrados.length} pedidos · imposto {pct(aliquotaSimples * 100)}
             {isPending && <span className="ml-2 text-emerald-500 animate-pulse">sincronizando...</span>}

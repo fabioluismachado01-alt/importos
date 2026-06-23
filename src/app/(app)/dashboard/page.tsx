@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import {
   Tag, Ship, Sigma, FileText,
-  DollarSign, BarChart3, Package,
+  DollarSign, BarChart3, Package, ShoppingBag,
   TrendingUp, AlertCircle, CheckCircle2, Clock,
   ArrowRight, Wrench,
 } from 'lucide-react'
@@ -204,10 +204,10 @@ export default async function DashboardPage() {
           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Acesso Rápido</p>
 
           {[
-            { href: '/faturamento', label: 'Faturamento',       desc: 'Receitas, DAS e despesas',        Icon: DollarSign, color: 'bg-emerald-500' },
-            { href: '/vendas',      label: 'Análise de Vendas', desc: 'Importar relatórios dos canais',  Icon: BarChart3,  color: 'bg-blue-500' },
-            { href: '/produtos',    label: 'Produtos / SKUs',   desc: 'Catálogo com custos e margens',   Icon: Package,    color: 'bg-amber-500' },
-            { href: '/central',     label: 'Central de Op.',    desc: 'Hub de controle e checklist',     Icon: Wrench,     color: 'bg-purple-500' },
+            { href: '/marketplaces/pedidos', label: 'Pedidos',           desc: 'ML, Shopee e demais canais',      Icon: ShoppingBag, color: 'bg-emerald-500' },
+            { href: '/faturamento',          label: 'Faturamento',       desc: 'Receitas, DAS e despesas',        Icon: DollarSign,  color: 'bg-blue-500' },
+            { href: '/vendas',               label: 'Análise de Vendas', desc: 'Importar relatórios dos canais',  Icon: BarChart3,   color: 'bg-violet-500' },
+            { href: '/produtos',             label: 'Produtos / SKUs',   desc: 'Catálogo com custos e margens',   Icon: Package,     color: 'bg-amber-500' },
           ].map(({ href, label, desc, Icon, color }) => (
             <Link key={href} href={href}
               className="flex items-center gap-3 bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 hover:shadow-md hover:-translate-y-0.5 transition-all group">
