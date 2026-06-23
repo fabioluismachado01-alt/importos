@@ -4,7 +4,7 @@ const features = [
   {
     icon: "📊",
     title: "Dashboard Multi-Marketplace",
-    desc: "Visão unificada de Mercado Livre, Shopee, Amazon, TikTok Shop e Magalu em uma única tela.",
+    desc: "Mercado Livre integrado via API com sync automático. Shopee, Amazon, TikTok Shop e Magalu via importação de relatório — tudo em uma única tela.",
   },
   {
     icon: "💰",
@@ -13,8 +13,8 @@ const features = [
   },
   {
     icon: "🔄",
-    title: "Sincronização Automática",
-    desc: "Seus pedidos atualizam sozinhos a cada 15 minutos, sem precisar apertar F5 ou importar planilhas.",
+    title: "Sync Automático com ML",
+    desc: "Pedidos do Mercado Livre atualizam sozinhos a cada 15 minutos. Para outros canais, basta importar o relatório baixado da plataforma.",
   },
   {
     icon: "📈",
@@ -43,7 +43,7 @@ const features = [
   },
 ];
 
-const marketplaces = ["Mercado Livre", "Shopee", "Amazon", "TikTok Shop", "Magalu"];
+const marketplaces = ["Mercado Livre (API)", "Shopee", "Amazon", "TikTok Shop", "Magalu", "+ importação manual"];
 
 const faqs = [
   {
@@ -97,7 +97,7 @@ export default function LandingPage() {
       <section className="pt-32 pb-20 px-6">
         <div className="max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-medium px-4 py-1.5 rounded-full mb-8">
-            ✦ Multi-marketplace em uma única plataforma
+            ✦ ML, Shopee, Amazon, TikTok e Magalu em uma única plataforma
           </div>
           <h1 className="text-5xl md:text-6xl font-extrabold leading-tight tracking-tight mb-6">
             Controle total da sua<br />
