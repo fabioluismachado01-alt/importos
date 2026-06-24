@@ -370,7 +370,7 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
             <table className="w-full text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  {['Data','Modal','Origem','Peso (kg)','CBM (m³)','Frete USD','Câmbio','Frete BRL','Armaz. R$','$/kg','R$/kg total','R$/CBM total',''].map(h => (
+                  {['Data','Modal','Operador','Origem','Peso (kg)','CBM (m³)','Frete USD','Câmbio','Frete BRL','Armaz. R$','$/kg','R$/kg total','R$/CBM total',''].map(h => (
                     <th key={h} className="px-3 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">{h}</th>
                   ))}
                 </tr>
@@ -390,6 +390,7 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
                         {f.modal === 'MARITIMO' ? (f.tipo_container ?? 'Marítimo') : 'Aéreo'}
                       </span>
                     </td>
+                    <td className="px-3 py-2.5 font-medium text-slate-700">{f.operador ?? '—'}</td>
                     <td className="px-3 py-2.5 text-slate-500">{f.origem ?? '—'}</td>
                     <td className="px-3 py-2.5 font-medium">{f.peso_kg.toLocaleString('pt-BR')}</td>
                     <td className="px-3 py-2.5 text-slate-500">{f.cbm ? f.cbm.toFixed(2) : '—'}</td>

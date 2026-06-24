@@ -9,6 +9,7 @@ export type FreteHistoricoRow = {
   rateio_id: string | null
   tipo: string
   tipo_container: string | null
+  operador: string | null
   modal: string
   origem: string | null
   data_embarque: Date
