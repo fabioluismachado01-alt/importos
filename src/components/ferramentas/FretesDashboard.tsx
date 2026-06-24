@@ -14,10 +14,13 @@ const brl = (n: number) => 'R$' + n.toLocaleString('pt-BR', { minimumFractionDig
 const usd = (n: number) => '$' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 type Tab = 'dashboard' | 'historico' | 'calculadora'
+type Filtro = 'TODOS' | 'MARITIMO' | 'AEREO'
 
 export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow[] }) {
   const [tab, setTab] = useState<Tab>('dashboard')
+  const [filtro, setFiltro] = useState<Filtro>('TODOS')
   const [fretes, setFretes] = useState(initial)
+  const fretesFiltrados = filtro === 'TODOS' ? fretes : fretes.filter(f => f.modal === filtro)
   const [showForm, setShowForm] = useState(false)
   const [isPending, startTransition] = useTransition()
 
@@ -55,20 +58,20 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
     })
   }
 
-  // ── Métricas derivadas ────────────────────────────────────────────────────
-  const maritimos = fretes.filter(f => f.modal === 'MARITIMO')
-  const aereos    = fretes.filter(f => f.modal === 'AEREO')
+  // ── Métricas derivadas (respeitam filtro) ────────────────────────────────
+  const maritimos = fretesFiltrados.filter(f => f.modal === 'MARITIMO')
+  const aereos    = fretesFiltrados.filter(f => f.modal === 'AEREO')
 
   const mediaKgMar = maritimos.length ? maritimos.reduce((s, f) => s + f.custo_kg_usd, 0) / maritimos.length : 0
   const mediaKgAer = aereos.length    ? aereos.reduce((s, f) => s + f.custo_kg_usd, 0) / aereos.length : 0
 
-  const melhorMar = maritimos.length ? maritimos.reduce((min, f) => f.custo_kg_usd < min.custo_kg_usd ? f : min, maritimos[0]) : null
-  const piorMar   = maritimos.length ? maritimos.reduce((max, f) => f.custo_kg_usd > max.custo_kg_usd ? f : max, maritimos[0]) : null
+  const melhorFiltro = fretesFiltrados.length ? fretesFiltrados.reduce((min, f) => f.custo_kg_usd < min.custo_kg_usd ? f : min, fretesFiltrados[0]) : null
+  const piorFiltro   = fretesFiltrados.length ? fretesFiltrados.reduce((max, f) => f.custo_kg_usd > max.custo_kg_usd ? f : max, fretesFiltrados[0]) : null
 
-  // Evolução mensal (últimos 12 meses)
+  // Evolução mensal
   const evolucao = useMemo(() => {
     const map = new Map<string, { mes: string; maritimo?: number; aereo?: number }>()
-    fretes.forEach(f => {
+    fretesFiltrados.forEach(f => {
       const d = new Date(f.data_embarque)
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
       const label = `${MESES[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`
@@ -77,8 +80,8 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
       else curr.aereo = f.custo_kg_usd
       map.set(key, curr)
     })
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b)).slice(-12).map(([, v]) => v)
-  }, [fretes])
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b)).slice(-24).map(([, v]) => v)
+  }, [fretesFiltrados])
 
   // Sazonalidade: média por mês (0-11)
   const sazonalidade = useMemo(() => {
@@ -122,17 +125,31 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-0 border-b border-slate-100">
-        {(['dashboard', 'historico', 'calculadora'] as Tab[]).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-2.5 text-sm font-semibold capitalize border-b-2 transition-colors ${tab === t ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-          >
-            {t === 'dashboard' ? 'Dashboard' : t === 'historico' ? 'Histórico' : 'Calculadora'}
-          </button>
-        ))}
+      {/* Tabs + Filtro modal */}
+      <div className="flex items-center justify-between border-b border-slate-100">
+        <div className="flex gap-0">
+          {(['dashboard', 'historico', 'calculadora'] as Tab[]).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 py-2.5 text-sm font-semibold capitalize border-b-2 transition-colors ${tab === t ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+            >
+              {t === 'dashboard' ? 'Dashboard' : t === 'historico' ? 'Histórico' : 'Calculadora'}
+            </button>
+          ))}
+        </div>
+        {/* Filtro de modal */}
+        <div className="flex gap-1 pb-1">
+          {([['TODOS', 'Todos'], ['MARITIMO', '🚢 Marítimo'], ['AEREO', '✈️ Aéreo']] as [Filtro, string][]).map(([v, label]) => (
+            <button
+              key={v}
+              onClick={() => setFiltro(v)}
+              className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors ${filtro === v ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── DASHBOARD ─────────────────────────────────────────────────────── */}
@@ -151,11 +168,11 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
               {/* KPIs */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[
-                  { label: 'Frete Marítimo · Média', val: usd(mediaKgMar) + '/kg', sub: `${maritimos.length} registros`, color: 'text-blue-600' },
-                  { label: 'Frete Aéreo · Média', val: usd(mediaKgAer) + '/kg', sub: `${aereos.length} registros`, color: 'text-orange-500' },
-                  { label: 'Melhor Mês (Marítimo)', val: melhorMar ? usd(melhorMar.custo_kg_usd) + '/kg' : '—', sub: melhorMar ? new Date(melhorMar.data_embarque).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }) : '', color: 'text-emerald-600' },
-                  { label: 'Pior Mês (Marítimo)', val: piorMar ? usd(piorMar.custo_kg_usd) + '/kg' : '—', sub: piorMar ? new Date(piorMar.data_embarque).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }) : '', color: 'text-red-500' },
-                ].map((k, i) => (
+                  { label: filtro !== 'AEREO' ? 'Frete Marítimo · Média' : 'Oculto', val: filtro !== 'AEREO' ? (mediaKgMar > 0 ? usd(mediaKgMar) + '/kg' : '—') : null, sub: `${maritimos.length} registros`, color: 'text-blue-600' },
+                  { label: filtro !== 'MARITIMO' ? 'Frete Aéreo · Média' : 'Oculto', val: filtro !== 'MARITIMO' ? (mediaKgAer > 0 ? usd(mediaKgAer) + '/kg' : '—') : null, sub: `${aereos.length} registros`, color: 'text-orange-500' },
+                  { label: 'Melhor Período', val: melhorFiltro ? usd(melhorFiltro.custo_kg_usd) + '/kg' : '—', sub: melhorFiltro ? new Date(melhorFiltro.data_embarque).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }) : '', color: 'text-emerald-600' },
+                  { label: 'Pior Período', val: piorFiltro ? usd(piorFiltro.custo_kg_usd) + '/kg' : '—', sub: piorFiltro ? new Date(piorFiltro.data_embarque).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }) : '', color: 'text-red-500' },
+                ].filter(k => k.val !== null).map((k, i) => (
                   <div key={i} className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{k.label}</p>
                     <p className={`text-xl font-black ${k.color}`}>{k.val}</p>
@@ -232,7 +249,7 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
       {/* ── HISTÓRICO ─────────────────────────────────────────────────────── */}
       {tab === 'historico' && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          {fretes.length === 0 ? (
+          {fretesFiltrados.length === 0 ? (
             <p className="text-center py-12 text-slate-400 text-sm">Nenhum registro ainda.</p>
           ) : (
             <table className="w-full text-sm">
@@ -244,7 +261,7 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
                 </tr>
               </thead>
               <tbody>
-                {fretes.map(f => (
+                {fretesFiltrados.map(f => (
                   <tr key={f.id} className="border-t border-slate-50 hover:bg-slate-50/50">
                     <td className="px-3 py-2.5">{new Date(f.data_embarque).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}</td>
                     <td className="px-3 py-2.5">
