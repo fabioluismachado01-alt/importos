@@ -15,9 +15,26 @@ export type FreteHistoricoRow = {
   frete_usd: number
   cambio: number
   frete_brl: number
+  armazenagem_brl: number
+  custo_total_brl: number
   custo_kg_usd: number
   custo_cbm_usd: number | null
+  custo_total_kg_brl: number
+  custo_total_cbm_brl: number | null
   notas: string | null
+}
+
+function calcularDerivedos(p: {
+  frete_usd: number; cambio: number; peso_kg: number; cbm?: number | null; armazenagem_brl?: number
+}) {
+  const frete_brl = p.frete_usd * p.cambio
+  const armazenagem_brl = p.armazenagem_brl ?? 0
+  const custo_total_brl = frete_brl + armazenagem_brl
+  const custo_kg_usd = p.frete_usd / p.peso_kg
+  const custo_cbm_usd = p.cbm ? p.frete_usd / p.cbm : null
+  const custo_total_kg_brl = custo_total_brl / p.peso_kg
+  const custo_total_cbm_brl = p.cbm ? custo_total_brl / p.cbm : null
+  return { frete_brl, armazenagem_brl, custo_total_brl, custo_kg_usd, custo_cbm_usd, custo_total_kg_brl, custo_total_cbm_brl }
 }
 
 export async function getFreteHistorico(): Promise<FreteHistoricoRow[]> {
@@ -36,13 +53,11 @@ export async function salvarFreteManual(data: {
   cbm?: number
   frete_usd: number
   cambio: number
+  armazenagem_brl?: number
   notas?: string
 }) {
   const { workspaceId } = await getAuthContext()
-
-  const frete_brl = data.frete_usd * data.cambio
-  const custo_kg_usd = data.frete_usd / data.peso_kg
-  const custo_cbm_usd = data.cbm ? data.frete_usd / data.cbm : null
+  const d = calcularDerivedos({ ...data, armazenagem_brl: data.armazenagem_brl ?? 0 })
 
   await prisma.frete_historico.create({
     data: {
@@ -54,10 +69,8 @@ export async function salvarFreteManual(data: {
       cbm: data.cbm ?? null,
       frete_usd: data.frete_usd,
       cambio: data.cambio,
-      frete_brl,
-      custo_kg_usd,
-      custo_cbm_usd,
       notas: data.notas ?? null,
+      ...d,
     },
   })
 
@@ -70,7 +83,6 @@ export async function excluirFrete(id: string) {
   revalidatePath('/ferramentas/fretes')
 }
 
-// Chamado ao salvar rateio — cria/atualiza entrada no histórico automaticamente
 export async function upsertFreteDoRateio(params: {
   workspaceId: string
   rateioId: string
@@ -82,9 +94,7 @@ export async function upsertFreteDoRateio(params: {
   freteUsd: number
   cambio: number
 }) {
-  const frete_brl = params.freteUsd * params.cambio
-  const custo_kg_usd = params.pesoKg > 0 ? params.freteUsd / params.pesoKg : 0
-  const custo_cbm_usd = params.cbm && params.cbm > 0 ? params.freteUsd / params.cbm : null
+  const d = calcularDerivedos({ frete_usd: params.freteUsd, cambio: params.cambio, peso_kg: params.pesoKg, cbm: params.cbm })
 
   await prisma.frete_historico.upsert({
     where: { rateio_id: params.rateioId },
@@ -98,9 +108,7 @@ export async function upsertFreteDoRateio(params: {
       cbm: params.cbm,
       frete_usd: params.freteUsd,
       cambio: params.cambio,
-      frete_brl,
-      custo_kg_usd,
-      custo_cbm_usd,
+      ...d,
     },
     update: {
       modal: params.modal,
@@ -110,9 +118,7 @@ export async function upsertFreteDoRateio(params: {
       cbm: params.cbm,
       frete_usd: params.freteUsd,
       cambio: params.cambio,
-      frete_brl,
-      custo_kg_usd,
-      custo_cbm_usd,
+      ...d,
     },
   })
 }

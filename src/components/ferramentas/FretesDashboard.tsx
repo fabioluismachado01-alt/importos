@@ -24,7 +24,7 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
   // ── Form state ────────────────────────────────────────────────────────────
   const [form, setForm] = useState({
     modal: 'MARITIMO', origem: '', data_embarque: new Date().toISOString().slice(0, 10),
-    peso_kg: '', cbm: '', frete_usd: '', cambio: '5.80', notas: '',
+    peso_kg: '', cbm: '', frete_usd: '', cambio: '5.80', armazenagem_brl: '', notas: '',
   })
 
   function setF(k: string, v: string) { setForm(p => ({ ...p, [k]: v })) }
@@ -39,6 +39,7 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
         cbm: form.cbm ? parseFloat(form.cbm) : undefined,
         frete_usd: parseFloat(form.frete_usd),
         cambio: parseFloat(form.cambio),
+        armazenagem_brl: form.armazenagem_brl ? parseFloat(form.armazenagem_brl) : undefined,
         notas: form.notas || undefined,
       })
       setShowForm(false)
@@ -237,7 +238,7 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
             <table className="w-full text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  {['Data','Modal','Origem','Peso (kg)','CBM (m³)','Frete USD','Câmbio','Frete BRL','$/kg','$/CBM',''].map(h => (
+                  {['Data','Modal','Origem','Peso (kg)','CBM (m³)','Frete USD','Câmbio','Frete BRL','Armaz. R$','$/kg','R$/kg total','R$/CBM total',''].map(h => (
                     <th key={h} className="px-3 py-3 text-left text-[10px] font-bold text-slate-400 uppercase">{h}</th>
                   ))}
                 </tr>
@@ -258,8 +259,10 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
                     <td className="px-3 py-2.5 font-medium text-slate-700">{usd(f.frete_usd)}</td>
                     <td className="px-3 py-2.5 text-slate-500">R${f.cambio.toFixed(2)}</td>
                     <td className="px-3 py-2.5 font-medium">{brl(f.frete_brl)}</td>
+                    <td className="px-3 py-2.5 text-slate-500">{f.armazenagem_brl > 0 ? brl(f.armazenagem_brl) : '—'}</td>
                     <td className="px-3 py-2.5 font-bold text-blue-600">{usd(f.custo_kg_usd)}</td>
-                    <td className="px-3 py-2.5 text-slate-500">{f.custo_cbm_usd ? usd(f.custo_cbm_usd) : '—'}</td>
+                    <td className={`px-3 py-2.5 font-bold ${f.armazenagem_brl > 0 ? 'text-orange-600' : 'text-slate-400'}`}>{brl(f.custo_total_kg_brl)}</td>
+                    <td className="px-3 py-2.5 text-slate-500">{f.custo_total_cbm_brl ? brl(f.custo_total_cbm_brl) : '—'}</td>
                     <td className="px-3 py-2.5">
                       {!f.rateio_id && (
                         <button onClick={() => handleDelete(f.id)} className="text-red-400 hover:text-red-600">
@@ -377,6 +380,15 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
               </div>
             </div>
 
+            {form.modal === 'MARITIMO' && (
+              <div>
+                <label className={labelCls}>
+                  Armazenagem + Portuários (R$)
+                  <span className="ml-1 text-[9px] font-normal text-slate-400">— demurrage, THC, diárias</span>
+                </label>
+                <input type="number" step="0.01" className={inputCls} placeholder="Ex: 1800" value={form.armazenagem_brl} onChange={e => setF('armazenagem_brl', e.target.value)} />
+              </div>
+            )}
             <div>
               <label className={labelCls}>Observações</label>
               <input type="text" className={inputCls} placeholder="Ex: alta temporada pré-natal" value={form.notas} onChange={e => setF('notas', e.target.value)} />

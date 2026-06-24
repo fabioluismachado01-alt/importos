@@ -814,12 +814,16 @@ model frete_historico {
   data_embarque   DateTime
   peso_kg         Float
   cbm             Float?   // volume em m³
-  frete_usd       Float
-  cambio          Float
-  frete_brl       Float    // frete_usd × cambio
-  custo_kg_usd    Float    // frete_usd / peso_kg
-  custo_cbm_usd   Float?   // frete_usd / cbm (se cbm disponível)
-  notas           String?
+  frete_usd         Float
+  cambio            Float
+  frete_brl         Float    // frete_usd × cambio
+  armazenagem_brl   Float    @default(0) // custos portuários: armazenagem + demurrage + THC
+  custo_total_brl   Float    @default(0) // frete_brl + armazenagem_brl
+  custo_kg_usd      Float    // frete_usd / peso_kg
+  custo_cbm_usd     Float?   // frete_usd / cbm (se cbm disponível)
+  custo_total_kg_brl  Float  @default(0) // custo_total_brl / peso_kg
+  custo_total_cbm_brl Float? // custo_total_brl / cbm (se cbm disponível)
+  notas             String?
   created_at      DateTime @default(now())
 
   workspace workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
