@@ -126,7 +126,22 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
   const inputCls = 'w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100'
   const labelCls = 'text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1'
 
-  const semDados = realizados.length === 0
+  const cotacoes = fretesFiltrados.filter(f => f.tipo === 'COTACAO')
+  const semDados = fretesFiltrados.length === 0
+  const somenteCotatcoes = realizados.length === 0 && cotacoes.length > 0
+
+  // Métricas de cotações (usa custo_cbm_usd pois FCL paga container inteiro)
+  const evolucaoCotacoes = cotacoes
+    .slice()
+    .sort((a, b) => new Date(a.data_embarque).getTime() - new Date(b.data_embarque).getTime())
+    .map(f => ({
+      mes: new Date(f.data_embarque).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: '2-digit' }),
+      cbm: f.custo_cbm_usd ?? 0,
+      total: f.frete_usd,
+    }))
+  const melhorCotacao = cotacoes.length ? cotacoes.reduce((min, f) => f.frete_usd < min.frete_usd ? f : min, cotacoes[0]) : null
+  const piorCotacao   = cotacoes.length ? cotacoes.reduce((max, f) => f.frete_usd > max.frete_usd ? f : max, cotacoes[0]) : null
+  const mediaCotacao  = cotacoes.length ? cotacoes.reduce((s, f) => s + f.frete_usd, 0) / cotacoes.length : 0
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-5">
@@ -197,7 +212,73 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
             </div>
           )}
 
-          {!semDados && (
+          {/* ── PAINEL COTAÇÕES (quando só há cotações no filtro ativo) ── */}
+          {!semDados && somenteCotatcoes && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black bg-amber-100 text-amber-700 px-2 py-1 rounded-full uppercase tracking-wider">Cotações</span>
+                <p className="text-xs text-slate-400">{cotacoes.length} orçamentos registrados · preço por container completo (67,5 m³)</p>
+              </div>
+
+              {/* KPIs cotações */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: 'Menor Cotação', val: melhorCotacao ? usd(melhorCotacao.frete_usd) : '—', sub: melhorCotacao ? new Date(melhorCotacao.data_embarque).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: '2-digit' }) : '', color: 'text-emerald-600' },
+                  { label: 'Maior Cotação', val: piorCotacao ? usd(piorCotacao.frete_usd) : '—', sub: piorCotacao ? new Date(piorCotacao.data_embarque).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: '2-digit' }) : '', color: 'text-red-500' },
+                  { label: 'Média das Cotações', val: mediaCotacao > 0 ? usd(mediaCotacao) : '—', sub: `${cotacoes.length} cotações`, color: 'text-blue-600' },
+                  { label: 'Variação', val: melhorCotacao && piorCotacao ? usd(piorCotacao.frete_usd - melhorCotacao.frete_usd) : '—', sub: 'entre menor e maior', color: 'text-orange-500' },
+                ].map((k, i) => (
+                  <div key={i} className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{k.label}</p>
+                    <p className={`text-xl font-black ${k.color}`}>{k.val}</p>
+                    <p className="text-[10px] text-slate-400 mt-1">{k.sub}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Evolução das cotações */}
+              <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
+                <h3 className="text-sm font-bold text-slate-700 mb-3">Evolução das Cotações — Preço por Container (USD)</h3>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={evolucaoCotacoes}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${v.toLocaleString()}`} width={55} />
+                    <Tooltip formatter={(v) => [`$${Number(v).toLocaleString('pt-BR')}`, 'Cotação']} />
+                    <Line dataKey="total" name="Frete USD" stroke="#f59e0b" strokeWidth={2} dot={{ r: 5, fill: '#f59e0b' }} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Heatmap cotações */}
+              <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
+                <h3 className="text-sm font-bold text-slate-700 mb-3">Comparativo de Cotações</h3>
+                <div className="space-y-2">
+                  {cotacoes.slice().sort((a, b) => a.frete_usd - b.frete_usd).map(f => {
+                    const min = melhorCotacao!.frete_usd, max = piorCotacao!.frete_usd
+                    const ratio = max > min ? (f.frete_usd - min) / (max - min) : 0
+                    const bg = ratio < 0.33 ? '#dcfce7' : ratio < 0.66 ? '#fef9c3' : '#fee2e2'
+                    const color = ratio < 0.33 ? '#16a34a' : ratio < 0.66 ? '#ca8a04' : '#dc2626'
+                    return (
+                      <div key={f.id} className="flex items-center gap-3 rounded-xl p-3" style={{ background: bg }}>
+                        <div className="w-24 text-[11px] font-bold text-slate-600">
+                          {new Date(f.data_embarque).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: '2-digit' })}
+                        </div>
+                        <div className="flex-1 bg-white/50 rounded-full h-2">
+                          <div className="h-2 rounded-full" style={{ width: `${Math.max(5, ratio * 100)}%`, background: color }} />
+                        </div>
+                        <div className="text-sm font-black w-24 text-right" style={{ color }}>{usd(f.frete_usd)}</div>
+                        <div className="text-[10px] text-slate-500 w-20 text-right">{usd(f.custo_cbm_usd ?? 0)}/m³</div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2">🟢 Mais barato · 🟡 Atenção · 🔴 Evitar</p>
+              </div>
+            </div>
+          )}
+
+          {!semDados && !somenteCotatcoes && (
             <>
               {/* KPIs */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
