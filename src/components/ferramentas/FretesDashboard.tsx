@@ -117,7 +117,7 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
           onClick={() => setShowForm(true)}
           className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold px-4 py-2.5 rounded-xl transition-colors"
         >
-          <Plus className="w-4 h-4" /> Registrar Frete
+          <Plus className="w-4 h-4" /> Registrar Frete Avulso
         </button>
       </div>
 
@@ -330,7 +330,10 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
-            <h2 className="text-base font-black text-slate-800">Registrar Frete</h2>
+            <div>
+            <h2 className="text-base font-black text-slate-800">Registrar Frete Avulso</h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">Para fretes históricos ou que não vieram de um Rateio. Fretes do Rateio entram aqui automaticamente.</p>
+          </div>
 
             <div>
               <label className={labelCls}>Modal</label>
