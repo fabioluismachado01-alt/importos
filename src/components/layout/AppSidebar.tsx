@@ -57,6 +57,7 @@ const NAV_ITEMS: NavItem[] = [
       { href: '/ferramentas/precificacao', label: 'Calculadora de Precificação' },
       { href: '/ferramentas/landed-cost', label: 'Simulador de Custos' },
       { href: '/ferramentas/rateio', label: 'Rateio de Lote' },
+      { href: '/ferramentas/fretes', label: 'Histórico de Fretes' },
       { href: '/ferramentas/recompra', label: 'Ponto de Recompra' },
       { href: '/ferramentas/documentacao', label: 'Documentação' },
     ],

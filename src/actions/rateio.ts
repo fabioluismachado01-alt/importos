@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/auth'
+import { upsertFreteDoRateio } from './fretes'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,7 @@ export interface RateioItemInput {
 export interface SalvarRateioInput {
   nome: string
   modo: 'SIMPLIFICADA' | 'FORMAL'
+  modal: 'MARITIMO' | 'AEREO'
   cambio: number
   frete_usd: number
   imposto_simpl_brl?: number
@@ -35,8 +37,9 @@ export interface SalvarRateioInput {
   venda_taxa_fixa_brl: number
   ano_ref: number
   mes_ref: number
-  // Valor aduaneiro CIF total do lote em R$ (calculado no cliente)
   valor_aduaneiro_brl: number
+  cbm_total?: number
+  origem?: string
   itens: RateioItemInput[]
 }
 
@@ -45,11 +48,15 @@ export interface SalvarRateioInput {
 export async function salvarRateio(input: SalvarRateioInput) {
   const { workspaceId, user } = await getAuthContext()
 
+  // Calcular peso total e CBM a partir dos itens
+  const pesoTotal = input.itens.reduce((acc, i) => acc + (i.peso * i.qty), 0)
+
   const rateio = await prisma.rateio.create({
     data: {
       workspace_id: workspaceId,
       nome: input.nome,
       modo: input.modo,
+      modal: input.modal,
       cambio: input.cambio,
       frete_usd: input.frete_usd,
       imposto_simpl_brl: input.imposto_simpl_brl ?? null,
@@ -61,6 +68,9 @@ export async function salvarRateio(input: SalvarRateioInput) {
       ano_ref: input.ano_ref,
       mes_ref: input.mes_ref,
       valor_aduaneiro_brl: input.valor_aduaneiro_brl,
+      cbm_total: input.cbm_total ?? null,
+      peso_total_kg: pesoTotal,
+      origem: input.origem ?? null,
       status: 'SALVO',
       created_by: user.id,
       itens: {
@@ -83,8 +93,24 @@ export async function salvarRateio(input: SalvarRateioInput) {
     },
   })
 
+  // Registrar no histórico de fretes automaticamente
+  if (input.frete_usd > 0 && pesoTotal > 0) {
+    await upsertFreteDoRateio({
+      workspaceId,
+      rateioId: rateio.id,
+      modal: input.modal,
+      origem: input.origem ?? null,
+      dataEmbarque: new Date(),
+      pesoKg: pesoTotal,
+      cbm: input.cbm_total ?? null,
+      freteUsd: input.frete_usd,
+      cambio: input.cambio,
+    })
+  }
+
   revalidatePath('/ferramentas/rateio')
   revalidatePath('/ferramentas/impostos')
+  revalidatePath('/ferramentas/fretes')
   return { ok: true, id: rateio.id }
 }
 

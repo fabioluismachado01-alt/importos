@@ -6,6 +6,18 @@ import { Search, RefreshCw, Download, Pencil, Check, X, TrendingUp, TrendingDown
 import { sincronizarMLPedidos, editarCustoPedido } from '@/actions/ml'
 import type { MLPedidoRow, AdsMes } from '@/actions/ml'
 
+function ProdImg({ fotoUrl, titulo, className }: { fotoUrl: string | null; titulo: string; className: string }) {
+  const [err, setErr] = useState(false)
+  if (!fotoUrl || err) {
+    return (
+      <div className={`${className} flex items-center justify-center text-[9px] font-black text-white shrink-0`} style={{ background: 'linear-gradient(135deg,#FFE600,#FF6A00)' }}>
+        {titulo.charAt(0)}
+      </div>
+    )
+  }
+  return <img src={fotoUrl} alt="" className={`${className} object-cover border border-slate-100 shrink-0`} onError={() => setErr(true)} />
+}
+
 interface Props {
   pedidos: MLPedidoRow[]
   conexoes: { id: string; nickname: string }[]
@@ -459,13 +471,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais }
             <div key={item.chave} className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-x-3 items-center px-1 py-1.5 hover:bg-slate-50 rounded-lg transition-colors">
               <div className="flex items-center gap-1.5">
                 <span className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-black border ${badgeCls}`}>{item.classe}</span>
-                {item.foto_url ? (
-                  <img src={item.foto_url} alt="" className="w-7 h-7 rounded-md object-cover border border-slate-100 shrink-0" />
-                ) : (
-                  <div className="w-7 h-7 rounded-md shrink-0 flex items-center justify-center text-[9px] font-black text-white" style={{ background: 'linear-gradient(135deg,#FFE600,#FF6A00)' }}>
-                    {item.titulo.charAt(0)}
-                  </div>
-                )}
+                <ProdImg fotoUrl={item.foto_url} titulo={item.titulo} className="w-7 h-7 rounded-md" />
               </div>
               <p className="text-xs text-slate-700 truncate leading-tight">
                 {mascaraNome(item.titulo)}
@@ -665,11 +671,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais }
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Maior custo de frete</p>
                     {logistica.topFrete.map(item => (
                       <div key={item.chave} className="flex items-center gap-2 py-1.5 border-b border-slate-50 last:border-0">
-                        {item.foto_url ? (
-                          <img src={item.foto_url} alt="" className="w-7 h-7 rounded object-cover shrink-0 border border-slate-100" />
-                        ) : (
-                          <div className="w-7 h-7 rounded shrink-0 flex items-center justify-center text-[9px] font-black text-white" style={{ background: 'linear-gradient(135deg,#FFE600,#FF6A00)' }}>{item.titulo.charAt(0)}</div>
-                        )}
+                        <ProdImg fotoUrl={item.foto_url} titulo={item.titulo} className="w-7 h-7 rounded" />
                         <p className="flex-1 text-xs text-slate-600 truncate">{mascaraNome(item.titulo)}</p>
                         <span className="text-xs font-bold text-orange-600">{mascaraValor(vis >= 3 ? '██' : brl(item.totalFrete))}</span>
                       </div>
@@ -690,11 +692,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais }
                       <div className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0 bg-red-100">
                         <span className="text-red-500 text-[10px] font-bold">✕</span>
                       </div>
-                      {p.foto_url ? (
-                        <img src={p.foto_url} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0 border border-slate-100" />
-                      ) : (
-                        <div className="w-8 h-8 rounded flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: 'linear-gradient(135deg, #FFE600 0%, #FF6A00 100%)' }}>{p.titulo.charAt(0)}</div>
-                      )}
+                      <ProdImg fotoUrl={p.foto_url} titulo={p.titulo} className="w-8 h-8 rounded" />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-slate-700 truncate">{mascaraNome(p.titulo)}</p>
                         <p className="text-[10px] text-slate-400">{mascaraNome(p.comprador_nick)} · {new Date(p.data_compra).toLocaleDateString('pt-BR')}</p>
@@ -721,11 +719,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais }
                     return (
                       <div key={item.chave} className="flex items-center gap-2 px-2 py-1.5">
                         <RingChart pct={item.pct} color={cor} />
-                        {item.foto_url ? (
-                          <img src={item.foto_url} alt="" className="w-9 h-9 rounded object-cover flex-shrink-0" />
-                        ) : (
-                          <div className="w-9 h-9 rounded flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: 'linear-gradient(135deg, #FFE600 0%, #FF6A00 100%)' }}>{item.titulo.charAt(0).toUpperCase()}</div>
-                        )}
+                        <ProdImg fotoUrl={item.foto_url} titulo={item.titulo} className="w-9 h-9 rounded" />
                         <div className="min-w-0 max-w-[200px]">
                           <p className="text-[11px] font-medium text-slate-600 truncate" title={item.titulo}>{mascaraNome(item.titulo)}</p>
                           <p className="text-xs font-bold text-slate-800">{mascaraValor(vis >= 3 ? '█████' : item.valor)}</p>
@@ -810,11 +804,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais }
               {filtrados.map(p => (
                 <tr key={p.id} className={`hover:bg-slate-50 transition-colors ${p.lucro < 0 ? 'bg-red-50/40' : ''}`}>
                   <td className="px-3 py-2">
-                    {p.foto_url ? (
-                      <img src={p.foto_url} alt="" className="w-8 h-8 object-cover rounded-md border border-slate-100" />
-                    ) : (
-                      <div className="w-8 h-8 rounded-md flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: 'linear-gradient(135deg, #FFE600 0%, #FF6A00 100%)' }}>{p.titulo.charAt(0).toUpperCase()}</div>
-                    )}
+                    <ProdImg fotoUrl={p.foto_url} titulo={p.titulo} className="w-8 h-8 rounded-md" />
                   </td>
                   <td className="px-3 py-2 max-w-[200px]">
                     <p className="font-medium text-slate-700 truncate" title={p.titulo}>{mascaraNome(p.titulo)}</p>

@@ -77,6 +77,7 @@ model workspace {
   ml_conexoes              ml_conexao[]
   ml_pedidos               ml_pedido[]
   ml_estoques              ml_estoque[]
+  fretes_historico         frete_historico[]
 }
 
 model workspace_membro {
@@ -458,13 +459,19 @@ model rateio {
   mes_ref             Int?
   // Valor aduaneiro total do lote (CIF em R$) — calculado ao salvar
   valor_aduaneiro_brl Float?
+  // Modal e logística
+  modal               String   @default("MARITIMO") // MARITIMO | AEREO
+  cbm_total           Float?   // volume total em m³ (da BL ou calculado pelas dims dos itens)
+  peso_total_kg       Float?   // peso total do lote em kg (calculado ao salvar)
+  origem              String?  // ex: Guangzhou, Yiwu
   created_at          DateTime @default(now())
   updated_at          DateTime @updatedAt
   created_by          String
 
-  workspace   workspace     @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
-  itens       rateio_item[]
-  comentarios comentario[]
+  workspace        workspace        @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  itens            rateio_item[]
+  comentarios      comentario[]
+  frete_historico  frete_historico?
 
   @@index([workspace_id])
 }
@@ -793,6 +800,35 @@ model ml_estoque {
 }
 
 // =============================================
+
+// =============================================
+// HISTÓRICO DE FRETES
+// =============================================
+
+model frete_historico {
+  id              String   @id @default(cuid())
+  workspace_id    String
+  rateio_id       String?  @unique // vínculo opcional com o rateio de origem
+  modal           String   // MARITIMO | AEREO
+  origem          String?  // ex: Guangzhou, Yiwu
+  data_embarque   DateTime
+  peso_kg         Float
+  cbm             Float?   // volume em m³
+  frete_usd       Float
+  cambio          Float
+  frete_brl       Float    // frete_usd × cambio
+  custo_kg_usd    Float    // frete_usd / peso_kg
+  custo_cbm_usd   Float?   // frete_usd / cbm (se cbm disponível)
+  notas           String?
+  created_at      DateTime @default(now())
+
+  workspace workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  rateio    rateio?   @relation(fields: [rateio_id], references: [id], onDelete: SetNull)
+
+  @@index([workspace_id])
+  @@index([modal])
+  @@index([data_embarque])
+}
 
 model comentario {
   id             String   @id @default(cuid())

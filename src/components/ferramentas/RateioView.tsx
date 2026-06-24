@@ -1,5 +1,5 @@
 'use client'
-
+// v2
 import { useState, useMemo, useEffect, useTransition, useRef } from 'react'
 import { usePersistedState } from '@/hooks/usePersistedState'
 import { cn } from '@/lib/utils'
@@ -294,6 +294,9 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
   const [saveNome, setSaveNome] = useState('')
   const [saveAno, setSaveAno] = useState(hoje.getFullYear())
   const [saveMes, setSaveMes] = useState(hoje.getMonth() + 1)
+  const [saveModal, setSaveModal] = useState<'MARITIMO' | 'AEREO'>('MARITIMO')
+  const [saveCbm, setSaveCbm] = useState('')
+  const [saveOrigem, setSaveOrigem] = useState('')
   const [saveFeedback, setSaveFeedback] = useState<'idle' | 'ok' | 'erro'>('idle')
   const [isPending, startTransition] = useTransition()
 
@@ -305,9 +308,11 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
     const nomeParaSalvar = saveNome.trim() || `Lote ${String(saveMes).padStart(2, '0')}/${saveAno}`
     startTransition(async () => {
       try {
+        const cbmParsed = parseFloat(saveCbm)
         await salvarRateio({
           nome: nomeParaSalvar,
           modo: mode === 'simplificada' ? 'SIMPLIFICADA' : 'FORMAL',
+          modal: saveModal,
           cambio: params.dolar,
           frete_usd: params.freightUsd,
           imposto_simpl_brl: mode === 'simplificada' ? params.taxesBrl : undefined,
@@ -319,6 +324,8 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
           ano_ref: saveAno,
           mes_ref: saveMes,
           valor_aduaneiro_brl: valorAduaneiroBrl,
+          cbm_total: !isNaN(cbmParsed) && cbmParsed > 0 ? cbmParsed : undefined,
+          origem: saveOrigem.trim() || undefined,
           itens: items.map(item => ({
             nome: item.name,
             produto_id: item.produtoId ?? undefined,
@@ -423,6 +430,48 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
               <div>
                 <Label>Frete + Seguro Total (USD)</Label>
                 <NInput value={params.freightUsd} onChange={v => setP('freightUsd', v)} step="10" />
+              </div>
+              <div>
+                <Label>Modal de Transporte</Label>
+                <div className="flex rounded-xl overflow-hidden border border-slate-200 mt-1">
+                  {(['MARITIMO', 'AEREO'] as const).map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setSaveModal(m)}
+                      className={`flex-1 py-1.5 text-[11px] font-bold transition-colors ${saveModal === m ? 'bg-emerald-600 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+                    >
+                      {m === 'MARITIMO' ? '🚢 Marítimo' : '✈️ Aéreo'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Label>
+                  CBM Total (m³)
+                  <span className="ml-1 text-[9px] font-normal text-slate-400">
+                    {mode === 'formal' ? '— informe da BL' : '— opcional'}
+                  </span>
+                </Label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={saveCbm}
+                  onChange={e => setSaveCbm(e.target.value)}
+                  placeholder={mode === 'formal' ? 'Ex: 2.5' : 'Opcional'}
+                  className="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                />
+              </div>
+              <div>
+                <Label>Origem</Label>
+                <input
+                  type="text"
+                  value={saveOrigem}
+                  onChange={e => setSaveOrigem(e.target.value)}
+                  placeholder="Ex: Guangzhou"
+                  className="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                />
               </div>
               {mode === 'simplificada' ? (
                 <div>
@@ -734,6 +783,52 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
                         <option key={a} value={a}>{a}</option>
                       ))}
                     </select>
+                  </div>
+                </div>
+
+                {/* Modal de transporte */}
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Modal</label>
+                  <div className="mt-1 flex rounded-xl overflow-hidden border border-slate-200">
+                    {(['MARITIMO', 'AEREO'] as const).map(m => (
+                      <button
+                        key={m}
+                        onClick={() => setSaveModal(m)}
+                        className={`flex-1 py-2 text-xs font-bold transition-colors ${saveModal === m ? 'bg-emerald-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                      >
+                        {m === 'MARITIMO' ? '🚢 Marítimo' : '✈️ Aéreo'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      CBM Total (m³)
+                      <span className="ml-1 text-[10px] font-normal text-slate-400">
+                        {mode === 'formal' ? '— da BL' : '— opcional'}
+                      </span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={saveCbm}
+                      onChange={e => setSaveCbm(e.target.value)}
+                      placeholder={mode === 'formal' ? 'Ex: 2.5' : 'Opcional'}
+                      className="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Origem</label>
+                    <input
+                      type="text"
+                      value={saveOrigem}
+                      onChange={e => setSaveOrigem(e.target.value)}
+                      placeholder="Ex: Guangzhou"
+                      className="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                    />
                   </div>
                 </div>
               </div>

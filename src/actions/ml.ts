@@ -513,6 +513,38 @@ export async function sincronizarMLEstoque(
   }
 
   revalidatePath('/marketplaces/estoque')
+  // Backfill de fotos: API de pedidos não retorna thumbnail, buscar em lote
+  const semFoto = await prisma.ml_pedido.findMany({
+    where: { workspace_id: conn.workspace_id, conexao_id: conn.id, foto_url: null },
+    select: { ml_item_id: true },
+    distinct: ['ml_item_id'],
+  })
+  if (semFoto.length > 0) {
+    const ids = semFoto.map(p => p.ml_item_id)
+    const thumbMap = new Map<string, string>()
+    for (let i = 0; i < ids.length; i += 20) {
+      const batch = ids.slice(i, i + 20).join(',')
+      try {
+        const res = await fetch(
+          `https://api.mercadolibre.com/items?ids=${batch}&attributes=id,thumbnail`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        )
+        if (res.ok) {
+          const data: Array<{ code: number; body: { id: string; thumbnail: string } }> = await res.json()
+          for (const d of data)
+            if (d.code === 200 && d.body?.thumbnail)
+              thumbMap.set(d.body.id, d.body.thumbnail.replace('http://', 'https://'))
+        }
+      } catch { /* ignora */ }
+    }
+    for (const [mlItemId, fotoUrl] of thumbMap) {
+      await prisma.ml_pedido.updateMany({
+        where: { workspace_id: conn.workspace_id, ml_item_id: mlItemId, foto_url: null },
+        data: { foto_url: fotoUrl },
+      })
+    }
+  }
+
   return { sincronizados }
 }
 
