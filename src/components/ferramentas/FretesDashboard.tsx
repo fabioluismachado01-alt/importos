@@ -15,12 +15,32 @@ const usd = (n: number) => '$' + n.toLocaleString('pt-BR', { minimumFractionDigi
 
 type Tab = 'dashboard' | 'historico' | 'calculadora'
 type Filtro = 'TODOS' | 'MARITIMO' | 'AEREO'
+type FiltroContainer = 'TODOS' | 'LCL' | 'FCL_40NOR' | 'FCL_20' | 'FCL_40HC'
+
+const CONTAINER_LABELS: Record<FiltroContainer, string> = {
+  TODOS: 'Todos',
+  LCL: 'LCL',
+  FCL_20: '20\'',
+  FCL_40NOR: '40NOR',
+  FCL_40HC: '40HC',
+}
 
 export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow[] }) {
   const [tab, setTab] = useState<Tab>('dashboard')
   const [filtro, setFiltro] = useState<Filtro>('TODOS')
+  const [filtroContainer, setFiltroContainer] = useState<FiltroContainer>('TODOS')
   const [fretes, setFretes] = useState(initial)
-  const fretesFiltrados = filtro === 'TODOS' ? fretes : fretes.filter(f => f.modal === filtro)
+
+  const fretesFiltrados = fretes
+    .filter(f => filtro === 'TODOS' || f.modal === filtro)
+    .filter(f => filtroContainer === 'TODOS' || f.tipo_container === filtroContainer)
+
+  // Sub-filtros de container disponíveis para o modal selecionado
+  const containerDisponiveis = Array.from(
+    new Set(fretes.filter(f => filtro === 'TODOS' || f.modal === filtro).map(f => f.tipo_container).filter(Boolean))
+  ) as string[]
+
+  const realizados = fretesFiltrados.filter(f => f.tipo !== 'COTACAO')
   const [showForm, setShowForm] = useState(false)
   const [isPending, startTransition] = useTransition()
 
@@ -58,20 +78,20 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
     })
   }
 
-  // ── Métricas derivadas (respeitam filtro) ────────────────────────────────
-  const maritimos = fretesFiltrados.filter(f => f.modal === 'MARITIMO')
-  const aereos    = fretesFiltrados.filter(f => f.modal === 'AEREO')
+  // ── Métricas derivadas (somente realizados) ──────────────────────────────
+  const maritimos = realizados.filter(f => f.modal === 'MARITIMO')
+  const aereos    = realizados.filter(f => f.modal === 'AEREO')
 
   const mediaKgMar = maritimos.length ? maritimos.reduce((s, f) => s + f.custo_kg_usd, 0) / maritimos.length : 0
   const mediaKgAer = aereos.length    ? aereos.reduce((s, f) => s + f.custo_kg_usd, 0) / aereos.length : 0
 
-  const melhorFiltro = fretesFiltrados.length ? fretesFiltrados.reduce((min, f) => f.custo_kg_usd < min.custo_kg_usd ? f : min, fretesFiltrados[0]) : null
-  const piorFiltro   = fretesFiltrados.length ? fretesFiltrados.reduce((max, f) => f.custo_kg_usd > max.custo_kg_usd ? f : max, fretesFiltrados[0]) : null
+  const melhorFiltro = realizados.length ? realizados.reduce((min, f) => f.custo_kg_usd < min.custo_kg_usd ? f : min, realizados[0]) : null
+  const piorFiltro   = realizados.length ? realizados.reduce((max, f) => f.custo_kg_usd > max.custo_kg_usd ? f : max, realizados[0]) : null
 
   // Evolução mensal
   const evolucao = useMemo(() => {
     const map = new Map<string, { mes: string; maritimo?: number; aereo?: number }>()
-    fretesFiltrados.forEach(f => {
+    realizados.forEach(f => {
       const d = new Date(f.data_embarque)
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
       const label = `${MESES[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`
@@ -106,7 +126,7 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
   const inputCls = 'w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100'
   const labelCls = 'text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1'
 
-  const semDados = fretes.length === 0
+  const semDados = realizados.length === 0
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-5">
@@ -138,17 +158,31 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
             </button>
           ))}
         </div>
-        {/* Filtro de modal */}
-        <div className="flex gap-1 pb-1">
+        {/* Filtros */}
+        <div className="flex flex-wrap gap-1 pb-1 items-center">
           {([['TODOS', 'Todos'], ['MARITIMO', '🚢 Marítimo'], ['AEREO', '✈️ Aéreo']] as [Filtro, string][]).map(([v, label]) => (
             <button
               key={v}
-              onClick={() => setFiltro(v)}
+              onClick={() => { setFiltro(v); setFiltroContainer('TODOS') }}
               className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors ${filtro === v ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
             >
               {label}
             </button>
           ))}
+          {containerDisponiveis.length > 1 && (
+            <>
+              <span className="text-slate-200 text-sm px-1">|</span>
+              {(['TODOS', ...containerDisponiveis] as FiltroContainer[]).map(v => (
+                <button
+                  key={v}
+                  onClick={() => setFiltroContainer(v)}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors ${filtroContainer === v ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                >
+                  {CONTAINER_LABELS[v] ?? v}
+                </button>
+              ))}
+            </>
+          )}
         </div>
       </div>
 
@@ -262,12 +296,17 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
               </thead>
               <tbody>
                 {fretesFiltrados.map(f => (
-                  <tr key={f.id} className="border-t border-slate-50 hover:bg-slate-50/50">
-                    <td className="px-3 py-2.5">{new Date(f.data_embarque).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}</td>
+                  <tr key={f.id} className={`border-t border-slate-50 hover:bg-slate-50/50 ${f.tipo === 'COTACAO' ? 'bg-amber-50/40' : ''}`}>
+                    <td className="px-3 py-2.5">
+                      <span className="block">{new Date(f.data_embarque).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}</span>
+                      {f.tipo === 'COTACAO' && (
+                        <span className="inline-block text-[9px] font-black bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full mt-0.5">COTAÇÃO</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2.5">
                       <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${f.modal === 'MARITIMO' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-500'}`}>
                         {f.modal === 'MARITIMO' ? <Ship className="w-3 h-3" /> : <Plane className="w-3 h-3" />}
-                        {f.modal === 'MARITIMO' ? 'Marítimo' : 'Aéreo'}
+                        {f.modal === 'MARITIMO' ? (f.tipo_container ?? 'Marítimo') : 'Aéreo'}
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-slate-500">{f.origem ?? '—'}</td>

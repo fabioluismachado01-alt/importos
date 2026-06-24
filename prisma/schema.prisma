@@ -823,6 +823,8 @@ model frete_historico {
   custo_cbm_usd     Float?   // frete_usd / cbm (se cbm disponível)
   custo_total_kg_brl  Float  @default(0) // custo_total_brl / peso_kg
   custo_total_cbm_brl Float? // custo_total_brl / cbm (se cbm disponível)
+  tipo              String   @default("REALIZADO") // REALIZADO | COTACAO
+  tipo_container    String?  // LCL | FCL_20 | FCL_40NOR | FCL_40HC
   notas             String?
   created_at      DateTime @default(now())
 

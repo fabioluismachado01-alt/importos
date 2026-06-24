@@ -7,6 +7,8 @@ import { revalidatePath } from 'next/cache'
 export type FreteHistoricoRow = {
   id: string
   rateio_id: string | null
+  tipo: string
+  tipo_container: string | null
   modal: string
   origem: string | null
   data_embarque: Date
