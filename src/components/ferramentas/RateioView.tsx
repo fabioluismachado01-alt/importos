@@ -294,7 +294,7 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
   const [saveNome, setSaveNome] = useState('')
   const [saveAno, setSaveAno] = useState(hoje.getFullYear())
   const [saveMes, setSaveMes] = useState(hoje.getMonth() + 1)
-  const [saveModal, setSaveModal] = useState<'MARITIMO' | 'AEREO'>('MARITIMO')
+  const saveModal = mode === 'simplificada' ? 'AEREO' : 'MARITIMO'
   const [saveCbm, setSaveCbm] = useState('')
   const [saveOrigem, setSaveOrigem] = useState('')
   const [saveFeedback, setSaveFeedback] = useState<'idle' | 'ok' | 'erro'>('idle')
@@ -431,21 +431,7 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
                 <Label>Frete + Seguro Total (USD)</Label>
                 <NInput value={params.freightUsd} onChange={v => setP('freightUsd', v)} step="10" />
               </div>
-              <div>
-                <Label>Modal de Transporte</Label>
-                <div className="flex rounded-xl overflow-hidden border border-slate-200 mt-1">
-                  {(['MARITIMO', 'AEREO'] as const).map(m => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setSaveModal(m)}
-                      className={`flex-1 py-1.5 text-[11px] font-bold transition-colors ${saveModal === m ? 'bg-emerald-600 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
-                    >
-                      {m === 'MARITIMO' ? '🚢 Marítimo' : '✈️ Aéreo'}
-                    </button>
-                  ))}
-                </div>
-              </div>
+
               <div>
                 <Label>
                   CBM Total (m³)
@@ -786,20 +772,11 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
                   </div>
                 </div>
 
-                {/* Modal de transporte */}
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Modal</label>
-                  <div className="mt-1 flex rounded-xl overflow-hidden border border-slate-200">
-                    {(['MARITIMO', 'AEREO'] as const).map(m => (
-                      <button
-                        key={m}
-                        onClick={() => setSaveModal(m)}
-                        className={`flex-1 py-2 text-xs font-bold transition-colors ${saveModal === m ? 'bg-emerald-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
-                      >
-                        {m === 'MARITIMO' ? '🚢 Marítimo' : '✈️ Aéreo'}
-                      </button>
-                    ))}
-                  </div>
+                {/* Modal derivado do tipo de rateio */}
+                <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 rounded-xl px-3 py-2">
+                  <span>{saveModal === 'MARITIMO' ? '🚢' : '✈️'}</span>
+                  <span className="font-semibold">{saveModal === 'MARITIMO' ? 'Marítimo' : 'Aéreo'}</span>
+                  <span className="text-slate-400">— derivado do tipo {mode === 'formal' ? 'Formal' : 'Simplificada'}</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
