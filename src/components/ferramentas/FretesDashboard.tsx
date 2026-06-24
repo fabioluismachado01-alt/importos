@@ -172,7 +172,7 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                       <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
                       <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${v}`} width={35} />
-                      <Tooltip formatter={(v: number) => [`$${v.toFixed(2)}/kg`]} />
+                      <Tooltip formatter={(v) => [`$${Number(v).toFixed(2)}/kg`]} />
                       <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
                       <Line dataKey="maritimo" name="Marítimo" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} connectNulls />
                       <Line dataKey="aereo" name="Aéreo" stroke="#f97316" strokeWidth={2} strokeDasharray="4 2" dot={{ r: 3 }} connectNulls />
@@ -187,7 +187,7 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                       <XAxis dataKey="mes" tick={{ fontSize: 9 }} />
                       <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${v}`} width={35} />
-                      <Tooltip formatter={(v: number) => [`$${v.toFixed(2)}/kg`]} />
+                      <Tooltip formatter={(v) => [`$${Number(v).toFixed(2)}/kg`]} />
                       <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
                       <Bar dataKey="maritimo" name="Marítimo" fill="#3b82f6" radius={[3, 3, 0, 0]} />
                       <Bar dataKey="aereo" name="Aéreo" fill="#f97316" radius={[3, 3, 0, 0]} />
