@@ -10,6 +10,60 @@ import {
 import { PrecificacaoReport } from './reports/PrecificacaoReport'
 import { getMLListingTaxas, type MLListingTaxas } from '@/actions/ml-listing'
 
+// ─── Logos dos canais ────────────────────────────────────────────────────────
+
+function ChannelLogo({ id }: { id: string }) {
+  switch (id) {
+    case 'ml': return (
+      <svg viewBox="0 0 130 22" height="15" fill="none">
+        {/* Estrela/ícone ML */}
+        <path d="M9 2L10.5 6.5H15.2L11.4 9.2L12.9 13.7L9 11L5.1 13.7L6.6 9.2L2.8 6.5H7.5L9 2Z" fill="#f97316"/>
+        {/* Wordmark "mercado livre" */}
+        <text x="19" y="15" fontSize="10.5" fontWeight="800" fill="#1c1917" fontFamily="Arial, sans-serif" letterSpacing="-0.2">mercado livre</text>
+      </svg>
+    )
+    case 'shopee': return (
+      <svg viewBox="0 0 90 22" height="15" fill="none">
+        {/* Bag icon */}
+        <path d="M3 8.5C3 7.4 3.9 6.5 5 6.5H13C14.1 6.5 15 7.4 15 8.5V16.5C15 17.6 14.1 18.5 13 18.5H5C3.9 18.5 3 17.6 3 16.5V8.5Z" fill="white" fillOpacity="0.9"/>
+        <path d="M6 6.5C6 5.1 7.1 4 8.5 4V4C9.9 4 11 5.1 11 6.5" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
+        <circle cx="7" cy="11.5" r="1" fill="#ea580c"/>
+        <circle cx="11" cy="11.5" r="1" fill="#ea580c"/>
+        {/* Wordmark */}
+        <text x="19" y="15" fontSize="12" fontWeight="800" fill="white" fontFamily="Arial, sans-serif" letterSpacing="-0.3">shopee</text>
+      </svg>
+    )
+    case 'amazon': return (
+      <svg viewBox="0 0 90 22" height="15" fill="none">
+        {/* Wordmark "amazon" */}
+        <text x="0" y="13" fontSize="13" fontWeight="800" fill="#1c1917" fontFamily="Arial, sans-serif" letterSpacing="-0.2">amazon</text>
+        {/* Sorriso arrow */}
+        <path d="M2 17 Q27 22 52 17" stroke="#f97316" strokeWidth="2" strokeLinecap="round" fill="none"/>
+        <path d="M49 14.5 L52 17 L49 18.5" fill="#f97316"/>
+      </svg>
+    )
+    case 'tiktok': return (
+      <svg viewBox="0 0 110 22" height="15" fill="none">
+        {/* TikTok note icon */}
+        <path d="M10 4V14.5C10 16.4 8.4 18 6.5 18C4.6 18 3 16.4 3 14.5C3 12.6 4.6 11 6.5 11C7 11 7.5 11.1 8 11.3V4H10Z" fill="white"/>
+        <path d="M10 7.5C11 8.5 12.3 9 14 9" stroke="#2BE0F0" strokeWidth="1.5" strokeLinecap="round"/>
+        {/* Wordmark */}
+        <text x="18" y="15" fontSize="11" fontWeight="900" fill="white" fontFamily="Arial, sans-serif" letterSpacing="-0.2">TikTok Shop</text>
+      </svg>
+    )
+    case 'magalu': return (
+      <svg viewBox="0 0 80 22" height="15" fill="none">
+        {/* Ícone M estilizado */}
+        <rect x="1" y="4" width="12" height="14" rx="2" fill="white" fillOpacity="0.2"/>
+        <text x="2.5" y="15" fontSize="11" fontWeight="900" fill="white" fontFamily="Arial, sans-serif">M</text>
+        {/* Wordmark */}
+        <text x="17" y="15" fontSize="12" fontWeight="700" fill="white" fontFamily="Arial, sans-serif" letterSpacing="-0.2">magalu</text>
+      </svg>
+    )
+    default: return null
+  }
+}
+
 // ─── Canais ─────────────────────────────────────────────────────────────────
 
 interface Channel {
@@ -379,7 +433,7 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
                 className="px-3 py-2.5 flex items-center justify-between shrink-0"
                 style={{ backgroundColor: ch.accentBg, color: ch.accentText }}
               >
-                <span className="text-[10px] font-black uppercase tracking-tight leading-none">{ch.name}</span>
+                <ChannelLogo id={ch.id} />
                 <StIcon className="w-3.5 h-3.5 shrink-0" />
               </div>
 
