@@ -43,6 +43,7 @@ interface ChannelState {
   price: number
   feePercent: number
   fixedFee: number
+  freight: number
 }
 
 interface CalcResult {
@@ -56,6 +57,7 @@ interface CalcResult {
   valTax: number
   valMkt: number
   valPack: number
+  valFrete: number
   status: 'excelente' | 'saudavel' | 'critico' | 'prejuizo'
 }
 
@@ -70,24 +72,39 @@ function tikTokFees(price: number) {
 function calc(
   price: number, cost: number, taxRate: number,
   packaging: number, feePercent: number, fixedFee: number, volume: number,
+  freight = 0,
 ): CalcResult {
-  const valProd = cost
-  const valTax  = price * (taxRate / 100)
-  const valMkt  = price * (feePercent / 100) + fixedFee
-  const valPack = packaging
-  const sobra   = price - valProd - valTax - valMkt - valPack
-  const roi     = cost > 0  ? (sobra / cost)  * 100 : 0
-  const margem  = price > 0 ? (sobra / price) * 100 : 0
-  const roas    = sobra > 0 ? price / sobra : 0
-  const acos    = margem
+  const valProd  = cost
+  const valTax   = price * (taxRate / 100)
+  const valMkt   = price * (feePercent / 100) + fixedFee
+  const valPack  = packaging
+  const valFrete = freight
+  const sobra    = price - valProd - valTax - valMkt - valPack - valFrete
+  const roi      = cost > 0  ? (sobra / cost)  * 100 : 0
+  const margem   = price > 0 ? (sobra / price) * 100 : 0
+  const roas     = sobra > 0 ? price / sobra : 0
+  const acos     = margem
 
   let status: CalcResult['status']
-  if (sobra <= 0)    status = 'prejuizo'
-  else if (roas > 6) status = 'critico'
+  if (sobra <= 0)       status = 'prejuizo'
+  else if (roas > 6)    status = 'critico'
   else if (roas >= 3.4) status = 'saudavel'
-  else               status = 'excelente'
+  else                  status = 'excelente'
 
-  return { sobra, sobraVolume: sobra * volume, roi, margem, roas, acos, valProd, valTax, valMkt, valPack, status }
+  return { sobra, sobraVolume: sobra * volume, roi, margem, roas, acos, valProd, valTax, valMkt, valPack, valFrete, status }
+}
+
+// Preço Ideal: dado margem desejada (%), calcula o preço de venda necessário
+function calcPrecoIdeal(cost: number, taxRate: number, packaging: number, freight: number, feePercent: number, fixedFee: number, margemTarget: number): number {
+  // price * (1 - tax% - fee% - margem%) = cost + fixedFee + packaging + freight
+  const divisor = 1 - (taxRate / 100) - (feePercent / 100) - (margemTarget / 100)
+  if (divisor <= 0) return 0
+  return (cost + fixedFee + packaging + freight) / divisor
+}
+
+// Preço Mínimo: margem = 0 (break-even)
+function calcPrecoMinimo(cost: number, taxRate: number, packaging: number, freight: number, feePercent: number, fixedFee: number): number {
+  return calcPrecoIdeal(cost, taxRate, packaging, freight, feePercent, fixedFee, 0)
 }
 
 // ─── Configuração de Status ──────────────────────────────────────────────────
@@ -169,6 +186,7 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
     price: defPrice,
     feePercent: ch.tiered ? tikTokFees(defPrice).fee : ch.defaultFee,
     fixedFee:   ch.tiered ? tikTokFees(defPrice).fixed : ch.defaultFixed,
+    freight: 0,
   })
 
   const [global, setGlobal] = usePersistedState<GlobalState>(`${workspaceId}_prec_global`, {
@@ -182,6 +200,7 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
 
   const [selected, setSelected] = useState('ml')
   const [openFees, setOpenFees] = useState<string | null>(null)
+  const [margemIdeal, setMargemIdeal] = useState(30)
 
   function setG<K extends keyof GlobalState>(k: K, v: GlobalState[K]) {
     setGlobal(p => ({ ...p, [k]: v }))
@@ -203,7 +222,7 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
     Object.fromEntries(
       CHANNELS.map(ch => {
         const cs = chs[ch.id]
-        return [ch.id, calc(cs.price, global.costPrice, global.taxRate, global.packaging, cs.feePercent, cs.fixedFee, global.volume)]
+        return [ch.id, calc(cs.price, global.costPrice, global.taxRate, global.packaging, cs.feePercent, cs.fixedFee, global.volume, cs.freight)]
       })
     ),
   [global, chs])
@@ -382,6 +401,14 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
                           )}
                         />
                       </div>
+                      <div className="col-span-2">
+                        <Label>Frete Vendedor R$</Label>
+                        <input
+                          type="number" step="0.01" value={cs.freight}
+                          onChange={e => setCh(ch.id, 'freight', +e.target.value || 0)}
+                          className="w-full mt-1 px-2 py-1 rounded-lg border border-slate-200 text-xs font-mono text-center focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
                       {ch.tiered && (
                         <p className="col-span-2 text-[7px] text-slate-400 italic text-center">
                           Ajuste automático por faixa de preço
@@ -442,19 +469,21 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
           </div>
           <div className="flex items-center gap-5">
             <DonutChart segs={[
-              { value: selRes.valProd,           color: '#1e293b' },
-              { value: selRes.valMkt,            color: selCh.accentBg },
-              { value: selRes.valTax,            color: '#94a3b8' },
-              { value: selRes.valPack,           color: '#60a5fa' },
+              { value: selRes.valProd,            color: '#1e293b' },
+              { value: selRes.valMkt,             color: selCh.accentBg },
+              { value: selRes.valTax,             color: '#94a3b8' },
+              { value: selRes.valPack,            color: '#60a5fa' },
+              { value: selRes.valFrete,           color: '#f97316' },
               { value: Math.max(0, selRes.sobra), color: '#10b981' },
             ]} />
             <div className="flex-1 space-y-2">
               {[
-                { label: 'Produto',       value: selRes.valProd, color: '#1e293b' },
-                { label: 'Taxas Mkt.',    value: selRes.valMkt,  color: selCh.accentBg },
-                { label: 'Imposto (DAS)', value: selRes.valTax,  color: '#94a3b8' },
-                { label: 'Embalagem',     value: selRes.valPack, color: '#60a5fa' },
-                { label: 'Sobra',         value: selRes.sobra,   color: '#10b981', bold: true },
+                { label: 'Produto',       value: selRes.valProd,  color: '#1e293b' },
+                { label: 'Taxas Mkt.',    value: selRes.valMkt,   color: selCh.accentBg },
+                { label: 'Imposto (DAS)', value: selRes.valTax,   color: '#94a3b8' },
+                { label: 'Embalagem',     value: selRes.valPack,  color: '#60a5fa' },
+                ...(selRes.valFrete > 0 ? [{ label: 'Frete',     value: selRes.valFrete, color: '#f97316' }] : []),
+                { label: 'Sobra',         value: selRes.sobra,    color: '#10b981', bold: true },
               ].map(row => (
                 <div key={row.label} className="flex justify-between items-center">
                   <div className="flex items-center gap-1.5">
@@ -538,7 +567,7 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
           <table className="w-full text-xs">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
-                {['#', 'Canal', 'Preço', 'Sobra Unit.', 'Margem', 'ROI', 'ROAS Mín.', 'ACoS', 'Sobra Mensal', 'Status'].map(h => (
+                {['#', 'Canal', 'Preço', 'Sobra Unit.', 'Margem', 'ROI', 'ROAS Mín.', 'ACoS Máx.', 'Sobra Mensal', 'Status'].map(h => (
                   <th key={h} className={cn('px-4 py-2.5 text-[8px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap', h === '#' || h === 'Canal' ? 'text-left' : 'text-right', h === 'Status' && 'text-center')}>
                     {h}
                   </th>
@@ -621,6 +650,81 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
             )
           })}
         </div>
+      </div>
+
+      {/* ── PREÇO IDEAL + PREÇO MÍNIMO ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+        {/* Preço Ideal */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Preço Ideal</p>
+          </div>
+          <p className="text-[10px] text-slate-400 mb-4">Defina a margem desejada → calculamos o preço de venda mínimo para atingi-la.</p>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex-1">
+              <Label>Margem Desejada (%)</Label>
+              <input
+                type="number" step="1" min="1" max="99" value={margemIdeal}
+                onChange={e => setMargemIdeal(+e.target.value || 0)}
+                className="w-full mt-1 px-3 py-2 rounded-xl border border-emerald-300 text-sm font-black font-mono text-center focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 bg-emerald-50"
+              />
+            </div>
+            <div className="text-slate-300 text-xl font-black pt-5">→</div>
+          </div>
+          <div className="space-y-2">
+            {CHANNELS.map(ch => {
+              const cs = chs[ch.id]
+              const preco = calcPrecoIdeal(global.costPrice, global.taxRate, global.packaging, cs.freight, cs.feePercent, cs.fixedFee, margemIdeal)
+              const inviavel = preco <= 0
+              return (
+                <div key={ch.id} className="flex items-center justify-between rounded-xl px-3 py-2" style={{ backgroundColor: ch.accentBg + '18' }}>
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-4 rounded-full" style={{ backgroundColor: ch.accentBg }} />
+                    <span className="text-[10px] font-bold text-slate-600">{ch.name}</span>
+                  </div>
+                  {inviavel
+                    ? <span className="text-[10px] font-black text-red-500">Não viável</span>
+                    : <span className="text-sm font-black font-mono text-slate-800">{brl(preco)}</span>
+                  }
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Preço Mínimo */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <Scale className="w-3.5 h-3.5 text-orange-500" />
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Preço Mínimo · Break-even</p>
+          </div>
+          <p className="text-[10px] text-slate-400 mb-4">Preço onde lucro = zero. Útil para promoções, queima de estoque ou limite de desconto.</p>
+          <div className="space-y-2 mt-10">
+            {CHANNELS.map(ch => {
+              const cs = chs[ch.id]
+              const preco = calcPrecoMinimo(global.costPrice, global.taxRate, global.packaging, cs.freight, cs.feePercent, cs.fixedFee)
+              const atual = cs.price
+              const folga = atual - preco
+              return (
+                <div key={ch.id} className="flex items-center justify-between rounded-xl px-3 py-2 bg-slate-50">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-4 rounded-full" style={{ backgroundColor: ch.accentBg }} />
+                    <span className="text-[10px] font-bold text-slate-600">{ch.name}</span>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-black font-mono text-orange-600">{brl(preco)}</p>
+                    <p className={`text-[9px] font-bold ${folga >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                      {folga >= 0 ? `+${brl(folga)} de folga` : `${brl(folga)} abaixo do mín.`}
+                    </p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
       </div>
 
       </div>{/* fim prec-print */}
