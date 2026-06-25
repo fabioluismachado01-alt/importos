@@ -379,7 +379,7 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
                 {fretesFiltrados.map(f => (
                   <tr key={f.id} className={`border-t border-slate-50 hover:bg-slate-50/50 ${f.tipo === 'COTACAO' ? 'bg-amber-50/40' : ''}`}>
                     <td className="px-3 py-2.5">
-                      <span className="block">{new Date(f.data_embarque).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}</span>
+                      <span className="block">{new Date(f.data_embarque).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: '2-digit' })}</span>
                       {f.tipo === 'COTACAO' && (
                         <span className="inline-block text-[9px] font-black bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full mt-0.5">COTAÇÃO</span>
                       )}
