@@ -6,17 +6,13 @@ import { getTokenValido } from '@/actions/ml'
 
 const ML_API = 'https://api.mercadolibre.com'
 
-// Extrai o ID MLB do link do anúncio
 function extractMLBId(url: string): string | null {
-  // Formatos: /p/MLB123, /MLB123, ?item_id=MLB123, MLB123 direto
-  const patterns = [
-    /MLB[\w]+/i,
-    /item_id=(MLB[\w]+)/i,
-  ]
-  for (const p of patterns) {
-    const m = url.match(p)
-    if (m) return (m[1] ?? m[0]).toUpperCase()
-  }
+  // Prioriza item_id= do query param (variante específica vs grupo de produto)
+  const qpMatch = url.match(/item_id=(MLB[\w]+)/i)
+  if (qpMatch) return qpMatch[1].toUpperCase()
+  // Fallback: primeiro MLB encontrado na URL
+  const pathMatch = url.match(/MLB[\w]+/i)
+  if (pathMatch) return pathMatch[0].toUpperCase()
   return null
 }
 
@@ -26,10 +22,12 @@ export interface MLListingTaxas {
   price: number
   listingTypeId: string
   listingTypeLabel: string
-  feePercent: number       // comissão % (ex: 11.5)
-  fixedFee: number         // taxa fixa em R$ (ex: 6.50)
+  feePercent: number      // % comissão efetiva (ex: 12.50)
+  fixedFee: number        // taxa fixa R$ (0 quando já embutida no %)
+  freight: number         // frete vendedor médio R$ (do histórico, ou 0)
   freeShipping: boolean
-  categoryId: string
+  fonte: 'historico' | 'api_default'  // de onde veio o dado
+  pedidosAnalisados: number
 }
 
 const LISTING_TYPE_LABELS: Record<string, string> = {
@@ -42,24 +40,13 @@ const LISTING_TYPE_LABELS: Record<string, string> = {
   free:          'Grátis',
 }
 
-// Taxa fixa padrão do ML por tipo de anúncio
-const LISTING_FIXED_FEES: Record<string, number> = {
-  gold_pro:     6.50,
-  gold_premium: 6.50,
-  gold_special: 6.50,
-  gold:         6.50,
-  silver:       0,
-  bronze:       0,
-  free:         0,
-}
-
 export async function getMLListingTaxas(url: string): Promise<MLListingTaxas> {
   const { workspaceId } = await getAuthContext()
 
   const itemId = extractMLBId(url)
   if (!itemId) throw new Error('URL inválida. Cole o link completo do anúncio do Mercado Livre.')
 
-  // Pega o token do workspace (primeira conexão ativa)
+  // Token ML do workspace
   const conexao = await prisma.ml_conexao.findFirst({
     where: { workspace_id: workspaceId, ativo: true },
     orderBy: { created_at: 'asc' },
@@ -68,33 +55,88 @@ export async function getMLListingTaxas(url: string): Promise<MLListingTaxas> {
 
   const token = await getTokenValido(conexao.id, workspaceId)
 
-  // Busca o item na API do ML
-  const res = await fetch(`${ML_API}/items/${itemId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    next: { revalidate: 0 },
-  })
+  // Busca dados básicos do anúncio na API ML
+  const res = await fetch(
+    `${ML_API}/items/${itemId}?attributes=id,title,price,listing_type_id,category_id,shipping`,
+    { headers: { Authorization: `Bearer ${token}` }, next: { revalidate: 0 } }
+  )
   if (!res.ok) {
     const err = await res.text()
-    throw new Error(`Erro ao buscar anúncio ML: ${err}`)
+    throw new Error(`Anúncio não encontrado (${res.status}). Verifique o link.`)
   }
   const item = await res.json()
 
-  // Extrai a taxa de comissão do sale_terms
-  const saleFeeTerm = item.sale_terms?.find((t: { id: string }) => t.id === 'SALE_FEE')
-  const feePercent: number = saleFeeTerm?.value_struct?.number ?? item.sale_fee ?? 11.5
-
   const listingTypeId: string = item.listing_type_id ?? 'gold_special'
-  const fixedFee = LISTING_FIXED_FEES[listingTypeId] ?? 6.50
+  const price: number = item.price ?? 0
+
+  // Estratégia 1: histórico de pedidos reais deste item no workspace
+  const historico = await prisma.ml_pedido.findMany({
+    where: {
+      workspace_id: workspaceId,
+      ml_item_id: itemId,
+      status: 'paid',
+      tarifa: { gt: 0 },
+      valor_venda: { gt: 0 },
+    },
+    select: { tarifa: true, frete_vendedor: true, valor_venda: true, quantidade: true },
+    orderBy: { data_compra: 'desc' },
+    take: 20,
+  })
+
+  if (historico.length > 0) {
+    // Calcula % efetiva média: tarifa / (valor_venda * quantidade)
+    const avgFeePct = historico.reduce((sum, p) => {
+      return sum + (p.tarifa / (p.valor_venda * p.quantidade)) * 100
+    }, 0) / historico.length
+
+    // Frete médio dos pedidos com frete > 0
+    const freteOrders = historico.filter(p => p.frete_vendedor > 0)
+    const avgFrete = freteOrders.length > 0
+      ? freteOrders.reduce((s, p) => s + p.frete_vendedor, 0) / freteOrders.length
+      : 0
+
+    return {
+      itemId,
+      title:             item.title ?? '',
+      price,
+      listingTypeId,
+      listingTypeLabel:  LISTING_TYPE_LABELS[listingTypeId] ?? listingTypeId,
+      feePercent:        Math.round(avgFeePct * 100) / 100,
+      fixedFee:          0, // já embutido no % histórico
+      freight:           Math.round(avgFrete * 100) / 100,
+      freeShipping:      item.shipping?.free_shipping ?? false,
+      fonte:             'historico',
+      pedidosAnalisados: historico.length,
+    }
+  }
+
+  // Estratégia 2 (fallback): tabela base do tipo de anúncio
+  // Busca % base na API do tipo de anúncio
+  const ltRes = await fetch(`${ML_API}/sites/MLB/listing_types/${listingTypeId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  let feePercent = 11.5
+  let fixedFee   = 6.50
+  if (ltRes.ok) {
+    const lt = await ltRes.json()
+    const pct = lt.configuration?.sale_fee_criteria?.percentage_of_fee_amount
+    if (typeof pct === 'number' && pct > 0) {
+      feePercent = pct
+      fixedFee   = 0
+    }
+  }
 
   return {
     itemId,
-    title:            item.title ?? '',
-    price:            item.price ?? 0,
+    title:             item.title ?? '',
+    price,
     listingTypeId,
-    listingTypeLabel: LISTING_TYPE_LABELS[listingTypeId] ?? listingTypeId,
+    listingTypeLabel:  LISTING_TYPE_LABELS[listingTypeId] ?? listingTypeId,
     feePercent,
     fixedFee,
-    freeShipping:     item.shipping?.free_shipping ?? false,
-    categoryId:       item.category_id ?? '',
+    freight:           0,
+    freeShipping:      item.shipping?.free_shipping ?? false,
+    fonte:             'api_default',
+    pedidosAnalisados: 0,
   }
 }

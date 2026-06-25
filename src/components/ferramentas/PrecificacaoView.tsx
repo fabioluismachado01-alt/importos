@@ -218,13 +218,14 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
       try {
         const data = await getMLListingTaxas(mlUrl.trim())
         setMlResult(data)
-        // Auto-preenche as taxas do card ML
+        // Auto-preenche taxas + frete do card ML
         setChs(prev => ({
           ...prev,
           ml: {
             ...prev.ml,
             feePercent: data.feePercent,
             fixedFee:   data.fixedFee,
+            ...(data.freight > 0 ? { freight: data.freight } : {}),
           },
         }))
         // Abre o painel de taxas do ML para mostrar os campos atualizados
@@ -488,13 +489,21 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
                     {mlResult && (
                       <div className="mt-2 space-y-1">
                         <p className="text-[8px] text-emerald-700 font-black flex items-center gap-1">
-                          <CheckCircle2 className="w-2.5 h-2.5 shrink-0" /> Taxas aplicadas
+                          <CheckCircle2 className="w-2.5 h-2.5 shrink-0" />
+                          {mlResult.fonte === 'historico'
+                            ? `Taxas reais · ${mlResult.pedidosAnalisados} pedidos`
+                            : 'Taxas aplicadas (tipo de anúncio)'}
                         </p>
                         <p className="text-[8px] text-slate-500 truncate" title={mlResult.title}>{mlResult.title}</p>
-                        <div className="grid grid-cols-2 gap-1 text-[7px]">
+                        <div className="flex flex-wrap gap-1 text-[7px]">
                           <span className="bg-white rounded px-1.5 py-0.5 text-slate-600 font-bold border border-slate-100">
                             {mlResult.listingTypeLabel} · {mlResult.feePercent.toFixed(1)}%
                           </span>
+                          {mlResult.freight > 0 && (
+                            <span className="bg-orange-50 rounded px-1.5 py-0.5 text-orange-700 font-bold border border-orange-100">
+                              Frete R${mlResult.freight.toFixed(2)}
+                            </span>
+                          )}
                           {mlResult.freeShipping && (
                             <span className="bg-emerald-50 rounded px-1.5 py-0.5 text-emerald-700 font-bold border border-emerald-100">
                               Frete Grátis
