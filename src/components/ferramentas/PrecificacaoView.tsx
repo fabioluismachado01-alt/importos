@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useTransition, useRef } from 'react'
 import { usePersistedState } from '@/hooks/usePersistedState'
 import { cn } from '@/lib/utils'
 import {
   Rocket, AlertTriangle, Scale, ChevronDown,
-  TrendingUp, Package2, Zap, Printer,
+  TrendingUp, Package2, Zap, Printer, Link2, Loader2, CheckCircle2, X,
 } from 'lucide-react'
 import { PrecificacaoReport } from './reports/PrecificacaoReport'
+import { getMLListingTaxas, type MLListingTaxas } from '@/actions/ml-listing'
 
 // ─── Canais ─────────────────────────────────────────────────────────────────
 
@@ -201,6 +202,38 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
   const [selected, setSelected] = useState('ml')
   const [openFees, setOpenFees] = useState<string | null>(null)
   const [margemIdeal, setMargemIdeal] = useState(30)
+
+  // ── ML Listing Fetch ──────────────────────────────────────────────────────
+  const [mlUrl, setMlUrl] = useState('')
+  const [mlFetching, startMlFetch] = useTransition()
+  const [mlResult, setMlResult] = useState<MLListingTaxas | null>(null)
+  const [mlError, setMlError] = useState<string | null>(null)
+  const mlInputRef = useRef<HTMLInputElement>(null)
+
+  function buscarTaxasML() {
+    if (!mlUrl.trim()) return
+    setMlError(null)
+    setMlResult(null)
+    startMlFetch(async () => {
+      try {
+        const data = await getMLListingTaxas(mlUrl.trim())
+        setMlResult(data)
+        // Auto-preenche as taxas do card ML
+        setChs(prev => ({
+          ...prev,
+          ml: {
+            ...prev.ml,
+            feePercent: data.feePercent,
+            fixedFee:   data.fixedFee,
+          },
+        }))
+        // Abre o painel de taxas do ML para mostrar os campos atualizados
+        setOpenFees('ml')
+      } catch (e) {
+        setMlError(e instanceof Error ? e.message : 'Erro ao buscar anúncio')
+      }
+    })
+  }
 
   function setG<K extends keyof GlobalState>(k: K, v: GlobalState[K]) {
     setGlobal(p => ({ ...p, [k]: v }))
@@ -417,6 +450,61 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
                     </div>
                   )}
                 </div>
+
+                {/* Busca de taxas por anúncio — só aparece no ML */}
+                {ch.id === 'ml' && (
+                  <div className="border border-amber-200 rounded-xl p-2.5 bg-amber-50/50" onClick={e => e.stopPropagation()}>
+                    <p className="text-[7px] font-black text-amber-600 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                      <Link2 className="w-2.5 h-2.5" /> Buscar taxas do anúncio
+                    </p>
+                    <div className="flex gap-1">
+                      <input
+                        ref={mlInputRef}
+                        type="text"
+                        value={mlUrl}
+                        onChange={e => { setMlUrl(e.target.value); setMlError(null); setMlResult(null) }}
+                        onKeyDown={e => e.key === 'Enter' && buscarTaxasML()}
+                        placeholder="Cole o link do anúncio ML"
+                        className="flex-1 min-w-0 px-2 py-1 rounded-lg border border-amber-200 text-[9px] font-mono focus:outline-none focus:border-amber-400 bg-white placeholder:text-slate-300"
+                      />
+                      <button
+                        onClick={buscarTaxasML}
+                        disabled={mlFetching || !mlUrl.trim()}
+                        className="px-2 py-1 rounded-lg bg-amber-400 hover:bg-amber-500 disabled:opacity-40 transition-colors shrink-0"
+                      >
+                        {mlFetching
+                          ? <Loader2 className="w-3 h-3 animate-spin text-amber-900" />
+                          : <Link2 className="w-3 h-3 text-amber-900" />
+                        }
+                      </button>
+                    </div>
+
+                    {mlError && (
+                      <p className="text-[8px] text-red-500 font-bold mt-1.5 flex items-center gap-1">
+                        <X className="w-2.5 h-2.5 shrink-0" /> {mlError}
+                      </p>
+                    )}
+
+                    {mlResult && (
+                      <div className="mt-2 space-y-1">
+                        <p className="text-[8px] text-emerald-700 font-black flex items-center gap-1">
+                          <CheckCircle2 className="w-2.5 h-2.5 shrink-0" /> Taxas aplicadas
+                        </p>
+                        <p className="text-[8px] text-slate-500 truncate" title={mlResult.title}>{mlResult.title}</p>
+                        <div className="grid grid-cols-2 gap-1 text-[7px]">
+                          <span className="bg-white rounded px-1.5 py-0.5 text-slate-600 font-bold border border-slate-100">
+                            {mlResult.listingTypeLabel} · {mlResult.feePercent.toFixed(1)}%
+                          </span>
+                          {mlResult.freeShipping && (
+                            <span className="bg-emerald-50 rounded px-1.5 py-0.5 text-emerald-700 font-bold border border-emerald-100">
+                              Frete Grátis
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Métricas */}
                 <div className="border-t border-slate-100 pt-2.5 space-y-1.5">
