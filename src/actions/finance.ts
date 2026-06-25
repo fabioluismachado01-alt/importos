@@ -632,3 +632,39 @@ export async function getDREAnual(ano: number) {
     orderBy: { mes: 'asc' },
   })
 }
+
+export type ProvisionalMes = {
+  receita_total: number
+  lucro_bruto: number
+  lucro_liquido: number
+  das_valor_calc: number
+  pedidos: number
+  fonte: 'ML_API'
+}
+
+export async function getProvisionalMesAtual(): Promise<ProvisionalMes | null> {
+  const { workspaceId } = await getAuthContext()
+  const now = new Date()
+  const inicio = new Date(now.getFullYear(), now.getMonth(), 1)
+  const fim    = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+
+  const pedidos = await prisma.ml_pedido.findMany({
+    where: { workspace_id: workspaceId, status: 'paid', data_compra: { gte: inicio, lt: fim } },
+    select: { valor_venda: true, tarifa: true, frete_vendedor: true, custo_produto: true },
+  })
+
+  if (pedidos.length === 0) return null
+
+  const config = await getConfig(workspaceId, now.getFullYear())
+  const aliquota = config.aliquota_simples > 1 ? config.aliquota_simples / 100 : config.aliquota_simples
+
+  const receita_total  = pedidos.reduce((s, p) => s + p.valor_venda, 0)
+  const tarifas        = pedidos.reduce((s, p) => s + p.tarifa, 0)
+  const frete          = pedidos.reduce((s, p) => s + p.frete_vendedor, 0)
+  const custo_produtos = pedidos.reduce((s, p) => s + (p.custo_produto ?? 0), 0)
+  const das_valor_calc = receita_total * aliquota
+  const lucro_bruto    = receita_total - tarifas - frete - custo_produtos - das_valor_calc
+  const lucro_liquido  = lucro_bruto
+
+  return { receita_total, lucro_bruto, lucro_liquido, das_valor_calc, pedidos: pedidos.length, fonte: 'ML_API' }
+}

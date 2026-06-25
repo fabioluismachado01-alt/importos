@@ -5,7 +5,7 @@ import {
   TrendingUp, AlertCircle, CheckCircle2, Clock,
   ArrowRight, Wrench,
 } from 'lucide-react'
-import { getFaturamentoAnual } from '@/actions/finance'
+import { getFaturamentoAnual, getProvisionalMesAtual } from '@/actions/finance'
 import { DashboardUsd } from '@/components/dashboard/DashboardUsd'
 
 export const metadata = { title: 'Dashboard — ImportOS' }
@@ -28,21 +28,25 @@ export default async function DashboardPage() {
   const mesAtual = new Date().getMonth() + 1  // 1-12
   const meses  = await getFaturamentoAnual(ano)
 
-  // Mês atual
+  // Mês atual — usa planilha importada se disponível, senão API ML (provisório)
   const mesData = meses.find(m => m.mes === mesAtual)
-  const receitaMes   = mesData?.receita_total  ?? 0
-  const lucroMes     = mesData?.lucro_bruto    ?? 0
-  const lucroLiq     = mesData?.lucro_liquido  ?? 0
-  const dasMes       = mesData?.das_valor_calc ?? 0
-  const dasStatus    = mesData?.das_status     ?? 'PENDENTE'
+  const temPlanilha = (mesData?.receita_total ?? 0) > 0
+  const provisional = !temPlanilha ? await getProvisionalMesAtual() : null
+  const isProvisional = provisional !== null && !temPlanilha
 
-  // Acumulado do ano
-  const receitaAno = meses.reduce((s, m) => s + m.receita_total, 0)
-  const lucroAno   = meses.reduce((s, m) => s + m.lucro_bruto, 0)
+  const receitaMes = temPlanilha ? (mesData?.receita_total ?? 0) : (provisional?.receita_total ?? 0)
+  const lucroMes   = temPlanilha ? (mesData?.lucro_bruto   ?? 0) : (provisional?.lucro_bruto   ?? 0)
+  const lucroLiq   = temPlanilha ? (mesData?.lucro_liquido ?? 0) : (provisional?.lucro_liquido  ?? 0)
+  const dasMes     = temPlanilha ? (mesData?.das_valor_calc ?? 0) : (provisional?.das_valor_calc ?? 0)
+  const dasStatus  = mesData?.das_status ?? 'PENDENTE'
+
+  // Acumulado do ano (inclui provisório do mês atual se aplicável)
+  const receitaAno = meses.reduce((s, m) => s + m.receita_total, 0) + (isProvisional ? receitaMes : 0)
+  const lucroAno   = meses.reduce((s, m) => s + m.lucro_bruto, 0)   + (isProvisional ? lucroMes  : 0)
 
   // Barra de progresso dos meses com lançamentos
   const mesesComDados = meses.filter(m => m.receita_total > 0)
-  const maiorReceita  = Math.max(...meses.map(m => m.receita_total), 1)
+  const maiorReceita  = Math.max(...meses.map(m => m.receita_total), isProvisional ? receitaMes : 0, 1)
 
   const dasConfig = {
     PENDENTE: { label: 'Pendente',  Icon: Clock,         color: 'text-amber-600',  bg: 'bg-amber-50',  border: 'border-amber-200' },
@@ -66,9 +70,16 @@ export default async function DashboardPage() {
 
       {/* ── KPIs DO MÊS ── */}
       <div>
-        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">
-          {MESES[mesAtual - 1]} {ano} · Mês Atual
-        </p>
+        <div className="flex items-center gap-2 mb-3">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+            {MESES[mesAtual - 1]} {ano} · Mês Atual
+          </p>
+          {isProvisional && (
+            <span className="text-[8px] font-black bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full uppercase tracking-wider">
+              Provisório · API ML · {provisional?.pedidos} pedidos
+            </span>
+          )}
+        </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
 
           {/* Receita */}
@@ -143,7 +154,7 @@ export default async function DashboardPage() {
             </Link>
           </div>
 
-          {mesesComDados.length === 0 ? (
+          {mesesComDados.length === 0 && !isProvisional ? (
             <div className="flex items-center justify-center h-32 text-slate-300">
               <p className="text-sm font-bold">Nenhum lançamento registrado em {ano}</p>
             </div>
@@ -151,9 +162,9 @@ export default async function DashboardPage() {
             <div className="flex items-end gap-2 h-36">
               {Array.from({ length: 12 }, (_, i) => {
                 const m = meses.find(x => x.mes === i + 1)
-                const receita   = m?.receita_total ?? 0
-                const barH      = receita > 0 ? Math.max((receita / maiorReceita) * 100, 6) : 0
                 const isCurrent = i + 1 === mesAtual
+                const receita   = (isCurrent && isProvisional) ? receitaMes : (m?.receita_total ?? 0)
+                const barH      = receita > 0 ? Math.max((receita / maiorReceita) * 100, 6) : 0
                 const isFuture  = i + 1 > mesAtual
                 return (
                   <Link key={i} href={`/faturamento/${ano}/${i + 1}`}
