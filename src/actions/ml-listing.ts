@@ -40,13 +40,24 @@ const LISTING_TYPE_LABELS: Record<string, string> = {
   free:          'Grátis',
 }
 
-export async function getMLListingTaxas(url: string): Promise<MLListingTaxas> {
+export type MLListingResult =
+  | { ok: true; data: MLListingTaxas }
+  | { ok: false; error: string }
+
+export async function getMLListingTaxas(url: string): Promise<MLListingResult> {
+  try {
+    return { ok: true, data: await _fetchMLListing(url) }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Erro ao buscar anúncio' }
+  }
+}
+
+async function _fetchMLListing(url: string): Promise<MLListingTaxas> {
   const { workspaceId } = await getAuthContext()
 
   const itemId = extractMLBId(url)
   if (!itemId) throw new Error('URL inválida. Cole o link completo do anúncio do Mercado Livre.')
 
-  // Token ML do workspace
   const conexao = await prisma.ml_conexao.findFirst({
     where: { workspace_id: workspaceId, ativo: true },
     orderBy: { created_at: 'asc' },
@@ -55,13 +66,11 @@ export async function getMLListingTaxas(url: string): Promise<MLListingTaxas> {
 
   const token = await getTokenValido(conexao.id, workspaceId)
 
-  // Busca dados básicos do anúncio na API ML
   const res = await fetch(
     `${ML_API}/items/${itemId}?attributes=id,title,price,listing_type_id,category_id,shipping`,
     { headers: { Authorization: `Bearer ${token}` }, next: { revalidate: 0 } }
   )
   if (!res.ok) {
-    const err = await res.text()
     throw new Error(`Anúncio não encontrado (${res.status}). Verifique o link.`)
   }
   const item = await res.json()

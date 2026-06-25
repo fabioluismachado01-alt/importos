@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect, useTransition, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { usePersistedState } from '@/hooks/usePersistedState'
 import { cn } from '@/lib/utils'
 import {
@@ -259,34 +259,37 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
 
   // ── ML Listing Fetch ──────────────────────────────────────────────────────
   const [mlUrl, setMlUrl] = useState('')
-  const [mlFetching, startMlFetch] = useTransition()
+  const [mlFetching, setMlFetching] = useState(false)
   const [mlResult, setMlResult] = useState<MLListingTaxas | null>(null)
   const [mlError, setMlError] = useState<string | null>(null)
   const mlInputRef = useRef<HTMLInputElement>(null)
 
   function buscarTaxasML() {
-    if (!mlUrl.trim()) return
+    if (!mlUrl.trim() || mlFetching) return
     setMlError(null)
     setMlResult(null)
-    startMlFetch(async () => {
-      try {
-        const data = await getMLListingTaxas(mlUrl.trim())
-        setMlResult(data)
-        // Auto-preenche taxas + frete do card ML
-        setChs(prev => ({
-          ...prev,
-          ml: {
-            ...prev.ml,
-            feePercent: data.feePercent,
-            fixedFee:   data.fixedFee,
-            ...(data.freight > 0 ? { freight: data.freight } : {}),
-          },
-        }))
-        // Abre o painel de taxas do ML para mostrar os campos atualizados
-        setOpenFees('ml')
-      } catch (e) {
-        setMlError(e instanceof Error ? e.message : 'Erro ao buscar anúncio')
+    setMlFetching(true)
+    getMLListingTaxas(mlUrl.trim()).then(result => {
+      if (!result.ok) {
+        setMlError(result.error)
+        return
       }
+      const data = result.data
+      setMlResult(data)
+      setChs(prev => ({
+        ...prev,
+        ml: {
+          ...prev.ml,
+          feePercent: data.feePercent,
+          fixedFee:   data.fixedFee,
+          ...(data.freight > 0 ? { freight: data.freight } : {}),
+        },
+      }))
+      setOpenFees('ml')
+    }).catch(() => {
+      setMlError('Erro ao buscar anúncio. Tente novamente.')
+    }).finally(() => {
+      setMlFetching(false)
     })
   }
 
