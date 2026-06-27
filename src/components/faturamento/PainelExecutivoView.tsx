@@ -222,28 +222,47 @@ export function PainelExecutivoView({ meses, config, ano }: Props) {
 
         {/* Análise de IA */}
         <Card className="border-0 shadow-sm border-l-4 border-l-purple-400">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <Brain className="w-4 h-4 text-purple-500" />
-              <CardTitle className="text-xs font-black text-slate-500 uppercase tracking-wide">
-                Análise de IA — {mesAtual ? getMesNome(mesAtual.mes) : ''}
-              </CardTitle>
-              <Badge className="text-[8px] bg-purple-100 text-purple-700 border-purple-200 h-4 px-1.5">Groq · Llama 3.3</Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loadingIA ? (
-              <div className="flex items-center gap-2 py-6">
-                <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
-                <p className="text-xs text-slate-500">Analisando resultado...</p>
+          <CardContent className="pt-4">
+            <div className="flex gap-3 items-start">
+
+              {/* Avatar */}
+              <div className="relative shrink-0">
+                <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-slate-200">
+                  <img src="/avatar-fabio.png" alt="Fábio" className="w-full h-full object-cover object-top" />
+                </div>
+                <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-emerald-400 rounded-full border-2 border-white" />
               </div>
-            ) : analiseIA ? (
-              <p className="text-sm text-slate-700 leading-relaxed">{analiseIA}</p>
-            ) : (
-              <p className="text-xs text-slate-400 py-6 text-center">
-                {mesAtual ? 'Selecione um mês no gráfico para ver a análise' : 'Sem dados para analisar'}
-              </p>
-            )}
+
+              {/* Balão */}
+              <div className="flex-1 min-w-0">
+                <div className="relative bg-slate-50 border border-slate-200 rounded-[4px_14px_14px_14px] px-3.5 py-3">
+                  {/* Seta do balão */}
+                  <div className="absolute -left-[9px] top-3 w-0 h-0"
+                    style={{ borderTop: '7px solid transparent', borderBottom: '7px solid transparent', borderRight: '9px solid #e2e8f0' }} />
+                  <div className="absolute -left-[7px] top-3 w-0 h-0"
+                    style={{ borderTop: '7px solid transparent', borderBottom: '7px solid transparent', borderRight: '9px solid #f8fafc' }} />
+
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">
+                    Fábio · {mesAtual ? getMesNome(mesAtual.mes) : 'ImportOS'}
+                  </p>
+
+                  {loadingIA ? (
+                    <div className="flex items-center gap-2 py-2">
+                      <Loader2 className="w-3.5 h-3.5 text-slate-400 animate-spin shrink-0" />
+                      <p className="text-xs text-slate-400">Analisando o resultado...</p>
+                    </div>
+                  ) : analiseIA ? (
+                    <p className="text-sm text-slate-700 leading-relaxed">{analiseIA}</p>
+                  ) : (
+                    <p className="text-xs text-slate-400 py-1">
+                      {mesAtual ? 'Clique em "Analisar" para ver minha análise do mês' : 'Selecione um mês no gráfico'}
+                    </p>
+                  )}
+                </div>
+                <p className="text-[9px] text-slate-300 mt-1 ml-1">gerado por IA · Groq Llama 3.3</p>
+              </div>
+
+            </div>
           </CardContent>
         </Card>
       </div>
