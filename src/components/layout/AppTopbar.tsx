@@ -25,17 +25,18 @@ export function AppTopbar({ user }: AppTopbarProps) {
       className="h-14 md:h-16 flex items-center justify-between px-4 md:px-6 shrink-0"
       style={{ background: '#FFFFFF', borderBottom: '1px solid #E2E8F0' }}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 min-w-0">
         {/* Hamburguer — só mobile */}
         <button
-          className="md:hidden w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"
+          aria-label="Abrir menu"
+          className="md:hidden w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors shrink-0"
           onClick={() => setMobileOpen(true)}
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        {/* Breadcrumb */}
-        <div id="topbar-breadcrumb" />
+        {/* Breadcrumb — preenchido por PageTitle via portal */}
+        <div id="topbar-breadcrumb" className="min-w-0" />
       </div>
 
       <div className="flex items-center gap-2 md:gap-3">

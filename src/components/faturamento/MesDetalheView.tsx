@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Plus, Lock, TrendingUp, TrendingDown, DollarSign,
-  AlertTriangle, CheckCircle2, Clock, Trash2, Target, FileDown, X,
+  AlertTriangle, CheckCircle2, Clock, Trash2, Target, FileDown, X, MoreHorizontal,
 } from 'lucide-react'
+import { PageTitle } from '@/components/layout/PageTitle'
 import { InsightsExecutivos, type CanalAnalise } from './InsightsExecutivos'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -185,12 +187,15 @@ function AnalisePorCanal({ lancamentos, receita_total }: {
 interface MesDetalheViewProps extends Props { abrirConfigAuto?: boolean; percentualDlrGlobal?: number }
 
 export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto, percentualDlrGlobal }: MesDetalheViewProps) {
+  const router = useRouter()
   const [showLancModal, setShowLancModal] = useState(false)
   const [showDASForm, setShowDASForm] = useState(false)
   const [showConfigModal, setShowConfigModal] = useState(abrirConfigAuto ?? false)
   const [showRetiradaModal, setShowRetiradaModal] = useState(false)
   const [auditModal, setAuditModal] = useState<{ titulo: string; items: typeof d.lancamentos } | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const moreMenuRef = useRef<HTMLDivElement>(null)
 
   const nomeMes = getMesNome(mes)
   const diasVencer = d.das_vencimento ? getDiasParaVencimento(new Date(d.das_vencimento)) : null
@@ -214,19 +219,19 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
     : `Reinvestimento${dlrPercentEfetivo !== null ? ` (${(100 - dlrPercentEfetivo).toFixed(0)}%)` : ''}`
 
   async function handleRemove(id: string) {
-    startTransition(async () => { await removeLancamento(id); window.location.reload() })
+    startTransition(async () => { await removeLancamento(id); router.refresh() })
   }
   async function handlePagamentoDAS(valor: number, data: Date) {
     await registrarPagamentoDAS(ano, mes, valor, data)
-    setShowDASForm(false); window.location.reload()
+    setShowDASForm(false); router.refresh()
   }
   async function handleRemoverPagamentoDAS() {
     await cancelarPagamentoDAS(ano, mes)
-    setShowDASForm(false); window.location.reload()
+    setShowDASForm(false); router.refresh()
   }
   async function handleFecharMes() {
     if (!confirm(`Fechar ${nomeMes} ${ano}? O mês ficará protegido contra edições.`)) return
-    await fecharMes(ano, mes); window.location.reload()
+    await fecharMes(ano, mes); router.refresh()
   }
 
   const receitas = d.lancamentos.filter(l => l.tipo === 'RECEITA')
@@ -303,6 +308,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
 
   return (
     <div className="space-y-5">
+      <PageTitle title={`${nomeMes} ${ano}`} subtitle="Faturamento mensal" />
 
       {/* ── HEADER ── */}
       <div className="flex items-start justify-between gap-4">
@@ -310,7 +316,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">
             {nomeMes} <span className="text-slate-400 font-normal">{ano}</span>
           </h1>
-          <div className="flex items-center gap-3 mt-1">
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className="text-xs text-slate-500">Alíquota: <strong>{(d.aliquota_simples * 100).toFixed(2)}%</strong></span>
             {d.meta_mes > 0 && (
               <span className="text-xs text-slate-500">Meta: <strong>{formatCurrency(d.meta_mes)}</strong></span>
@@ -322,7 +328,9 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
             )}
           </div>
         </div>
-        <div className="flex gap-2 shrink-0">
+
+        {/* Desktop: todos os botões */}
+        <div className="hidden sm:flex gap-2 shrink-0">
           <Button variant="outline" size="sm"
             onClick={() => window.open(`/api/export/pdf-mes?ano=${ano}&mes=${mes}`, '_blank')}>
             <FileDown className="w-3.5 h-3.5 mr-1.5" /> PDF
@@ -340,6 +348,45 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
               </Button>
             </>
           )}
+        </div>
+
+        {/* Mobile: botão principal + menu ··· */}
+        <div className="flex sm:hidden gap-2 shrink-0">
+          {!d.fechado && (
+            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => setShowLancModal(true)}>
+              <Plus className="w-4 h-4 mr-1" /> Lançamento
+            </Button>
+          )}
+          <div className="relative" ref={moreMenuRef}>
+            <Button variant="outline" size="sm" onClick={() => setShowMoreMenu(v => !v)}
+              aria-label="Mais opções">
+              <MoreHorizontal className="w-4 h-4" />
+            </Button>
+            {showMoreMenu && (
+              <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-50 p-1">
+                <button
+                  onClick={() => { window.open(`/api/export/pdf-mes?ano=${ano}&mes=${mes}`, '_blank'); setShowMoreMenu(false) }}
+                  className="w-full text-left px-3 py-2 text-xs font-medium rounded-lg hover:bg-slate-50 flex items-center gap-2 text-slate-700">
+                  <FileDown className="w-3.5 h-3.5" /> Exportar PDF
+                </button>
+                {!d.fechado && (
+                  <>
+                    <button
+                      onClick={() => { setShowConfigModal(true); setShowMoreMenu(false) }}
+                      className="w-full text-left px-3 py-2 text-xs font-medium rounded-lg hover:bg-slate-50 flex items-center gap-2 text-slate-700">
+                      Configurar mês
+                    </button>
+                    <div className="h-px bg-slate-100 my-1" />
+                    <button
+                      onClick={() => { handleFecharMes(); setShowMoreMenu(false) }}
+                      className="w-full text-left px-3 py-2 text-xs font-medium rounded-lg hover:bg-red-50 flex items-center gap-2 text-red-600">
+                      <Lock className="w-3.5 h-3.5" /> Fechar mês
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -521,7 +568,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
 
         {/* ── PAINEL LATERAL: 25 KPIs ── */}
         <div className="space-y-3">
-          <Card className="border-0 shadow-sm sticky top-4">
+          <Card className="border-0 shadow-sm sticky top-4 max-h-[calc(100vh-6rem)] overflow-y-auto">
             <CardHeader className="pb-2 pt-4 px-4">
               <CardTitle className="text-xs font-black text-slate-800 uppercase tracking-wide">Painel do Mês</CardTitle>
             </CardHeader>

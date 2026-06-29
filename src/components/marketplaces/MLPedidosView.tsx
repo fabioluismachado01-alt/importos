@@ -2,9 +2,11 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, RefreshCw, Download, Pencil, Check, X, TrendingUp, TrendingDown, Eye, EyeOff } from 'lucide-react'
+import Link from 'next/link'
+import { Search, RefreshCw, Download, Pencil, Check, X, TrendingUp, TrendingDown, Eye, EyeOff, ShoppingBag, CheckCircle2 } from 'lucide-react'
 import { sincronizarMLPedidos, editarCustoPedido } from '@/actions/ml'
 import type { MLPedidoRow, AdsMes, AliquotaMes } from '@/actions/ml'
+import { PageTitle } from '@/components/layout/PageTitle'
 
 function ProdImg({ fotoUrl, titulo, className }: { fotoUrl: string | null; titulo: string; className: string }) {
   const [err, setErr] = useState(false)
@@ -509,8 +511,45 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     )
   }
 
+  // Empty state quando não há conexão nenhuma
+  if (conexoes.length === 0) {
+    return (
+      <>
+        <PageTitle title="Vendas" subtitle="Mercado Livre" />
+        <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
+          <div className="w-20 h-20 bg-slate-100 rounded-3xl flex items-center justify-center mb-5">
+            <ShoppingBag className="w-10 h-10 text-slate-400" />
+          </div>
+          <h2 className="text-xl font-black text-slate-800 mb-2">Nenhuma conta conectada</h2>
+          <p className="text-sm text-slate-500 mb-8 max-w-xs leading-relaxed">
+            Conecte sua conta do Mercado Livre para que seus pedidos apareçam aqui automaticamente.
+          </p>
+          <Link href="/marketplaces"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl text-sm hover:bg-emerald-700 transition-colors">
+            Conectar conta do Mercado Livre →
+          </Link>
+        </div>
+      </>
+    )
+  }
+
   return (
     <div className="space-y-3">
+      <PageTitle title="Vendas" subtitle="Mercado Livre" />
+
+      {/* ── BANNER DE SINCRONIZAÇÃO ── */}
+      {isPending && (
+        <div className="flex items-center gap-2.5 px-4 py-2.5 bg-blue-50 border border-blue-100 rounded-xl">
+          <RefreshCw className="w-3.5 h-3.5 text-blue-600 animate-spin shrink-0" />
+          <span className="text-xs font-bold text-blue-700">Sincronizando pedidos com o Mercado Livre...</span>
+        </div>
+      )}
+      {syncMsg && !isPending && (
+        <div className="flex items-center gap-2.5 px-4 py-2.5 bg-emerald-50 border border-emerald-100 rounded-xl">
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+          <span className="text-xs font-bold text-emerald-700">{syncMsg}</span>
+        </div>
+      )}
 
       {/* ── HERO HEADER ESCURO ── */}
       <div className="bg-slate-900 rounded-2xl p-4 pb-5">
@@ -519,7 +558,6 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
           <div>
             <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">
               Faturamento · {filtrados.length} {filtrados.length === 1 ? 'venda' : 'vendas'}
-              {isPending && <span className="ml-2 text-emerald-400 animate-pulse">· sincronizando...</span>}
             </p>
             <p className="text-3xl font-black text-white leading-none">
               {mascaraValor(vis >= 3 ? '█████' : brl(totalFat))}
@@ -565,7 +603,6 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
               {mascaraValor(vis >= 3 ? '█████' : brl(lucroMedio))}
             </p>
           </div>
-          {syncMsg && <p className="text-[10px] font-bold text-emerald-400 ml-auto self-center">{syncMsg}</p>}
         </div>
 
         {/* Filtros de período */}
@@ -825,7 +862,79 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
 
       {/* Tabela */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+
+        {/* ── MOBILE: card por pedido ── */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {filtrados.length === 0 ? (
+            <div className="py-14 flex flex-col items-center gap-3 text-center px-6">
+              {pedidos.length === 0 ? (
+                <>
+                  <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center">
+                    <RefreshCw className="w-7 h-7 text-slate-400" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-600">Nenhum pedido sincronizado</p>
+                  <p className="text-xs text-slate-400">Toque no ícone de sincronizar acima para buscar seus pedidos.</p>
+                </>
+              ) : (
+                <p className="text-sm text-slate-400">Nenhum pedido nesse período.</p>
+              )}
+            </div>
+          ) : filtrados.map(p => (
+            <div key={p.id} className={`p-3 flex gap-3 ${p.lucro < 0 ? 'bg-red-50/50' : ''}`}>
+              <ProdImg fotoUrl={p.foto_url} titulo={p.titulo} className="w-11 h-11 rounded-xl shrink-0" />
+              <div className="flex-1 min-w-0">
+                {/* Linha 1: título + lucro em destaque */}
+                <div className="flex items-start justify-between gap-2 mb-0.5">
+                  <p className="text-xs font-semibold text-slate-700 leading-snug line-clamp-2 flex-1" title={p.titulo}>
+                    {mascaraNome(p.titulo)}
+                  </p>
+                  <div className={`shrink-0 px-2 py-0.5 rounded-lg text-[11px] font-black flex flex-col items-end ${p.lucro >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                    <span>{mascaraValor(vis >= 3 ? '████' : brl(p.lucro))}</span>
+                    <span className="text-[9px] font-bold opacity-70">{vis >= 3 ? '██' : pct(p.margem)}</span>
+                  </div>
+                </div>
+                {/* Linha 2: data + sku + valor */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] text-slate-400">{fmt(p.data_compra)}</span>
+                  {p.sku && (
+                    <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">{p.sku}</span>
+                  )}
+                  <span className="text-[10px] font-bold text-slate-600 ml-auto">
+                    {mascaraValor(vis >= 3 ? '████' : brl(p.valor_venda))}
+                  </span>
+                </div>
+                {/* Linha 3: detalhes financeiros */}
+                <div className="flex items-center gap-3 mt-0.5 text-[10px] text-slate-400">
+                  <span>Tarifa {mascaraValor(vis >= 3 ? '██' : brl(p.tarifa))}</span>
+                  {p.frete_vendedor > 0 && (
+                    <span>Frete {mascaraValor(vis >= 3 ? '██' : brl(p.frete_vendedor))}</span>
+                  )}
+                  {/* Edição de custo inline no mobile */}
+                  <div className="ml-auto">
+                    {editandoId === p.id ? (
+                      <div className="flex items-center gap-1">
+                        <input autoFocus value={custoTemp} onChange={e => setCustoTemp(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleSaveCusto(p.id, p.valor_venda, p.tarifa, p.frete_vendedor); if (e.key === 'Escape') setEditandoId(null) }}
+                          className="w-20 text-right border border-emerald-400 rounded px-1.5 py-0.5 text-xs focus:outline-none" placeholder="0,00" />
+                        <button onClick={() => handleSaveCusto(p.id, p.valor_venda, p.tarifa, p.frete_vendedor)} className="text-emerald-600"><Check className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => setEditandoId(null)} className="text-slate-400"><X className="w-3.5 h-3.5" /></button>
+                      </div>
+                    ) : (
+                      <button onClick={() => { setEditandoId(p.id); setCustoTemp(p.custo_produto?.toFixed(2).replace('.', ',') ?? '') }}
+                        className="flex items-center gap-1 text-slate-400 hover:text-slate-600">
+                        <Pencil className="w-3 h-3" />
+                        <span>{p.custo_produto != null && p.custo_produto > 0 ? mascaraValor(vis >= 3 ? '██' : `C:${brl(p.custo_produto)}`) : 'custo'}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── DESKTOP: tabela completa ── */}
+        <div className="hidden md:block overflow-x-auto">
           <table ref={tableRef} className="w-full text-xs">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
@@ -847,7 +956,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
             <tbody className="divide-y divide-slate-50">
               {filtrados.length === 0 && (
                 <tr><td colSpan={13} className="text-center py-12 text-slate-400 text-sm">
-                  {pedidos.length === 0 ? 'Nenhum pedido sincronizado. Clique em Sincronizar.' : 'Nenhum pedido nesse período.'}
+                  {pedidos.length === 0 ? 'Nenhum pedido sincronizado ainda. Clique em sincronizar.' : 'Nenhum pedido nesse período.'}
                 </td></tr>
               )}
               {filtrados.map(p => (
