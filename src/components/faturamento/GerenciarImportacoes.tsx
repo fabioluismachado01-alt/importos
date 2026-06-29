@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Trash2, RefreshCw, ShoppingBag, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn, formatCurrency } from '@/lib/utils'
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function GerenciarImportacoes({ ano, mes, importacoes, fechado }: Props) {
+  const router = useRouter()
   const [confirmando, setConfirmando] = useState<MarketplaceKey | null>(null)
   const [resultado, setResultado] = useState<{ mkt: MarketplaceKey; msg: string; ok: boolean } | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -38,8 +40,7 @@ export function GerenciarImportacoes({ ano, mes, importacoes, fechado }: Props) 
           ok: true,
         })
         setConfirmando(null)
-        // Recarrega a página para refletir os novos valores
-        setTimeout(() => window.location.reload(), 800)
+        router.refresh()
       } catch (e) {
         setResultado({ mkt: confirmando, msg: String(e), ok: false })
         setConfirmando(null)

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, CartesianGrid, Legend,
@@ -26,6 +27,7 @@ const CONTAINER_LABELS: Record<FiltroContainer, string> = {
 }
 
 export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow[] }) {
+  const router = useRouter()
   const [tab, setTab] = useState<Tab>('dashboard')
   const [filtro, setFiltro] = useState<Filtro>('TODOS')
   const [filtroContainer, setFiltroContainer] = useState<FiltroContainer>('TODOS')
@@ -66,7 +68,7 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
         notas: form.notas || undefined,
       })
       setShowForm(false)
-      window.location.reload()
+      router.refresh()
     })
   }
 

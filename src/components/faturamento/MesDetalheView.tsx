@@ -203,7 +203,8 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
 
   // Totais calculados para o painel
   const totalFixas = d.desp_pro_labore + d.desp_inss + d.desp_contabilidade +
-    d.desp_erp + d.desp_emprestimo + d.desp_aluguel + d.desp_pagina_ml + d.desp_fixas_outras
+    d.desp_erp + d.desp_emprestimo + d.desp_aluguel + d.desp_pagina_ml + d.desp_fixas_outras +
+    d.desp_previdencia_privada
   const totalVarSemDAS = d.desp_armazenagem + d.desp_ads_ml + d.desp_ads_outros +
     d.desp_custo_produtos + d.desp_tarifas + d.desp_frete + d.desp_fatura_ml + d.desp_outras_taxas
   const totalAds = d.desp_ads_ml + d.desp_ads_outros
@@ -219,19 +220,27 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
     : `Reinvestimento${dlrPercentEfetivo !== null ? ` (${(100 - dlrPercentEfetivo).toFixed(0)}%)` : ''}`
 
   async function handleRemove(id: string) {
-    startTransition(async () => { await removeLancamento(id); router.refresh() })
+    startTransition(async () => {
+      try { await removeLancamento(id); router.refresh() }
+      catch (e) { alert(e instanceof Error ? e.message : 'Erro ao remover lançamento') }
+    })
   }
   async function handlePagamentoDAS(valor: number, data: Date) {
-    await registrarPagamentoDAS(ano, mes, valor, data)
-    setShowDASForm(false); router.refresh()
+    try {
+      await registrarPagamentoDAS(ano, mes, valor, data)
+      setShowDASForm(false); router.refresh()
+    } catch (e) { alert(e instanceof Error ? e.message : 'Erro ao registrar pagamento') }
   }
   async function handleRemoverPagamentoDAS() {
-    await cancelarPagamentoDAS(ano, mes)
-    setShowDASForm(false); router.refresh()
+    try {
+      await cancelarPagamentoDAS(ano, mes)
+      setShowDASForm(false); router.refresh()
+    } catch (e) { alert(e instanceof Error ? e.message : 'Erro ao cancelar pagamento') }
   }
   async function handleFecharMes() {
     if (!confirm(`Fechar ${nomeMes} ${ano}? O mês ficará protegido contra edições.`)) return
-    await fecharMes(ano, mes); router.refresh()
+    try { await fecharMes(ano, mes); router.refresh() }
+    catch (e) { alert(e instanceof Error ? e.message : 'Erro ao fechar mês') }
   }
 
   const receitas = d.lancamentos.filter(l => l.tipo === 'RECEITA')

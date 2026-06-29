@@ -12,7 +12,14 @@ export function PageTitle({ title, subtitle }: Props) {
   const [target, setTarget] = useState<Element | null>(null)
 
   useEffect(() => {
-    setTarget(document.getElementById('topbar-breadcrumb'))
+    const tryFind = () => {
+      try {
+        const el = document.getElementById('topbar-breadcrumb')
+        if (el) { setTarget(el); return }
+        requestAnimationFrame(tryFind)
+      } catch { /* SSR safety */ }
+    }
+    tryFind()
   }, [])
 
   if (!target) return null

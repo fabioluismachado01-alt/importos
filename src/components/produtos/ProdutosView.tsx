@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Plus, Package, Pencil, Trash2, Search, Calendar, AlertTriangle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -24,6 +25,7 @@ interface Produto {
 interface Props { produtos: Produto[] }
 
 export function ProdutosView({ produtos: inicial }: Props) {
+  const router = useRouter()
   const [produtos, setProdutos] = useState(inicial)
   const [busca, setBusca] = useState('')
   const [editando, setEditando] = useState<Produto | null | 'novo'>(null)
@@ -50,7 +52,7 @@ export function ProdutosView({ produtos: inicial }: Props) {
         descricao: data.descricao,
         ncm: data.ncm,
       })
-      window.location.reload()
+      router.refresh()
     } finally {
       setLoading(false)
     }

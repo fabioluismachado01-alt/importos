@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Plus, Pencil, Trash2, ShoppingBag } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,6 +23,7 @@ const CANAL_CORES: Record<string, string> = {
 }
 
 export function CanaisView({ canais: inicial }: Props) {
+  const router = useRouter()
   const [editando, setEditando] = useState<Canal | null | 'novo'>(null)
   const [loading, setLoading] = useState(false)
 
@@ -40,7 +42,7 @@ export function CanaisView({ canais: inicial }: Props) {
     setLoading(true)
     try {
       await saveCanal(data)
-      window.location.reload()
+      router.refresh()
     } finally {
       setLoading(false)
     }

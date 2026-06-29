@@ -368,11 +368,11 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     })
   }
 
-  async function handleSaveCusto(pedidoId: string, valorVenda: number, tarifa: number, frete: number) {
+  async function handleSaveCusto(pedidoId: string, valorVenda: number, tarifa: number, frete: number, dataCompra: string | Date) {
     const custo = parseFloat(custoTemp.replace(',', '.'))
     if (isNaN(custo) || custo < 0) return
     await editarCustoPedido(pedidoId, custo)
-    const imposto = valorVenda * (aliquotaSimples / 100)
+    const imposto = valorVenda * getAliquotaParaData(dataCompra)
     const lucro = valorVenda - tarifa - frete - custo - imposto
     setCustosLocais(prev => ({ ...prev, [pedidoId]: { custo, lucro, margem: valorVenda > 0 ? (lucro / valorVenda) * 100 : 0 } }))
     setEditandoId(null)
@@ -914,9 +914,9 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                     {editandoId === p.id ? (
                       <div className="flex items-center gap-1">
                         <input autoFocus value={custoTemp} onChange={e => setCustoTemp(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') handleSaveCusto(p.id, p.valor_venda, p.tarifa, p.frete_vendedor); if (e.key === 'Escape') setEditandoId(null) }}
+                          onKeyDown={e => { if (e.key === 'Enter') handleSaveCusto(p.id, p.valor_venda, p.tarifa, p.frete_vendedor, p.data_compra); if (e.key === 'Escape') setEditandoId(null) }}
                           className="w-20 text-right border border-emerald-400 rounded px-1.5 py-0.5 text-xs focus:outline-none" placeholder="0,00" />
-                        <button onClick={() => handleSaveCusto(p.id, p.valor_venda, p.tarifa, p.frete_vendedor)} className="text-emerald-600"><Check className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => handleSaveCusto(p.id, p.valor_venda, p.tarifa, p.frete_vendedor, p.data_compra)} className="text-emerald-600"><Check className="w-3.5 h-3.5" /></button>
                         <button onClick={() => setEditandoId(null)} className="text-slate-400"><X className="w-3.5 h-3.5" /></button>
                       </div>
                     ) : (
@@ -988,9 +988,9 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                     {editandoId === p.id ? (
                       <div className="flex items-center gap-1 justify-end">
                         <input autoFocus value={custoTemp} onChange={e => setCustoTemp(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') handleSaveCusto(p.id, p.valor_venda, p.tarifa, p.frete_vendedor); if (e.key === 'Escape') setEditandoId(null) }}
+                          onKeyDown={e => { if (e.key === 'Enter') handleSaveCusto(p.id, p.valor_venda, p.tarifa, p.frete_vendedor, p.data_compra); if (e.key === 'Escape') setEditandoId(null) }}
                           className="w-20 text-right border border-emerald-400 rounded px-1.5 py-0.5 text-xs focus:outline-none" placeholder="0,00" />
-                        <button onClick={() => handleSaveCusto(p.id, p.valor_venda, p.tarifa, p.frete_vendedor)} className="text-emerald-600 hover:text-emerald-700"><Check className="w-3 h-3" /></button>
+                        <button onClick={() => handleSaveCusto(p.id, p.valor_venda, p.tarifa, p.frete_vendedor, p.data_compra)} className="text-emerald-600 hover:text-emerald-700"><Check className="w-3 h-3" /></button>
                         <button onClick={() => setEditandoId(null)} className="text-slate-400 hover:text-slate-600"><X className="w-3 h-3" /></button>
                       </div>
                     ) : (

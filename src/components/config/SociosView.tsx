@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Plus, Users, TrendingUp, Wallet } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,6 +17,7 @@ interface MesDRE { mes: number; lucro_liquido: number; desp_pro_labore: number }
 interface Props { socios: Socio[]; config: Config; meses: MesDRE[]; ano: number }
 
 export function SociosView({ socios: sociosIniciais, config, meses, ano }: Props) {
+  const router = useRouter()
   const [socios, setSocios] = useState(sociosIniciais)
   const [dlrPercent, setDlrPercent] = useState(((config?.percentual_dlr_socio ?? 0.5) * 100).toFixed(0))
   const [formula, setFormula] = useState(config?.formula_previdencia ?? 'PRO_LABORE*0.20+LUCRO_BRUTO*0.11')
@@ -48,7 +50,7 @@ export function SociosView({ socios: sociosIniciais, config, meses, ano }: Props
       email: novoSocio.email || undefined,
       percentual_participacao: parseFloat(novoSocio.percentual),
     })
-    window.location.reload()
+    router.refresh()
   }
 
   return (

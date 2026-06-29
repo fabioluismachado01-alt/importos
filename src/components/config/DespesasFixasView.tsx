@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Plus, Pencil, Trash2, GripVertical, Calculator } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -25,6 +26,7 @@ const CATEGORIA_LABEL: Record<string, string> = {
 }
 
 export function DespesasFixasView({ despesas: inicial }: Props) {
+  const router = useRouter()
   const [despesas, setDespesas] = useState(inicial)
   const [editando, setEditando] = useState<Template | null | 'novo'>(null)
   const [loading, setLoading] = useState(false)
@@ -46,7 +48,7 @@ export function DespesasFixasView({ despesas: inicial }: Props) {
         amortizacao_mensal: data.amortizacao_mensal ?? undefined,
         observacoes: data.observacoes ?? undefined,
       })
-      window.location.reload()
+      router.refresh()
     } finally {
       setLoading(false)
     }

@@ -37,6 +37,7 @@ export function ConfigurarMesModal({
   const [meta, setMeta] = useState(metaAtual > 0 ? metaAtual.toFixed(2) : '')
   const [replicarFixas, setReplicarFixas] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
 
   // SELIC e PRONAMPE
   const [selic, setSelic] = useState<number | null>(null)
@@ -73,6 +74,7 @@ export function ConfigurarMesModal({
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setLoading(true)
+    setErro(null)
     try {
       await configurarMes(ano, mes, {
         aliquota_simples: parseFloat(aliquota) / 100,
@@ -80,6 +82,8 @@ export function ConfigurarMesModal({
         replicar_fixas: replicarFixas,
       })
       onSuccess()
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao configurar mês')
     } finally {
       setLoading(false)
     }
@@ -226,6 +230,10 @@ export function ConfigurarMesModal({
               </p>
             </div>
           </div>
+
+          {erro && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{erro}</p>
+          )}
 
           {/* Ações */}
           <div className="flex gap-3 pt-1">
