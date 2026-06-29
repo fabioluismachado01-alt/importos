@@ -262,6 +262,10 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
   const acos  = totalFat > 0 ? (totalAds / totalFat) * 100 : 0
   const tacos = totalLucro > 0 ? (totalAds / totalLucro) * 100 : 0
 
+  // Chave única por produto — consistente em todos os cálculos
+  const prodChave = (p: { sku: string | null; ml_item_id: string; titulo: string }) =>
+    p.sku ?? p.ml_item_id ?? p.titulo.slice(0, 40)
+
   // Curva ABC por Faturamento
   const curvaABCFat = (() => {
     const mapa = new Map<string, { chave: string; titulo: string; foto_url: string | null; fat: number; lucro: number; vendas: number; qtde: number }>()
@@ -321,10 +325,6 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     })
   })()
   const maxFat = Math.max(...dadosDiarios.map(d => d.fat), 1)
-
-  // Chave única por produto — consistente em todos os cálculos
-  const prodChave = (p: { sku: string | null; ml_item_id: string; titulo: string }) =>
-    p.sku ?? p.ml_item_id ?? p.titulo.slice(0, 40)
 
   // Top produtos
   const topProdutos = (() => {
