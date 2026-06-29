@@ -511,7 +511,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
         {/* Linha topo: faturamento hero + ações */}
         <div className="flex items-start justify-between mb-3">
           <div>
-            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
+            <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">
               Faturamento · {filtrados.length} {filtrados.length === 1 ? 'venda' : 'vendas'}
               {isPending && <span className="ml-2 text-emerald-400 animate-pulse">· sincronizando...</span>}
             </p>
@@ -522,15 +522,15 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
           </div>
           <div className="flex items-center gap-1 mt-0.5">
             <button onClick={() => setVis(v => ((v + 1) % 4) as Vis)}
-              className={`p-2 rounded-xl transition-colors ${vis === 0 ? 'text-slate-500 hover:text-slate-300' : 'text-amber-400 bg-amber-400/10'}`}>
+              className={`p-2 rounded-xl transition-colors ${vis === 0 ? 'text-slate-300 hover:text-white' : 'text-amber-400 bg-amber-400/10'}`}>
               {vis === 0 ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
             </button>
             <button onClick={() => handleSync(false)} disabled={isPending}
-              className="p-2 rounded-xl text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-40">
+              className="p-2 rounded-xl text-slate-300 hover:text-white transition-colors disabled:opacity-40">
               <RefreshCw className={`w-4 h-4 ${isPending ? 'animate-spin text-emerald-400' : ''}`} />
             </button>
             <button onClick={exportarCSV}
-              className="p-2 rounded-xl text-slate-500 hover:text-slate-300 transition-colors">
+              className="p-2 rounded-xl text-slate-300 hover:text-white transition-colors">
               <Download className="w-4 h-4" />
             </button>
           </div>
@@ -539,22 +539,22 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
         {/* Lucro + margem */}
         <div className="flex items-start gap-5 mb-4">
           <div>
-            <p className="text-[9px] text-slate-500 uppercase tracking-widest">Lucro líquido</p>
+            <p className="text-[9px] text-slate-300 uppercase tracking-widest">Lucro líquido</p>
             <p className={`text-lg font-black ${totalLucro >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               {mascaraValor(vis >= 3 ? '█████' : brl(totalLucro))}
             </p>
             <Delta atual={totalLucro} anterior={antLucro} />
           </div>
-          <div className="w-px h-10 bg-slate-800 mt-1" />
+          <div className="w-px h-10 bg-slate-700 mt-1" />
           <div>
-            <p className="text-[9px] text-slate-500 uppercase tracking-widest">Margem</p>
+            <p className="text-[9px] text-slate-300 uppercase tracking-widest">Margem</p>
             <p className={`text-lg font-black ${margemMedia >= 15 ? 'text-emerald-400' : margemMedia >= 0 ? 'text-amber-400' : 'text-red-400'}`}>
               {pct(margemMedia)}
             </p>
           </div>
-          <div className="w-px h-10 bg-slate-800 mt-1" />
+          <div className="w-px h-10 bg-slate-700 mt-1" />
           <div>
-            <p className="text-[9px] text-slate-500 uppercase tracking-widest">Lucro médio</p>
+            <p className="text-[9px] text-slate-300 uppercase tracking-widest">Lucro médio</p>
             <p className={`text-lg font-black ${lucroMedio >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               {mascaraValor(vis >= 3 ? '█████' : brl(lucroMedio))}
             </p>
@@ -566,7 +566,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
         <div className="flex items-center gap-1.5 flex-wrap">
           {periodos.map(p => (
             <button key={p.id} onClick={() => setPeriodo(p.id)}
-              className={`px-3 py-1 text-[11px] font-bold rounded-full transition-colors ${periodo === p.id ? 'bg-emerald-500 text-white' : 'bg-white/10 text-slate-400 hover:bg-white/15 hover:text-slate-200'}`}>
+              className={`px-3 py-1 text-[11px] font-bold rounded-full transition-colors ${periodo === p.id ? 'bg-emerald-500 text-white' : 'bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white'}`}>
               {p.label}
             </button>
           ))}
