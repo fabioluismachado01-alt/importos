@@ -134,15 +134,14 @@ function periodoParaDias(periodo: Periodo): number {
 }
 
 export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, aliquotasHistorico }: Props) {
-  // Helper: retorna a alíquota correta para a data do pedido
+  // Helper: retorna a alíquota correta para a data do pedido (como decimal, ex: 0.08)
   function getAliquotaParaData(dataPedido: string | Date): number {
     const d = new Date(dataPedido)
     const ano = d.getFullYear()
     const mes = d.getMonth() + 1
     if (aliquotasHistorico?.historico.length) {
       const entrada = aliquotasHistorico.historico.find(h => h.ano === ano && h.mes === mes)
-      if (entrada) return entrada.aliquota
-      return aliquotasHistorico.padrao
+      if (entrada) return entrada.aliquota / 100
     }
     return aliquotaSimples / 100
   }
