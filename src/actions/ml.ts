@@ -966,6 +966,34 @@ async function _syncPedidosInterno(
     const data = await res.json()
     totalAPI = data.paging.total
 
+    // Busca custo de frete via /shipments/{id} em lotes de 10
+    const shipmentIds = data.results
+      .map((o: any) => o.shipping?.id)
+      .filter(Boolean) as string[]
+    const shipmentCosts = new Map<string, number>()
+    for (let i = 0; i < shipmentIds.length; i += 10) {
+      const batch = shipmentIds.slice(i, i + 10)
+      await Promise.all(batch.map(async (shipId) => {
+        try {
+          const r = await fetch(`https://api.mercadolibre.com/shipments/${shipId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (!r.ok) return
+          const ship = await r.json()
+          const listCost: number = ship.shipping_option?.list_cost ?? 0
+          const buyerCost: number = ship.shipping_option?.cost ?? 0
+          shipmentCosts.set(String(shipId), Math.max(0, listCost - buyerCost))
+        } catch { /* ignora */ }
+      }))
+    }
+    const shipmentValorTotal = new Map<string, number>()
+    for (const order of data.results) {
+      const shipId = String((order as any).shipping?.id ?? '')
+      if (!shipId) continue
+      const val = order.order_items.reduce((s: number, oi: any) => s + (oi.unit_price ?? 0) * (oi.quantity ?? 1), 0)
+      shipmentValorTotal.set(shipId, (shipmentValorTotal.get(shipId) ?? 0) + val)
+    }
+
     for (const order of data.results) {
       for (const oi of order.order_items) {
         try {
@@ -973,6 +1001,11 @@ async function _syncPedidosInterno(
           const produto = sku ? skuMap.get(sku) : undefined
           const foto = (oi.item.thumbnail ?? oi.item.picture_url ?? '').replace('http://', 'https://')
           const fee = sanitizeSaleFee(oi.sale_fee, oi.unit_price, oi.quantity)
+          const shipId = String((order as any).shipping?.id ?? '')
+          const freteTotalShipment = shipmentCosts.get(shipId) ?? 0
+          const valorTotalShipment = shipmentValorTotal.get(shipId) ?? 1
+          const itemValor = (oi.unit_price ?? 0) * (oi.quantity ?? 1)
+          const shippingFee = valorTotalShipment > 0 ? freteTotalShipment * (itemValor / valorTotalShipment) : 0
           await prisma.ml_pedido.upsert({
             where: { workspace_id_ml_order_id_ml_item_id: { workspace_id: conn.workspace_id, ml_order_id: String(order.id), ml_item_id: oi.item.id } },
             create: {
@@ -983,11 +1016,11 @@ async function _syncPedidosInterno(
               titulo: oi.item.title ?? '', foto_url: foto || null,
               sku: oi.item.seller_sku ?? null, quantidade: oi.quantity ?? 1,
               valor_venda: (oi.unit_price ?? 0) * (oi.quantity ?? 1), tarifa: fee,
-              frete_vendedor: 0, custo_produto: produto?.custo_brl ?? null,
+              frete_vendedor: shippingFee, custo_produto: produto?.custo_brl ?? null,
               produto_id: produto?.id ?? null,
             },
             update: {
-              status: order.status ?? 'paid', tarifa: fee,
+              status: order.status ?? 'paid', tarifa: fee, frete_vendedor: shippingFee,
               ...(foto && { foto_url: foto }),
               ...(produto && { custo_produto: produto.custo_brl, produto_id: produto.id }),
             },

@@ -164,6 +164,9 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
   const [adsSubtraido, setAdsSubtraido] = useState(false)
   const tableRef = useRef<HTMLTableElement>(null)
 
+  // Reseta ADS subtraído ao trocar período para evitar confusão de contexto
+  useEffect(() => { setAdsSubtraido(false) }, [periodo])
+
   useEffect(() => {
     if (conexoes.length === 0) return
     const maisRecente = pedidos.reduce((max, p) => { const t = new Date(p.data_compra).getTime(); return t > max ? t : max }, 0)
@@ -255,13 +258,13 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
   const lucroComAds = totalLucro - (adsSubtraido ? totalAds : 0)
   const roas  = totalAds > 0 ? totalFat / totalAds : 0
   const acos  = totalFat > 0 ? (totalAds / totalFat) * 100 : 0
-  const tacos = totalFat > 0 ? (totalAds / totalFat) * 100 : 0
+  const tacos = totalLucro > 0 ? (totalAds / totalLucro) * 100 : 0
 
   // Curva ABC por Faturamento
   const curvaABCFat = (() => {
     const mapa = new Map<string, { chave: string; titulo: string; foto_url: string | null; fat: number; lucro: number; vendas: number; qtde: number }>()
     filtrados.forEach(p => {
-      const chave = p.sku ?? p.ml_item_id ?? p.titulo.slice(0, 40)
+      const chave = prodChave(p)
       const curr = mapa.get(chave) ?? { chave, titulo: p.titulo, foto_url: p.foto_url, fat: 0, lucro: 0, vendas: 0, qtde: 0 }
       mapa.set(chave, { ...curr, foto_url: curr.foto_url ?? p.foto_url, fat: curr.fat + p.valor_venda, lucro: curr.lucro + p.lucro, vendas: curr.vendas + 1, qtde: curr.qtde + p.quantidade })
     })
@@ -282,7 +285,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
   const curvaABCLucro = (() => {
     const mapa = new Map<string, { chave: string; titulo: string; foto_url: string | null; fat: number; lucro: number; vendas: number; qtde: number }>()
     filtrados.forEach(p => {
-      const chave = p.sku ?? p.ml_item_id ?? p.titulo.slice(0, 40)
+      const chave = prodChave(p)
       const curr = mapa.get(chave) ?? { chave, titulo: p.titulo, foto_url: p.foto_url, fat: 0, lucro: 0, vendas: 0, qtde: 0 }
       mapa.set(chave, { ...curr, foto_url: curr.foto_url ?? p.foto_url, fat: curr.fat + p.valor_venda, lucro: curr.lucro + p.lucro, vendas: curr.vendas + 1, qtde: curr.qtde + p.quantidade })
     })
@@ -317,11 +320,15 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
   })()
   const maxFat = Math.max(...dadosDiarios.map(d => d.fat), 1)
 
+  // Chave única por produto — consistente em todos os cálculos
+  const prodChave = (p: { sku: string | null; ml_item_id: string; titulo: string }) =>
+    p.sku ?? p.ml_item_id ?? p.titulo.slice(0, 40)
+
   // Top produtos
   const topProdutos = (() => {
     const mapa = new Map<string, { chave: string; titulo: string; foto_url: string | null; fat: number; lucro: number; qtde: number }>()
     filtrados.forEach(p => {
-      const chave = p.sku ?? p.titulo.slice(0, 40)
+      const chave = prodChave(p)
       const curr = mapa.get(chave) ?? { chave, titulo: p.titulo, foto_url: p.foto_url, fat: 0, lucro: 0, qtde: 0 }
       mapa.set(chave, { ...curr, fat: curr.fat + p.valor_venda, lucro: curr.lucro + p.lucro, qtde: curr.qtde + p.quantidade })
     })
@@ -389,12 +396,12 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     const comFrete  = filtrados.filter(p => p.frete_vendedor > 0)
     const semFrete  = filtrados.filter(p => p.frete_vendedor === 0)
     const topFrete  = [...topProdutos].sort((a, b) => {
-      const freteA = filtrados.filter(p => (p.sku ?? p.titulo.slice(0,40)) === a.chave).reduce((s, p) => s + p.frete_vendedor, 0)
-      const freteB = filtrados.filter(p => (p.sku ?? p.titulo.slice(0,40)) === b.chave).reduce((s, p) => s + p.frete_vendedor, 0)
+      const freteA = filtrados.filter(p => prodChave(p) === a.chave).reduce((s, p) => s + p.frete_vendedor, 0)
+      const freteB = filtrados.filter(p => prodChave(p) === b.chave).reduce((s, p) => s + p.frete_vendedor, 0)
       return freteB - freteA
     }).slice(0, 5).map(item => ({
       ...item,
-      totalFrete: filtrados.filter(p => (p.sku ?? p.titulo.slice(0,40)) === item.chave).reduce((s, p) => s + p.frete_vendedor, 0),
+      totalFrete: filtrados.filter(p => prodChave(p) === item.chave).reduce((s, p) => s + p.frete_vendedor, 0),
     })).filter(i => i.totalFrete > 0)
     return { comFrete: comFrete.length, semFrete: semFrete.length, totalFrete, avgFrete: filtrados.length > 0 ? totalFrete / filtrados.length : 0, topFrete, pctFat: totalFat > 0 ? (totalFrete / totalFat) * 100 : 0 }
   })()
