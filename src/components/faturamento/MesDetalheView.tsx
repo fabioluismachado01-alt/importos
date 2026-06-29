@@ -822,7 +822,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
         <LancamentoModal
           ano={ano} mes={mes}
           onClose={() => setShowLancModal(false)}
-          onSuccess={() => { setShowLancModal(false); window.location.reload() }}
+          onSuccess={() => { setShowLancModal(false); router.refresh() }}
         />
       )}
       {showDASForm && (
@@ -841,7 +841,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
           metaAtual={d.meta_mes}
           templates={templates}
           onClose={() => setShowConfigModal(false)}
-          onSuccess={() => { setShowConfigModal(false); window.location.reload() }}
+          onSuccess={() => { setShowConfigModal(false); router.refresh() }}
         />
       )}
       {showRetiradaModal && (
@@ -853,7 +853,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
           percentualCustomAtual={d.dlr_percentual_custom}
           valorFixoAtual={d.dlr_valor_fixo}
           onClose={() => setShowRetiradaModal(false)}
-          onSuccess={() => { setShowRetiradaModal(false); window.location.reload() }}
+          onSuccess={() => { setShowRetiradaModal(false); router.refresh() }}
         />
       )}
     </div>

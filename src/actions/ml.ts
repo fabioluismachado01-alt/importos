@@ -365,7 +365,8 @@ export async function getMLPedidos(filtros?: {
   })
 
   return pedidos.map(p => {
-    const imposto = p.imposto ?? 0
+    // imposto é calculado no componente com aliquota histórica; aqui retornamos 0 como placeholder
+    const imposto = 0
     const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - imposto - (p.custo_produto ?? 0)
     const margem = p.valor_venda > 0 ? (lucro / p.valor_venda) * 100 : 0
     return {
