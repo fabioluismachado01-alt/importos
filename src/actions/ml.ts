@@ -843,6 +843,31 @@ export async function getAliquotaSimples(): Promise<number> {
   return empresa?.aliquota_simples ?? 6.0
 }
 
+// ─── Histórico de alíquotas por mês (para cálculo correto por período) ────────
+
+export type AliquotaMes = { ano: number; mes: number; aliquota: number }
+
+export async function getAliquotasHistorico(): Promise<{ historico: AliquotaMes[]; padrao: number }> {
+  const { workspaceId } = await getAuthContext()
+
+  const [historico, empresa] = await Promise.all([
+    prisma.aliquota_historico.findMany({
+      where: { workspace_id: workspaceId },
+      select: { ano: true, mes: true, aliquota: true },
+      orderBy: [{ ano: 'asc' }, { mes: 'asc' }],
+    }),
+    prisma.empresa.findFirst({
+      where: { workspace_id: workspaceId },
+      select: { aliquota_simples: true },
+    }),
+  ])
+
+  return {
+    historico,
+    padrao: empresa?.aliquota_simples ?? 0.06,
+  }
+}
+
 // ─── Ads mensais (lançados manualmente na planilha) ──────────────────────────
 
 export type AdsMes = {

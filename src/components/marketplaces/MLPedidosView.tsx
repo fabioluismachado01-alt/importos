@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, RefreshCw, Download, Pencil, Check, X, TrendingUp, TrendingDown, Eye, EyeOff } from 'lucide-react'
 import { sincronizarMLPedidos, editarCustoPedido } from '@/actions/ml'
-import type { MLPedidoRow, AdsMes } from '@/actions/ml'
+import type { MLPedidoRow, AdsMes, AliquotaMes } from '@/actions/ml'
 
 function ProdImg({ fotoUrl, titulo, className }: { fotoUrl: string | null; titulo: string; className: string }) {
   const [err, setErr] = useState(false)
@@ -23,6 +23,7 @@ interface Props {
   conexoes: { id: string; nickname: string }[]
   aliquotaSimples: number
   adsMensais: AdsMes[]
+  aliquotasHistorico?: { historico: AliquotaMes[]; padrao: number }
 }
 
 function RingChart({ pct, color = '#10b981' }: { pct: number; color?: string }) {
@@ -132,7 +133,19 @@ function periodoParaDias(periodo: Periodo): number {
   return 90
 }
 
-export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais }: Props) {
+export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, aliquotasHistorico }: Props) {
+  // Helper: retorna a alíquota correta para a data do pedido
+  function getAliquotaParaData(dataPedido: string | Date): number {
+    const d = new Date(dataPedido)
+    const ano = d.getFullYear()
+    const mes = d.getMonth() + 1
+    if (aliquotasHistorico?.historico.length) {
+      const entrada = aliquotasHistorico.historico.find(h => h.ano === ano && h.mes === mes)
+      if (entrada) return entrada.aliquota
+      return aliquotasHistorico.padrao
+    }
+    return aliquotaSimples / 100
+  }
   const router = useRouter()
   const [busca, setBusca] = useState('')
   const [periodo, setPeriodo] = useState<Periodo>('hoje')
@@ -171,7 +184,8 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais }
   }).map(p => {
     const local = custosLocais[p.id]
     const custo = local?.custo ?? p.custo_produto ?? 0
-    const imposto = p.valor_venda * (aliquotaSimples / 100)
+    const aliqPedido = getAliquotaParaData(p.data_compra)
+    const imposto = p.valor_venda * aliqPedido
     const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - custo - imposto
     const margem = p.valor_venda > 0 ? (lucro / p.valor_venda) * 100 : 0
     return { ...p, custo_produto: custo > 0 ? custo : p.custo_produto, lucro, margem, imposto }
@@ -191,7 +205,8 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais }
   // KPIs do período anterior (para delta)
   const anterior = filtrarPeriodoAnterior(pedidos, periodo).filter(p => p.status !== 'cancelled').map(p => {
     const custo = p.custo_produto ?? 0
-    const imposto = p.valor_venda * (aliquotaSimples / 100)
+    const aliqPedido = getAliquotaParaData(p.data_compra)
+    const imposto = p.valor_venda * aliqPedido
     const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - custo - imposto
     return { ...p, lucro }
   })
@@ -489,95 +504,123 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais }
   }
 
   return (
-    <div className="p-4 space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-xl font-black text-slate-800">Vendas</h1>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {filtrados.length} pedidos · imposto {pct(aliquotaSimples)}
-            {isPending && <span className="ml-2 text-emerald-500 animate-pulse">sincronizando...</span>}
-          </p>
+    <div className="space-y-3">
+
+      {/* ── HERO HEADER ESCURO ── */}
+      <div className="bg-slate-900 rounded-2xl p-4 pb-5">
+        {/* Linha topo: faturamento hero + ações */}
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
+              Faturamento · {filtrados.length} {filtrados.length === 1 ? 'venda' : 'vendas'}
+              {isPending && <span className="ml-2 text-emerald-400 animate-pulse">· sincronizando...</span>}
+            </p>
+            <p className="text-3xl font-black text-white leading-none">
+              {mascaraValor(vis >= 3 ? '█████' : brl(totalFat))}
+            </p>
+            <Delta atual={totalFat} anterior={antFat} />
+          </div>
+          <div className="flex items-center gap-1 mt-0.5">
+            <button onClick={() => setVis(v => ((v + 1) % 4) as Vis)}
+              className={`p-2 rounded-xl transition-colors ${vis === 0 ? 'text-slate-500 hover:text-slate-300' : 'text-amber-400 bg-amber-400/10'}`}>
+              {vis === 0 ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+            </button>
+            <button onClick={() => handleSync(false)} disabled={isPending}
+              className="p-2 rounded-xl text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-40">
+              <RefreshCw className={`w-4 h-4 ${isPending ? 'animate-spin text-emerald-400' : ''}`} />
+            </button>
+            <button onClick={exportarCSV}
+              className="p-2 rounded-xl text-slate-500 hover:text-slate-300 transition-colors">
+              <Download className="w-4 h-4" />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setVis(v => ((v + 1) % 4) as Vis)}
-            className={`p-1.5 rounded-lg border transition-colors ${vis === 0 ? 'border-slate-200 text-slate-400 hover:text-slate-600' : 'border-amber-300 bg-amber-50 text-amber-600'}`}>
-            {vis === 0 ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-          </button>
-          <button onClick={() => handleSync(false)} disabled={isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 text-white text-xs font-bold rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors">
-            <RefreshCw className={`w-3 h-3 ${isPending ? 'animate-spin' : ''}`} />
-            Sincronizar
-          </button>
-          <button onClick={exportarCSV}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200 transition-colors">
-            <Download className="w-3 h-3" />CSV
-          </button>
+
+        {/* Lucro + margem */}
+        <div className="flex items-start gap-5 mb-4">
+          <div>
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest">Lucro líquido</p>
+            <p className={`text-lg font-black ${totalLucro >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {mascaraValor(vis >= 3 ? '█████' : brl(totalLucro))}
+            </p>
+            <Delta atual={totalLucro} anterior={antLucro} />
+          </div>
+          <div className="w-px h-10 bg-slate-800 mt-1" />
+          <div>
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest">Margem</p>
+            <p className={`text-lg font-black ${margemMedia >= 15 ? 'text-emerald-400' : margemMedia >= 0 ? 'text-amber-400' : 'text-red-400'}`}>
+              {pct(margemMedia)}
+            </p>
+          </div>
+          <div className="w-px h-10 bg-slate-800 mt-1" />
+          <div>
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest">Lucro médio</p>
+            <p className={`text-lg font-black ${lucroMedio >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {mascaraValor(vis >= 3 ? '█████' : brl(lucroMedio))}
+            </p>
+          </div>
+          {syncMsg && <p className="text-[10px] font-bold text-emerald-400 ml-auto self-center">{syncMsg}</p>}
         </div>
+
+        {/* Filtros de período */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {periodos.map(p => (
+            <button key={p.id} onClick={() => setPeriodo(p.id)}
+              className={`px-3 py-1 text-[11px] font-bold rounded-full transition-colors ${periodo === p.id ? 'bg-emerald-500 text-white' : 'bg-white/10 text-slate-400 hover:bg-white/15 hover:text-slate-200'}`}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {periodo === 'personalizado' && (
+          <div className="flex items-center gap-2 flex-wrap mt-2">
+            <input type="date" value={customInicio} onChange={e => setCustomInicio(e.target.value)} className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 bg-slate-800 text-slate-200 focus:outline-none focus:border-emerald-500" />
+            <span className="text-xs text-slate-500">até</span>
+            <input type="date" value={customFim} onChange={e => setCustomFim(e.target.value)} className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 bg-slate-800 text-slate-200 focus:outline-none focus:border-emerald-500" />
+          </div>
+        )}
       </div>
 
-      {syncMsg && <p className="text-xs font-medium text-emerald-600">{syncMsg}</p>}
-
-      {/* Filtros de período */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {periodos.map(p => (
-          <button key={p.id} onClick={() => setPeriodo(p.id)}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${periodo === p.id ? 'bg-emerald-500 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-600'}`}>
-            {p.label}
-          </button>
-        ))}
-      </div>
-      {periodo === 'personalizado' && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <input type="date" value={customInicio} onChange={e => setCustomInicio(e.target.value)} className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-emerald-500" />
-          <span className="text-xs text-slate-400">até</span>
-          <input type="date" value={customFim} onChange={e => setCustomFim(e.target.value)} className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-emerald-500" />
-        </div>
-      )}
-
-      {/* KPIs — linha 1: principais com delta */}
+      {/* KPIs — linha 1: secundários */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {/* Pedidos */}
-        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
+        <div className="bg-white rounded-xl p-3 shadow-sm">
           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Vendas</p>
           <p className="text-sm font-black mt-0.5 text-slate-800">{vis >= 3 ? '█' : filtrados.length}</p>
           <Delta atual={filtrados.length} anterior={antVendas} />
         </div>
-        {/* Faturamento */}
-        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Faturamento</p>
-          <p className="text-sm font-black mt-0.5 text-slate-800">{mascaraValor(vis >= 3 ? '█████' : brl(totalFat))}</p>
-          <Delta atual={totalFat} anterior={antFat} />
-        </div>
-        {/* Ticket médio */}
-        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ticket Médio</p>
+        <div className="bg-white rounded-xl p-3 shadow-sm">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ticket médio</p>
           <p className="text-sm font-black mt-0.5 text-slate-800">{mascaraValor(vis >= 3 ? '█████' : brl(ticketMedio))}</p>
         </div>
-        {/* Lucro médio */}
-        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Lucro Médio</p>
-          <p className={`text-sm font-black mt-0.5 ${lucroMedio >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{mascaraValor(vis >= 3 ? '█████' : brl(lucroMedio))}</p>
+        <div className="bg-white rounded-xl p-3 shadow-sm col-span-2 sm:col-span-2">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Canceladas no período</p>
+          <p className="text-sm font-black mt-0.5 text-slate-800">{cancelados.length} <span className="text-[10px] font-normal text-slate-400">pedidos</span></p>
         </div>
       </div>
 
-      {/* KPIs — linha 2: custos com % + lucro com delta */}
+      {/* KPIs — linha 2: custos com color coding */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-        {[
-          { label: 'Tarifas ML',  value: totalTarifas,  pctVal: totalFat > 0 ? (totalTarifas / totalFat) * 100 : 0 },
-          { label: 'Frete',       value: totalFrete,    pctVal: totalFat > 0 ? (totalFrete / totalFat) * 100 : 0 },
-          { label: 'Impostos',    value: totalImpostos, pctVal: totalFat > 0 ? (totalImpostos / totalFat) * 100 : 0 },
-          { label: 'Custos prod.', value: totalCustos,  pctVal: totalFat > 0 ? (totalCustos / totalFat) * 100 : 0 },
-        ].map(k => (
-          <div key={k.label} className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{k.label}</p>
-            <p className="text-sm font-black mt-0.5 text-orange-600">{mascaraValor(vis >= 3 ? '█████' : brl(k.value))}</p>
-            <p className="text-[9px] text-slate-400 mt-0.5">{pct(k.pctVal)} do fat.</p>
-          </div>
-        ))}
-        {/* Lucro */}
-        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Lucro Líquido</p>
+        <div className="bg-white rounded-xl p-3 shadow-sm">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tarifas ML</p>
+          <p className="text-sm font-black mt-0.5 text-slate-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalTarifas))}</p>
+          <p className="text-[9px] text-slate-400 mt-0.5">{pct(totalFat > 0 ? (totalTarifas / totalFat) * 100 : 0)} do fat.</p>
+        </div>
+        <div className="bg-white rounded-xl p-3 shadow-sm">
+          <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest">Frete</p>
+          <p className="text-sm font-black mt-0.5 text-amber-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalFrete))}</p>
+          <p className="text-[9px] text-slate-400 mt-0.5">{pct(totalFat > 0 ? (totalFrete / totalFat) * 100 : 0)} do fat.</p>
+        </div>
+        <div className="bg-white rounded-xl p-3 shadow-sm">
+          <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Impostos</p>
+          <p className="text-sm font-black mt-0.5 text-blue-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalImpostos))}</p>
+          <p className="text-[9px] text-slate-400 mt-0.5">{pct(totalFat > 0 ? (totalImpostos / totalFat) * 100 : 0)} do fat.</p>
+        </div>
+        <div className="bg-white rounded-xl p-3 shadow-sm">
+          <p className="text-[9px] font-black text-orange-400 uppercase tracking-widest">Custos prod.</p>
+          <p className="text-sm font-black mt-0.5 text-orange-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalCustos))}</p>
+          <p className="text-[9px] text-slate-400 mt-0.5">{pct(totalFat > 0 ? (totalCustos / totalFat) * 100 : 0)} do fat.</p>
+        </div>
+        <div className="bg-emerald-50 rounded-xl p-3 shadow-sm border-l-2 border-emerald-400">
+          <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Lucro líquido</p>
           <p className={`text-sm font-black mt-0.5 ${totalLucro >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{mascaraValor(vis >= 3 ? '█████' : brl(totalLucro))}</p>
           <p className="text-[9px] text-slate-400 mt-0.5">{pct(margemMedia)} mg</p>
           <Delta atual={totalLucro} anterior={antLucro} />

@@ -1,14 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Package, Pencil, Trash2, Search } from 'lucide-react'
+import { Plus, Package, Pencil, Trash2, Search, Calendar, AlertTriangle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatCurrency } from '@/lib/utils'
-import { saveProduto, deleteProduto } from '@/actions/produtos'
+import { saveProduto, deleteProduto, atualizarCustoDesdeData } from '@/actions/produtos'
 
 interface Produto {
   id: string
@@ -27,6 +27,7 @@ export function ProdutosView({ produtos: inicial }: Props) {
   const [produtos, setProdutos] = useState(inicial)
   const [busca, setBusca] = useState('')
   const [editando, setEditando] = useState<Produto | null | 'novo'>(null)
+  const [atualizandoCusto, setAtualizandoCusto] = useState<Produto | null>(null)
   const [loading, setLoading] = useState(false)
 
   // Pesquisa por nome OU por SKU
@@ -149,6 +150,15 @@ export function ProdutosView({ produtos: inicial }: Props) {
                       {p.custo_brl != null ? formatCurrency(p.custo_brl) : '—'}
                     </span>
                   </div>
+                  {p.sku_interno && p.custo_brl != null && (
+                    <button
+                      onClick={() => setAtualizandoCusto(p)}
+                      className="mt-2 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-[10px] font-bold text-slate-500 border border-slate-200 rounded-lg hover:border-emerald-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
+                    >
+                      <Calendar className="w-3 h-3" />
+                      Atualizar custo com vigência
+                    </button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -156,13 +166,21 @@ export function ProdutosView({ produtos: inicial }: Props) {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Modal editar/criar produto */}
       {editando !== null && (
         <ProdutoModal
           produto={editando === 'novo' ? null : editando}
           onClose={() => setEditando(null)}
           onSave={handleSave}
           loading={loading}
+        />
+      )}
+
+      {/* Modal vigência de custo */}
+      {atualizandoCusto !== null && (
+        <VigenciaCustoModal
+          produto={atualizandoCusto}
+          onClose={() => setAtualizandoCusto(null)}
         />
       )}
     </div>
@@ -308,6 +326,133 @@ function ProdutoModal({ produto, onClose, onSave, loading }: {
             </Button>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Modal de vigência de custo ──────────────────────────────────────────────
+
+function VigenciaCustoModal({ produto, onClose }: { produto: Produto; onClose: () => void }) {
+  const hoje = new Date().toISOString().slice(0, 10)
+  const [novoCusto, setNovoCusto] = useState(produto.custo_brl?.toFixed(2) ?? '')
+  const [dataInicio, setDataInicio] = useState(hoje)
+  const [loading, setLoading] = useState(false)
+  const [resultado, setResultado] = useState<{ pedidosAtualizados: number } | null>(null)
+  const [erro, setErro] = useState('')
+
+  async function handleSalvar() {
+    const custo = parseFloat(novoCusto.replace(',', '.'))
+    if (isNaN(custo) || custo < 0) { setErro('Informe um custo válido'); return }
+    if (!dataInicio) { setErro('Informe a data de vigência'); return }
+    if (!produto.sku_interno) { setErro('Produto sem SKU — não é possível retroagir'); return }
+    setErro('')
+    setLoading(true)
+    try {
+      const r = await atualizarCustoDesdeData(produto.id, produto.sku_interno, custo, dataInicio)
+      setResultado(r)
+    } catch {
+      setErro('Erro ao atualizar. Tente novamente.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const custoAtual = produto.custo_brl
+  const custoNovo = parseFloat(novoCusto.replace(',', '.'))
+  const mudou = !isNaN(custoNovo) && custoNovo !== custoAtual
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl">
+        <div className="flex items-center justify-between p-5 border-b border-slate-100">
+          <div>
+            <h2 className="text-base font-black text-slate-900">Atualizar Custo com Vigência</h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">{produto.sku_interno} · {produto.nome}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
+        </div>
+
+        {resultado ? (
+          <div className="p-5 space-y-4">
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+              <p className="text-2xl mb-1">✓</p>
+              <p className="text-sm font-black text-emerald-800">Custo atualizado!</p>
+              <p className="text-xs text-emerald-700 mt-1">
+                {resultado.pedidosAtualizados} pedido{resultado.pedidosAtualizados !== 1 ? 's' : ''} com SKU <strong>{produto.sku_interno}</strong> retroagido{resultado.pedidosAtualizados !== 1 ? 's' : ''} desde {new Date(dataInicio + 'T12:00:00').toLocaleDateString('pt-BR')}
+              </p>
+              <p className="text-[10px] text-emerald-600 mt-1">
+                Novo custo: {formatCurrency(parseFloat(novoCusto.replace(',', '.')))}
+              </p>
+            </div>
+            <Button className="w-full" variant="outline" onClick={onClose}>Fechar</Button>
+          </div>
+        ) : (
+          <div className="p-5 space-y-4">
+
+            {/* Custo atual */}
+            <div className="bg-slate-50 rounded-xl p-3 flex justify-between items-center">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Custo atual</span>
+              <span className="text-sm font-black font-mono text-slate-700">{custoAtual != null ? formatCurrency(custoAtual) : '—'}</span>
+            </div>
+
+            {/* Novo custo */}
+            <div>
+              <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Novo Custo (R$) *</Label>
+              <Input
+                type="number" step="0.01" min="0"
+                value={novoCusto}
+                onChange={e => setNovoCusto(e.target.value)}
+                placeholder="0,00"
+                className="mt-1.5 font-mono"
+                autoFocus
+              />
+              {mudou && !isNaN(custoNovo) && (
+                <p className="text-[10px] mt-1 text-amber-600 font-bold">
+                  Variação: {custoAtual != null && custoAtual > 0 ? `${(((custoNovo - custoAtual) / custoAtual) * 100).toFixed(1)}%` : 'novo custo'}
+                </p>
+              )}
+            </div>
+
+            {/* Data de vigência */}
+            <div>
+              <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                Vigente a partir de *
+              </Label>
+              <Input
+                type="date"
+                value={dataInicio}
+                onChange={e => setDataInicio(e.target.value)}
+                max={hoje}
+                className="mt-1.5"
+              />
+              <p className="text-[10px] text-slate-400 mt-1">
+                Todos os pedidos de <strong>{produto.sku_interno}</strong> a partir desta data terão o custo atualizado
+              </p>
+            </div>
+
+            {/* Aviso */}
+            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-[10px] text-amber-700">
+                Esta ação atualiza o custo no cadastro do produto <em>e</em> recalcula os pedidos retroativamente. Não pode ser desfeita facilmente.
+              </p>
+            </div>
+
+            {erro && (
+              <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{erro}</p>
+            )}
+
+            <div className="flex gap-3">
+              <Button type="button" variant="outline" className="flex-1" onClick={onClose} disabled={loading}>
+                Cancelar
+              </Button>
+              <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" disabled={loading || !mudou} onClick={handleSalvar}>
+                {loading ? 'Atualizando...' : 'Confirmar'}
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

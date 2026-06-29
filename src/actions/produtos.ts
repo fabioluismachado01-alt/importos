@@ -79,3 +79,35 @@ export async function deleteProduto(id: string) {
   await prisma.produto_catalogo.update({ where: { id }, data: { ativo: false } })
   revalidatePath('/produtos')
 }
+
+// Atualiza custo do produto e retroage nos pedidos ML a partir de uma data
+export async function atualizarCustoDesdeData(
+  produtoId: string,
+  skuInterno: string,
+  novoCusto: number,
+  dataInicio: string, // ISO date string 'YYYY-MM-DD'
+): Promise<{ pedidosAtualizados: number }> {
+  const { workspaceId } = await getAuthContext()
+
+  const dataInicioDate = new Date(dataInicio + 'T00:00:00.000Z')
+
+  const [, result] = await Promise.all([
+    prisma.produto_catalogo.update({
+      where: { id: produtoId },
+      data: { custo_brl: novoCusto },
+    }),
+    prisma.ml_pedido.updateMany({
+      where: {
+        workspace_id: workspaceId,
+        sku: skuInterno,
+        data_compra: { gte: dataInicioDate },
+      },
+      data: { custo_produto: novoCusto },
+    }),
+  ])
+
+  revalidatePath('/produtos')
+  revalidatePath('/marketplaces/pedidos')
+
+  return { pedidosAtualizados: result.count }
+}
