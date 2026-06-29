@@ -329,6 +329,7 @@ export type MLPedidoRow = {
   valor_venda: number
   tarifa: number
   frete_vendedor: number
+  imposto: number
   custo_produto: number | null
   lucro: number
   margem: number
@@ -364,7 +365,8 @@ export async function getMLPedidos(filtros?: {
   })
 
   return pedidos.map(p => {
-    const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - (p.custo_produto ?? 0)
+    const imposto = p.imposto ?? 0
+    const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - imposto - (p.custo_produto ?? 0)
     const margem = p.valor_venda > 0 ? (lucro / p.valor_venda) * 100 : 0
     return {
       id: p.id,
@@ -382,6 +384,7 @@ export async function getMLPedidos(filtros?: {
       valor_venda: p.valor_venda,
       tarifa: p.tarifa,
       frete_vendedor: p.frete_vendedor,
+      imposto,
       custo_produto: p.custo_produto,
       lucro,
       margem,
