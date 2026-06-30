@@ -1,4 +1,4 @@
-const CACHE_NAME = 'importos-v1';
+const CACHE_NAME = 'importos-v3';
 const STATIC_ASSETS = ['/login', '/dashboard'];
 
 self.addEventListener('install', (event) => {
