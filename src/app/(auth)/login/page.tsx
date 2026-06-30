@@ -62,7 +62,7 @@ export default function LoginPage() {
             className="mb-2"
             style={{ filter: 'drop-shadow(0 8px 32px rgba(10,126,150,0.45)) drop-shadow(0 4px 16px rgba(0,0,0,0.35))' }}
           >
-            <Image src="/logo-3d.png" alt="ImportOS" width={96} height={96} priority />
+            <Image src="/logo-3d-icon.png" alt="ImportOS" width={100} height={100} priority />
           </div>
           <h1
             className="text-[28px] font-black text-white tracking-tight"
