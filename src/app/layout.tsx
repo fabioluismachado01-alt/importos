@@ -42,7 +42,9 @@ export default function RootLayout({
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <head>
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="icon" type="image/svg+xml" href="/logo-icon.svg" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+        <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
         <meta name="theme-color" content="#0A7E96" />
       </head>
       <body className="min-h-full flex flex-col font-sans">

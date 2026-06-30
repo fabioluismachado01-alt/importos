@@ -2,8 +2,54 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Package, Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 import { loginAction } from '@/actions/auth'
+
+function ImportOSLogo3D({ size = 56 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="login-bg" x1="0" y1="0" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#0E9AB5" />
+          <stop offset="50%" stopColor="#0A7E96" />
+          <stop offset="100%" stopColor="#005B70" />
+        </linearGradient>
+        <linearGradient id="login-shine" x1="0" y1="0" x2="56" y2="28" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.18)" />
+          <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+        </linearGradient>
+        <linearGradient id="login-arrow" x1="18" y1="34" x2="32" y2="10" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.6)" />
+          <stop offset="100%" stopColor="rgba(255,255,255,0.95)" />
+        </linearGradient>
+        <filter id="login-glow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="1.5" result="blur" />
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      {/* Background rounded square */}
+      <rect width="56" height="56" rx="14" fill="url(#login-bg)" />
+      {/* Glass shine top */}
+      <rect width="56" height="28" rx="14" fill="url(#login-shine)" />
+      {/* Bottom edge highlight (3D depth) */}
+      <rect x="2" y="50" width="52" height="3" rx="2" fill="rgba(0,0,0,0.25)" />
+      {/* I letterform — top bar */}
+      <rect x="14" y="12" width="28" height="6" rx="2" fill="white" filter="url(#login-glow)" />
+      {/* I letterform — bottom bar */}
+      <rect x="14" y="38" width="28" height="6" rx="2" fill="white" />
+      {/* I letterform — stem */}
+      <rect x="24" y="18" width="8" height="20" rx="1" fill="white" />
+      {/* Upward arrow — metallic overlay */}
+      <path
+        d="M28 10 L20 20 L24.5 20 L24.2 36 L31.8 36 L31.5 20 L36 20 Z"
+        fill="url(#login-arrow)"
+        opacity="0.5"
+      />
+      {/* Arrow tip */}
+      <polygon points="28,9 25,14 31,14" fill="white" opacity="0.9" />
+    </svg>
+  )
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -46,11 +92,11 @@ export default function LoginPage() {
           opacity: 0.3,
         }}
       />
-      {/* Glow */}
+      {/* Glow teal */}
       <div
         className="fixed inset-0 pointer-events-none"
         style={{
-          background: 'radial-gradient(ellipse at 50% 60%, rgba(16,185,129,0.06) 0%, transparent 60%)',
+          background: 'radial-gradient(ellipse at 50% 40%, rgba(10,126,150,0.12) 0%, transparent 65%)',
         }}
       />
 
@@ -58,13 +104,10 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <div
-            className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
-            style={{
-              background: '#10B981',
-              boxShadow: '0 0 40px rgba(16,185,129,0.35)',
-            }}
+            className="mb-4"
+            style={{ filter: 'drop-shadow(0 0 32px rgba(10,126,150,0.5)) drop-shadow(0 8px 24px rgba(0,0,0,0.4))' }}
           >
-            <Package className="w-7 h-7 text-white" />
+            <ImportOSLogo3D size={64} />
           </div>
           <h1
             className="text-[28px] font-black text-white tracking-tight"
@@ -112,8 +155,8 @@ export default function LoginPage() {
                   fontFamily: 'Inter, sans-serif',
                 }}
                 onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#10B981'
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.15)'
+                  e.currentTarget.style.borderColor = '#0A7E96'
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(10,126,150,0.2)'
                 }}
                 onBlur={(e) => {
                   e.currentTarget.style.borderColor = '#1A2440'
@@ -186,8 +229,10 @@ export default function LoginPage() {
               className="w-full font-bold text-sm text-white rounded-xl transition-all mt-2 disabled:opacity-60"
               style={{
                 height: '44px',
-                background: loading ? '#059669' : '#10B981',
-                boxShadow: '0 4px 20px rgba(16,185,129,0.35)',
+                background: loading
+                  ? '#005B70'
+                  : 'linear-gradient(135deg, #0E9AB5 0%, #0A7E96 50%, #005B70 100%)',
+                boxShadow: '0 4px 20px rgba(10,126,150,0.45)',
                 fontFamily: 'Inter, sans-serif',
               }}
             >
