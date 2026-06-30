@@ -52,7 +52,7 @@ export function AppTopbar({ user }: AppTopbarProps) {
         {/* Avatar + Dropdown */}
         <div className="relative group">
           <button className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-slate-100 transition-colors">
-            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-black bg-emerald-500">
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-black" style={{ background: '#0A7E96' }}>
               {initials}
             </div>
             <span className="hidden sm:block text-xs font-semibold text-slate-700">
