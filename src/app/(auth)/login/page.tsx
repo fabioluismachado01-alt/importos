@@ -3,53 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff } from 'lucide-react'
+import Image from 'next/image'
 import { loginAction } from '@/actions/auth'
-
-function ImportOSLogo3D({ size = 56 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="login-bg" x1="0" y1="0" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#0E9AB5" />
-          <stop offset="50%" stopColor="#0A7E96" />
-          <stop offset="100%" stopColor="#005B70" />
-        </linearGradient>
-        <linearGradient id="login-shine" x1="0" y1="0" x2="56" y2="28" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.18)" />
-          <stop offset="100%" stopColor="rgba(255,255,255,0)" />
-        </linearGradient>
-        <linearGradient id="login-arrow" x1="18" y1="34" x2="32" y2="10" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.6)" />
-          <stop offset="100%" stopColor="rgba(255,255,255,0.95)" />
-        </linearGradient>
-        <filter id="login-glow" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="1.5" result="blur" />
-          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-      </defs>
-      {/* Background rounded square */}
-      <rect width="56" height="56" rx="14" fill="url(#login-bg)" />
-      {/* Glass shine top */}
-      <rect width="56" height="28" rx="14" fill="url(#login-shine)" />
-      {/* Bottom edge highlight (3D depth) */}
-      <rect x="2" y="50" width="52" height="3" rx="2" fill="rgba(0,0,0,0.25)" />
-      {/* I letterform — top bar */}
-      <rect x="14" y="12" width="28" height="6" rx="2" fill="white" filter="url(#login-glow)" />
-      {/* I letterform — bottom bar */}
-      <rect x="14" y="38" width="28" height="6" rx="2" fill="white" />
-      {/* I letterform — stem */}
-      <rect x="24" y="18" width="8" height="20" rx="1" fill="white" />
-      {/* Upward arrow — metallic overlay */}
-      <path
-        d="M28 10 L20 20 L24.5 20 L24.2 36 L31.8 36 L31.5 20 L36 20 Z"
-        fill="url(#login-arrow)"
-        opacity="0.5"
-      />
-      {/* Arrow tip */}
-      <polygon points="28,9 25,14 31,14" fill="white" opacity="0.9" />
-    </svg>
-  )
-}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -104,10 +59,10 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <div
-            className="mb-4"
-            style={{ filter: 'drop-shadow(0 0 32px rgba(10,126,150,0.5)) drop-shadow(0 8px 24px rgba(0,0,0,0.4))' }}
+            className="mb-2"
+            style={{ filter: 'drop-shadow(0 8px 32px rgba(10,126,150,0.45)) drop-shadow(0 4px 16px rgba(0,0,0,0.35))' }}
           >
-            <ImportOSLogo3D size={64} />
+            <Image src="/logo-3d.png" alt="ImportOS" width={96} height={96} priority />
           </div>
           <h1
             className="text-[28px] font-black text-white tracking-tight"
