@@ -50,11 +50,31 @@ interface PagamentosData {
 type AbaId = 'vendas' | 'faturamento' | 'full' | 'pagamentos'
 type EstadoAba = 'idle' | 'lendo' | 'ok' | 'erro'
 
-const ABAS: Array<{ id: AbaId; label: string; icon: React.ElementType; descricao: string; formato: string; obrigatorio: boolean }> = [
-  { id: 'vendas',      label: '1. Relatório de Vendas',  icon: ShoppingCart,  descricao: 'Receita por SKU, tarifas e frete',            formato: '.xlsx', obrigatorio: true  },
-  { id: 'faturamento', label: '2. Faturamento ML',        icon: DollarSign,    descricao: 'Publicidade, estornos e tarifas extras',       formato: '.xlsx', obrigatorio: true  },
-  { id: 'full',        label: '3. Tarifas Full',          icon: Package,       descricao: 'Armazenagem e coleta Full (2 abas)',           formato: '.xlsx', obrigatorio: false },
-  { id: 'pagamentos',  label: '4. Pagamentos de Faturas', icon: Tag,           descricao: 'Histórico de pagamentos e faturas pendentes',  formato: '.xlsx', obrigatorio: false },
+const ABAS: Array<{ id: AbaId; label: string; icon: React.ElementType; descricao: string; formato: string; obrigatorio: boolean; caminho: string[]; link: string }> = [
+  {
+    id: 'vendas', label: '1. Relatório de Vendas', icon: ShoppingCart,
+    descricao: 'Receita por SKU, tarifas e frete', formato: '.xlsx', obrigatorio: true,
+    caminho: ['Vendas', 'Data Personalizado', 'Intervalo do mês', 'Baixar Excel'],
+    link: 'https://www.mercadolivre.com.br/vendas/relatorios',
+  },
+  {
+    id: 'faturamento', label: '2. Faturamento ML', icon: DollarSign,
+    descricao: 'Publicidade, estornos e tarifas extras', formato: '.xlsx', obrigatorio: true,
+    caminho: ['Faturamento', 'Tarifas e Pagamentos', 'Relatórios', 'Faturamento do ML'],
+    link: 'https://www.mercadolivre.com.br/cobros/relatorios',
+  },
+  {
+    id: 'full', label: '3. Tarifas Full', icon: Package,
+    descricao: 'Armazenagem e coleta Full (2 abas)', formato: '.xlsx', obrigatorio: false,
+    caminho: ['Faturamento', 'Tarifas e Pagamentos', 'Relatórios', 'Tarifas do Full'],
+    link: 'https://www.mercadolivre.com.br/cobros/relatorios',
+  },
+  {
+    id: 'pagamentos', label: '4. Pagamentos de Faturas', icon: Tag,
+    descricao: 'Histórico de pagamentos e faturas pendentes', formato: '.xlsx', obrigatorio: false,
+    caminho: ['Faturamento', 'Tarifas e Pagamentos', 'Relatórios', 'Pagamentos de faturas'],
+    link: 'https://www.mercadolivre.com.br/cobros/relatorios',
+  },
 ]
 
 const CORES_MARGEM = (m: number) =>
@@ -342,6 +362,20 @@ export function AnaliseMlCompleta() {
                 </button>
               )}
             </div>
+            {/* Caminho de navegação */}
+            <div className="flex flex-wrap items-center gap-1 mt-1.5">
+              {aba.caminho.map((passo, i) => (
+                <span key={i} className="flex items-center gap-1">
+                  <span className="text-[9px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5">{passo}</span>
+                  {i < aba.caminho.length - 1 && <ArrowRight className="w-2.5 h-2.5 text-slate-300" />}
+                </span>
+              ))}
+            </div>
+            <a href={aba.link} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-[9px] font-semibold text-emerald-600 hover:text-emerald-800 hover:underline mt-1">
+              <ArrowRight className="w-2.5 h-2.5" />
+              Abrir no Mercado Livre
+            </a>
           </CardHeader>
           <CardContent>
             {estadosAba[aba.id] === 'idle' || estadosAba[aba.id] === 'erro' ? (
