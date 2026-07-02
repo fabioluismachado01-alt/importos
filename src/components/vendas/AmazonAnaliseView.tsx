@@ -58,11 +58,12 @@ const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
 // ─── Componente de Upload ─────────────────────────────────────────────────────
 
 function UploadBox({
-  numero, titulo, subtitulo, obrigatorio, aceita, estado,
+  numero, titulo, subtitulo, obrigatorio, aceita, estado, caminho,
   onFile, onRemover, criancas, cor = 'orange',
 }: {
   numero: number; titulo: string; subtitulo: string; obrigatorio: boolean
-  aceita: string; estado: UploadEstado; onFile: (f: File) => void
+  aceita: string; estado: UploadEstado; caminho: string[]
+  onFile: (f: File) => void
   onRemover: () => void; criancas?: React.ReactNode; cor?: string
 }) {
   const ref = useRef<HTMLInputElement>(null)
@@ -79,7 +80,7 @@ function UploadBox({
       : 'border-slate-200')}>
       <CardContent className="p-5">
         {/* Cabeçalho */}
-        <div className="flex items-center gap-2.5 mb-4">
+        <div className="flex items-center gap-2.5 mb-3">
           <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-black shrink-0',
             estado === 'ok' ? 'bg-emerald-500' : 'bg-slate-700')}>
             {estado === 'carregando' ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -89,12 +90,22 @@ function UploadBox({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-black text-slate-800">{titulo}</p>
-            <p className="text-[10px] text-slate-400 truncate">{subtitulo}</p>
+            <p className="text-[10px] text-slate-400">{subtitulo}</p>
           </div>
           <Badge className={cn('text-[8px] h-4 px-1.5 shrink-0',
             obrigatorio ? 'bg-red-100 text-red-700 border-red-200' : 'bg-slate-100 text-slate-500 border-slate-200')}>
-            {obrigatorio ? 'Obrigatório' : 'Obrigatório'}
+            Obrigatório
           </Badge>
+        </div>
+
+        {/* Caminho de onde baixar */}
+        <div className="flex flex-wrap items-center gap-1 mb-3">
+          {caminho.map((step, i) => (
+            <span key={i} className="flex items-center gap-1">
+              <span className="bg-slate-100 text-slate-600 text-[9px] font-semibold px-1.5 py-0.5 rounded">{step}</span>
+              {i < caminho.length - 1 && <ArrowRight className="w-2.5 h-2.5 text-slate-300 shrink-0" />}
+            </span>
+          ))}
         </div>
 
         {/* Área de upload ou conteúdo */}
@@ -103,7 +114,7 @@ function UploadBox({
             onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) onFile(f) }}
             onDragOver={e => e.preventDefault()}
             onClick={() => ref.current?.click()}
-            className={cn('border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all',
+            className={cn('border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all',
               cores[cor] || cores.orange)}>
             <input ref={ref} type="file" accept={aceita} className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f) }} />
@@ -353,10 +364,11 @@ export function AmazonAnaliseView() {
           {/* 3 Uploads */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-            {/* Upload 1 — Relatório de Vendas */}
+            {/* Upload 1 — Visualizar Transações */}
             <UploadBox
-              numero={1} titulo="Relatório de Vendas" subtitulo="Receita, SKUs e Comissões (.csv)"
+              numero={1} titulo="Visualizar Transações" subtitulo="Receita, Tarifas e Reembolsos (.csv)"
               obrigatorio aceita=".csv,.xlsx" estado={estV} cor="orange"
+              caminho={['Menu', 'Pagamentos', 'Visualizar transações', 'Selecionar mês', 'Download CSV']}
               onFile={handleVendas}
               onRemover={() => { setEstV('idle'); setDadosV(null); setErroV('') }}
               criancas={estV === 'ok' && dadosV ? (
@@ -373,6 +385,7 @@ export function AmazonAnaliseView() {
             <UploadBox
               numero={2} titulo="Relatório de Pedidos" subtitulo="SKUs, quantidades e margem por produto (.txt)"
               obrigatorio aceita=".txt,.csv,.tsv" estado={estG} cor="blue"
+              caminho={['Menu', 'Pedidos', 'Relatório de Pedidos', 'Todos os pedidos', 'Selecionar período', 'Download']}
               onFile={handleGeral}
               onRemover={() => { setEstG('idle'); setDadosG(null); setErroG('') }}
               criancas={estG === 'ok' && dadosG ? (
@@ -393,6 +406,7 @@ export function AmazonAnaliseView() {
             <UploadBox
               numero={3} titulo="Fatura de Publicidade" subtitulo="Amazon Advertising — fatura mensal (.pdf)"
               obrigatorio aceita=".pdf" estado={estP} cor="purple"
+              caminho={['Menu', 'Pagamentos', 'Histórico de Fatura de Publicidade', 'Selecionar mês', 'Download PDF']}
               onFile={handlePdf}
               onRemover={() => { setEstP('idle'); setDadosP(null); setPubManual(''); setErroP('') }}
               criancas={estP === 'ok' ? (
