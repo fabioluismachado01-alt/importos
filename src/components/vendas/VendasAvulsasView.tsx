@@ -111,10 +111,17 @@ export function VendasAvulsasView() {
   async function handleSalvar() {
     if (!dados) return
     setSalvando(true)
+    setErro('')
     try {
       const result = await salvarAnaliseAvulsas(dados)
-      if (result.ok) router.push('/vendas/avulsas/historico')
-      else setErro(result.error ?? 'Erro ao salvar')
+      if (result.ok) {
+        setEstado('idle')
+        setDados(null)
+        router.push('/vendas')
+        router.refresh()
+      } else {
+        setErro(result.error ?? 'Erro ao salvar')
+      }
     } finally {
       setSalvando(false)
     }
