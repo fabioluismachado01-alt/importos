@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Package, Pencil, Trash2, Search, Calendar, AlertTriangle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -32,6 +32,9 @@ export function ProdutosView({ produtos: inicial }: Props) {
   const [atualizandoCusto, setAtualizandoCusto] = useState<Produto | null>(null)
   const [loading, setLoading] = useState(false)
 
+  // Sincroniza estado local quando o servidor retorna dados atualizados
+  useEffect(() => { setProdutos(inicial) }, [inicial])
+
   // Pesquisa por nome OU por SKU
   const filtrados = produtos.filter(p => {
     const q = busca.toLowerCase()
@@ -52,6 +55,7 @@ export function ProdutosView({ produtos: inicial }: Props) {
         descricao: data.descricao,
         ncm: data.ncm,
       })
+      setEditando(null)
       router.refresh()
     } finally {
       setLoading(false)
