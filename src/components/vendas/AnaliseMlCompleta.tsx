@@ -66,8 +66,8 @@ const ABAS: Array<{ id: AbaId; label: string; icon: React.ElementType; descricao
   {
     id: 'full', label: '3. Tarifas Full', icon: Package,
     descricao: 'Armazenagem e coleta Full (2 abas)', formato: '.xlsx', obrigatorio: false,
-    caminho: ['Faturamento', 'Tarifas e Pagamentos', 'Relatórios', 'Tarifas do Full'],
-    link: 'https://www.mercadolivre.com.br/cobros/relatorios',
+    caminho: ['Menu', 'Faturamento', 'Tarifas e Pagamentos', 'Ir para Detalhes', 'Relatórios', 'Selecionar Mês', 'Download Tarifas do Full'],
+    link: 'https://myaccount.mercadolivre.com.br/billing/detail/20260629?fromSummary=true',
   },
   {
     id: 'pagamentos', label: '4. Pagamentos de Faturas', icon: Tag,
