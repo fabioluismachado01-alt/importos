@@ -109,34 +109,36 @@ export function ImportarPlanilhaView() {
       </div>
 
       {/* ── COMO BAIXAR O RELATÓRIO ── */}
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-4">
-        <div className="flex items-center gap-2 mb-3">
+      <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-4 space-y-4">
+        <div className="flex items-center gap-2">
           <Info className="w-4 h-4 text-slate-500 shrink-0" />
-          <p className="text-sm font-bold text-slate-700">Como baixar o relatório no Mercado Livre</p>
+          <p className="text-sm font-bold text-slate-700">Como baixar os relatórios no Mercado Livre</p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3 text-xs text-slate-600">
-          <div className="flex items-start gap-2 flex-1">
-            <span className="w-5 h-5 rounded-full bg-[#0A7E96] text-white text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">1</span>
-            <div>
-              <p className="font-semibold text-slate-700">Acesse o painel do ML</p>
-              <p className="text-slate-500">Entrar em conta → Painel de Vendas</p>
-            </div>
-          </div>
-          <ArrowRight className="w-4 h-4 text-slate-300 shrink-0 self-center hidden sm:block" />
-          <div className="flex items-start gap-2 flex-1">
-            <span className="w-5 h-5 rounded-full bg-[#0A7E96] text-white text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">2</span>
-            <div>
-              <p className="font-semibold text-slate-700">Vá em Relatórios</p>
-              <p className="text-slate-500">Vendas → Relatórios → Vendas por período</p>
-            </div>
-          </div>
-          <ArrowRight className="w-4 h-4 text-slate-300 shrink-0 self-center hidden sm:block" />
-          <div className="flex items-start gap-2 flex-1">
-            <span className="w-5 h-5 rounded-full bg-[#0A7E96] text-white text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">3</span>
-            <div>
-              <p className="font-semibold text-slate-700">Exporte em Excel</p>
-              <p className="text-slate-500">Selecione o mês → baixar em .xlsx</p>
-            </div>
+
+        {/* Caminho */}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+          {['Faturamento', 'Tarifas e Pagamentos', 'Relatórios'].map((step, i, arr) => (
+            <span key={step} className="flex items-center gap-1.5">
+              <span className="bg-[#0A7E96] text-white px-2.5 py-1 rounded-lg">{step}</span>
+              {i < arr.length - 1 && <ArrowRight className="w-3.5 h-3.5 text-slate-400" />}
+            </span>
+          ))}
+        </div>
+
+        {/* Planilhas a baixar */}
+        <div>
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Planilhas que devem ser baixadas e importadas:</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {[
+              'Faturamento do Mercado Livre',
+              'Tarifas do Full',
+              'Pagamentos de faturas',
+            ].map(r => (
+              <div key={r} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2">
+                <FileSpreadsheet className="w-3.5 h-3.5 text-[#0A7E96] shrink-0" />
+                <span className="text-xs font-medium text-slate-700">{r}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
