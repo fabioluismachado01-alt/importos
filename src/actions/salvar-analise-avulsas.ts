@@ -68,7 +68,7 @@ export async function salvarAnaliseAvulsas(dados: AvulsasPayload): Promise<{ ok:
     if (lancamentos.length > 0)
       await prisma.lancamento.createMany({ data: lancamentos })
 
-    await recalcularMes(workspaceId, ano, mes)
+    await recalcularMes(fat.id, workspaceId, ano, mes)
     revalidatePath('/vendas/avulsas')
     revalidatePath('/financeiro')
 
