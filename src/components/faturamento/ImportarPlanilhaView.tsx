@@ -4,7 +4,7 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Upload, FileSpreadsheet, CheckCircle2, AlertTriangle,
-  ArrowRight, X, Loader2, Download,
+  ArrowRight, X, Loader2, Download, Info,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -106,6 +106,39 @@ export function ImportarPlanilhaView() {
           <Download className="w-4 h-4" />
           Baixar Modelo
         </a>
+      </div>
+
+      {/* ── COMO BAIXAR O RELATÓRIO ── */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Info className="w-4 h-4 text-slate-500 shrink-0" />
+          <p className="text-sm font-bold text-slate-700">Como baixar o relatório no Mercado Livre</p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3 text-xs text-slate-600">
+          <div className="flex items-start gap-2 flex-1">
+            <span className="w-5 h-5 rounded-full bg-[#0A7E96] text-white text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">1</span>
+            <div>
+              <p className="font-semibold text-slate-700">Acesse o painel do ML</p>
+              <p className="text-slate-500">Entrar em conta → Painel de Vendas</p>
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 text-slate-300 shrink-0 self-center hidden sm:block" />
+          <div className="flex items-start gap-2 flex-1">
+            <span className="w-5 h-5 rounded-full bg-[#0A7E96] text-white text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">2</span>
+            <div>
+              <p className="font-semibold text-slate-700">Vá em Relatórios</p>
+              <p className="text-slate-500">Vendas → Relatórios → Vendas por período</p>
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 text-slate-300 shrink-0 self-center hidden sm:block" />
+          <div className="flex items-start gap-2 flex-1">
+            <span className="w-5 h-5 rounded-full bg-[#0A7E96] text-white text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">3</span>
+            <div>
+              <p className="font-semibold text-slate-700">Exporte em Excel</p>
+              <p className="text-slate-500">Selecione o mês → baixar em .xlsx</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ── ZONA DE UPLOAD ── */}
