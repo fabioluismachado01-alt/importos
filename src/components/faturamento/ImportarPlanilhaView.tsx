@@ -153,7 +153,7 @@ export function ImportarPlanilhaView() {
 
         <div className="border-t border-slate-200" />
 
-        {/* Amazon */}
+        {/* Amazon — Pagamentos */}
         <div className="space-y-2">
           <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">📦 Amazon — Relatório de Pagamentos</p>
           <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
@@ -163,6 +163,25 @@ export function ImportarPlanilhaView() {
                 {i < arr.length - 1 && <ArrowRight className="w-3 h-3 text-slate-400" />}
               </span>
             ))}
+          </div>
+        </div>
+
+        <div className="border-t border-slate-200" />
+
+        {/* Amazon — Publicidade */}
+        <div className="space-y-2">
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">📣 Amazon — Fatura de Publicidade</p>
+          <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+            {['Menu', 'Pagamentos', 'Histórico de Fatura de Publicidade', 'Selecionar o mês de referência'].map((step, i, arr) => (
+              <span key={step} className="flex items-center gap-1.5">
+                <span className="bg-[#F59E0B] text-white px-2.5 py-1 rounded-lg">{step}</span>
+                {i < arr.length - 1 && <ArrowRight className="w-3 h-3 text-slate-400" />}
+              </span>
+            ))}
+          </div>
+          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-1">
+            <Info className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-700">O histórico de publicidade da Amazon só fecha no dia <strong>02 de cada mês</strong>. Aguarde essa data antes de importar.</p>
           </div>
         </div>
       </div>
