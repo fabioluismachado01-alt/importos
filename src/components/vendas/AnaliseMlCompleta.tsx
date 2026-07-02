@@ -60,8 +60,8 @@ const ABAS: Array<{ id: AbaId; label: string; icon: React.ElementType; descricao
   {
     id: 'faturamento', label: '2. Faturamento ML', icon: DollarSign,
     descricao: 'Publicidade, estornos e tarifas extras', formato: '.xlsx', obrigatorio: true,
-    caminho: ['Faturamento', 'Tarifas e Pagamentos', 'Relatórios', 'Faturamento do ML'],
-    link: 'https://www.mercadolivre.com.br/cobros/relatorios',
+    caminho: ['Menu', 'Faturamento', 'Tarifas e Pagamentos', 'Ir para Detalhes', 'Relatórios', 'Selecionar Mês', 'Download Faturamento ML'],
+    link: 'https://myaccount.mercadolivre.com.br/billing/detail/20260629?fromSummary=true',
   },
   {
     id: 'full', label: '3. Tarifas Full', icon: Package,
