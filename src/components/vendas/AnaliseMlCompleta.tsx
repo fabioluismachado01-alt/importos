@@ -72,8 +72,8 @@ const ABAS: Array<{ id: AbaId; label: string; icon: React.ElementType; descricao
   {
     id: 'pagamentos', label: '4. Pagamentos de Faturas', icon: Tag,
     descricao: 'Histórico de pagamentos e faturas pendentes', formato: '.xlsx', obrigatorio: false,
-    caminho: ['Faturamento', 'Tarifas e Pagamentos', 'Relatórios', 'Pagamentos de faturas'],
-    link: 'https://www.mercadolivre.com.br/cobros/relatorios',
+    caminho: ['Menu', 'Faturamento', 'Tarifas e Pagamentos', 'Ir para Detalhes', 'Relatórios', 'Selecionar Mês', 'Pagamentos de Faturas'],
+    link: 'https://myaccount.mercadolivre.com.br/billing/detail/20260629?fromSummary=true',
   },
 ]
 
