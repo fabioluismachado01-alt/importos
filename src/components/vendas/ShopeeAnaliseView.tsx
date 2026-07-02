@@ -51,10 +51,12 @@ const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
 
 function UploadBox({
   numero, titulo, subtitulo, aceita, estado, cor = 'orange',
+  caminho, link,
   onFile, onRemover, criancas,
 }: {
   numero: number; titulo: string; subtitulo: string
   aceita: string; estado: UploadEstado; cor?: string
+  caminho?: string[]; link?: string
   onFile: (f: File) => void; onRemover: () => void; criancas?: React.ReactNode
 }) {
   const ref = useRef<HTMLInputElement>(null)
@@ -85,6 +87,25 @@ function UploadBox({
             Obrigatório
           </Badge>
         </div>
+
+        {/* Caminho de navegação */}
+        {caminho && (
+          <div className="flex flex-wrap items-center gap-1 mb-2">
+            {caminho.map((passo, i) => (
+              <span key={i} className="flex items-center gap-1">
+                <span className="text-[9px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5">{passo}</span>
+                {i < caminho.length - 1 && <ArrowRight className="w-2.5 h-2.5 text-slate-300" />}
+              </span>
+            ))}
+          </div>
+        )}
+        {link && (
+          <a href={link} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[9px] font-semibold text-orange-500 hover:text-orange-700 hover:underline mb-3">
+            <ArrowRight className="w-2.5 h-2.5" />
+            Abrir na Shopee
+          </a>
+        )}
 
         {estado === 'idle' || estado === 'carregando' ? (
           <div
@@ -289,6 +310,8 @@ export function ShopeeAnaliseView() {
             <UploadBox
               numero={1} titulo="Relatório de Vendas" subtitulo="Pedidos, SKUs, comissões (.xlsx)"
               aceita=".xlsx,.csv" estado={estV} cor="orange"
+              caminho={['Menu', 'Meus Pedidos', 'Todos', 'Exportar', 'Selecionar período', 'Baixar']}
+              link="https://seller.shopee.com.br/portal/sale/order"
               onFile={handleVendas}
               onRemover={() => { setEstV('idle'); setDadosV(null); setErroV('') }}
               criancas={estV === 'ok' && dadosV ? (
