@@ -67,6 +67,12 @@ interface MesSalvo {
 export function VendasAvulsasView({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
+  const hoje = new Date()
+
+  const [mes, setMes] = useState(hoje.getMonth() + 1)
+  const [ano, setAno] = useState(hoje.getFullYear())
+  const [periodoOk, setPeriodoOk] = useState(false)
+
   const [estado, setEstado] = useState<UploadEstado>('idle')
   const [dados, setDados] = useState<AvulsasData | null>(null)
   const [erro, setErro] = useState('')
@@ -95,6 +101,8 @@ export function VendasAvulsasView({ salvas = [] }: { salvas?: MesSalvo[] }) {
     try {
       const fd = new FormData()
       fd.append('file', file)
+      fd.append('mes', String(mes))
+      fd.append('ano', String(ano))
       const res = await fetch('/api/analisar-vendas-avulsas', { method: 'POST', body: fd })
       const json = await res.json()
       if (!res.ok) { setErro(json.error ?? 'Erro ao processar arquivo'); setEstado('erro'); return }
@@ -159,6 +167,42 @@ export function VendasAvulsasView({ salvas = [] }: { salvas?: MesSalvo[] }) {
         </p>
       </div>
 
+      {/* Mês de referência */}
+      <div className={cn('rounded-2xl border-2 p-5 transition-all',
+        periodoOk ? 'border-emerald-400 bg-emerald-50/20' : 'border-blue-400 bg-blue-50/20')}>
+        <div className="flex items-center gap-2 mb-1">
+          <div className={cn('w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-black',
+            periodoOk ? 'bg-emerald-500' : 'bg-blue-500')}>
+            {periodoOk ? '✓' : '1'}
+          </div>
+          <p className="text-sm font-black text-slate-800">Mês de referência</p>
+          <span className="text-xs text-slate-400">período das vendas avulsas</span>
+          {periodoOk && (
+            <button onClick={() => { setPeriodoOk(false); setEstado('idle'); setDados(null) }}
+              className="ml-auto text-slate-400 hover:text-slate-600 text-xs underline">
+              alterar
+            </button>
+          )}
+        </div>
+        {!periodoOk ? (
+          <div className="flex items-center gap-3 mt-3 ml-8">
+            <select value={mes} onChange={e => setMes(Number(e.target.value))}
+              className="h-10 px-3 rounded-xl border-2 border-blue-300 text-sm font-bold bg-white">
+              {MESES.map((n, i) => <option key={i+1} value={i+1}>{n}</option>)}
+            </select>
+            <select value={ano} onChange={e => setAno(Number(e.target.value))}
+              className="h-10 px-3 rounded-xl border-2 border-blue-300 text-sm font-bold bg-white">
+              {[2024,2025,2026,2027].map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+            <Button onClick={() => setPeriodoOk(true)} className="bg-blue-500 hover:bg-blue-600 h-10">
+              Confirmar
+            </Button>
+          </div>
+        ) : (
+          <p className="ml-8 mt-1 text-lg font-black text-emerald-700">{MESES[mes-1]} {ano}</p>
+        )}
+      </div>
+
       {/* Meses salvos */}
       {salvas.length > 0 && (
         <Card className="border-0 shadow-sm">
@@ -192,8 +236,8 @@ export function VendasAvulsasView({ salvas = [] }: { salvas?: MesSalvo[] }) {
         </Card>
       )}
 
-      {/* Download template + Upload */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Download template + Upload — só aparece após confirmar mês */}
+      {periodoOk && <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* Card template */}
         <Card className="border-0 shadow-sm bg-violet-50 border-t-2 border-t-violet-400">
@@ -267,7 +311,7 @@ export function VendasAvulsasView({ salvas = [] }: { salvas?: MesSalvo[] }) {
             )}
           </CardContent>
         </Card>
-      </div>
+      </div>}
 
       {/* Resultados */}
       {dados && (
