@@ -335,6 +335,8 @@ export function ShopeeAnaliseView() {
             <UploadBox
               numero={2} titulo="Relatório de Ads" subtitulo="Histórico de transações de anúncios (.csv)"
               aceita=".csv" estado={estA} cor="red"
+              caminho={['Menu', 'Central de Marketing', 'Shopee Ads', 'Minha Conta', 'Mais', 'Histórico de Transações', 'Selecionar período', 'Exportar Dados']}
+              link="https://seller.shopee.com.br/portal/marketing/pas/wallet?tab=ads_credit_bill_label"
               onFile={handleAds}
               onRemover={() => { setEstA('idle'); setDadosA(null); setErroA('') }}
               criancas={estA === 'ok' && dadosA ? (
