@@ -202,8 +202,10 @@ export function AmazonAnaliseView() {
     setEstG('carregando'); setErroG('')
     const form = new FormData()
     form.append('file', file)
+    form.append('mes', String(mes))
+    form.append('ano', String(ano))
     try {
-      const res = await fetch('/api/analisar-relatorio-geral', { method: 'POST', body: form })
+      const res = await fetch('/api/analisar-relatorio-pedidos', { method: 'POST', body: form })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setDadosG(data); setEstG('ok')
@@ -343,8 +345,8 @@ export function AmazonAnaliseView() {
           <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-start gap-3">
             <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
             <div className="text-xs text-blue-800">
-              <p className="font-black mb-0.5">3 arquivos obrigatórios para DRE completa</p>
-              <p className="text-blue-600">Relatório de Vendas (Receita) · Relatório Geral (FBA/Taxas) · Fatura Ads (Publicidade)</p>
+              <p className="font-black mb-0.5">3 arquivos para DRE completa com análise por produto</p>
+              <p className="text-blue-600">Visualizar Transações (Receita + Tarifas) · Relatório de Pedidos (SKUs + Margem) · Fatura Ads (Publicidade)</p>
             </div>
           </div>
 
@@ -367,22 +369,22 @@ export function AmazonAnaliseView() {
               ) : erroV ? <p className="text-xs text-red-600">{erroV}</p> : null}
             />
 
-            {/* Upload 2 — Relatório Geral */}
+            {/* Upload 2 — Relatório de Pedidos */}
             <UploadBox
-              numero={2} titulo="Relatório Geral" subtitulo="FBA, Armazenagem e Taxas (.csv)"
-              obrigatorio aceita=".csv,.xlsx" estado={estG} cor="blue"
+              numero={2} titulo="Relatório de Pedidos" subtitulo="SKUs, quantidades e margem por produto (.txt)"
+              obrigatorio aceita=".txt,.csv,.tsv" estado={estG} cor="blue"
               onFile={handleGeral}
               onRemover={() => { setEstG('idle'); setDadosG(null); setErroG('') }}
               criancas={estG === 'ok' && dadosG ? (
                 <div className="space-y-1 text-xs">
                   <div className="flex justify-between"><span className="text-slate-400">Arquivo</span><span className="font-semibold truncate max-w-[120px]">{dadosG.arquivo}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">FBA Fulfillment</span><span className="font-bold text-red-500 font-mono">-{formatCurrency(dadosG.fba_fulfillment)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">FBA Armazenagem</span><span className="font-bold text-red-500 font-mono">-{formatCurrency(dadosG.fba_armazenagem)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Mensalidade</span><span className="font-bold text-red-500 font-mono">-{formatCurrency(dadosG.mensalidade)}</span></div>
-                  {dadosG.reembolsos_bruto > 0 && <div className="flex justify-between"><span className="text-slate-400">Reembolsos</span><span className="font-bold text-amber-600 font-mono">{formatCurrency(dadosG.reembolsos_bruto)}</span></div>}
-                  {dadosG.publicidade_interno > 0 && (
-                    <div className="flex justify-between opacity-50"><span className="text-slate-400 line-through">Pub. no relatório</span><span className="font-mono">{formatCurrency(dadosG.publicidade_interno)}</span></div>
-                  )}
+                  {(() => { const d = dadosG as unknown as {pedidos?:number;unidades?:number;cancelados?:number;receita_total?:number;custo_total?:number}; return (<>
+                    {d.pedidos != null && <div className="flex justify-between"><span className="text-slate-400">Pedidos</span><span className="font-bold">{d.pedidos} · {d.unidades} un.</span></div>}
+                    {d.cancelados != null && d.cancelados > 0 && <div className="flex justify-between"><span className="text-slate-400">Cancelados</span><span className="font-bold text-amber-600">{d.cancelados}</span></div>}
+                    {dadosG.skus.length > 0 && <div className="flex justify-between"><span className="text-slate-400">SKUs</span><span className="font-bold">{dadosG.skus.map(s => s.sku).join(', ')}</span></div>}
+                    {d.receita_total != null && <div className="flex justify-between"><span className="text-slate-400">Receita</span><span className="font-black text-emerald-600 font-mono">{formatCurrency(d.receita_total)}</span></div>}
+                    {d.custo_total != null && <div className="flex justify-between"><span className="text-slate-400">CMV</span><span className="font-bold text-red-500 font-mono">-{formatCurrency(d.custo_total)}</span></div>}
+                  </>)})()}
                 </div>
               ) : erroG ? <p className="text-xs text-red-600">{erroG}</p> : null}
             />
@@ -437,8 +439,8 @@ export function AmazonAnaliseView() {
                   <p className="text-xs font-black text-white uppercase tracking-widest">DRE — {MESES[mes-1]} {ano}</p>
                   {!dre_completa && (
                     <span className="text-[9px] text-slate-400 font-medium">
-                      {!dadosG && !dadosP ? '⬛ Aguardando Relatório Geral + Fatura'
-                        : !dadosG ? '⬛ Aguardando Relatório Geral'
+                      {!dadosG && !dadosP ? '⬛ Aguardando Relatório de Pedidos + Fatura'
+                        : !dadosG ? '⬛ Aguardando Relatório de Pedidos'
                         : '⬛ Aguardando Fatura de Publicidade'}
                     </span>
                   )}
@@ -656,7 +658,7 @@ export function AmazonAnaliseView() {
               )}
               {!dre_completa && !salvando && (
                 <p className="text-center text-[10px] text-slate-400">
-                  {estG !== 'ok' ? '⚠ Sem Relatório Geral: FBA, armazenagem e mensalidade não incluídos.' : ''}
+                  {estG !== 'ok' ? '⚠ Sem Relatório de Pedidos: análise por SKU e CMV não incluídos.' : ''}
                   {estP !== 'ok' && pub === 0 ? ' ⚠ Sem Fatura Ads: publicidade não incluída.' : ''}
                 </p>
               )}

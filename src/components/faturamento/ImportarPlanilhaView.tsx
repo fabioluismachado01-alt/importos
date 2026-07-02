@@ -153,11 +153,26 @@ export function ImportarPlanilhaView() {
 
         <div className="border-t border-slate-200" />
 
-        {/* Amazon — Pagamentos */}
+        {/* Amazon — Visualizar Transações */}
         <div className="space-y-2">
-          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">📦 Amazon — Relatório de Pagamentos</p>
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">📦 Amazon — Visualizar Transações (Receita + Tarifas)</p>
           <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
-            {['Menu', 'Pagamentos', 'Repositório de Relatórios', 'Selecionar o mês de referência'].map((step, i, arr) => (
+            {['Menu', 'Pagamentos', 'Visualizar transações', 'Selecionar o mês', 'Download CSV'].map((step, i, arr) => (
+              <span key={step} className="flex items-center gap-1.5">
+                <span className="bg-[#F59E0B] text-white px-2.5 py-1 rounded-lg">{step}</span>
+                {i < arr.length - 1 && <ArrowRight className="w-3 h-3 text-slate-400" />}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t border-slate-200" />
+
+        {/* Amazon — Relatório de Pedidos */}
+        <div className="space-y-2">
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">📋 Amazon — Relatório de Pedidos (SKUs + Margem)</p>
+          <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+            {['Menu', 'Pedidos', 'Relatório de Pedidos', 'Todos os pedidos', 'Selecionar o período', 'Download'].map((step, i, arr) => (
               <span key={step} className="flex items-center gap-1.5">
                 <span className="bg-[#F59E0B] text-white px-2.5 py-1 rounded-lg">{step}</span>
                 {i < arr.length - 1 && <ArrowRight className="w-3 h-3 text-slate-400" />}
