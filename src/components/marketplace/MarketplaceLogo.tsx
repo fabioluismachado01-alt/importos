@@ -24,6 +24,7 @@ const BRANDS: Record<string, MarketplaceBrand> = {
   MAGALU:        { nome: 'Magalu',        cor: '#0086FF', iconCor: '#FFFFFF', icon: Heart },
   TIKTOK:        { nome: 'TikTok Shop',   cor: '#010101', iconCor: '#FFFFFF', icon: Music2 },
   CASAS_BAHIA:   { nome: 'Casas Bahia',   cor: '#004A93', iconCor: '#FFFFFF', icon: Home },
+  AVULSAS:       { nome: 'Vendas Avulsas', cor: '#7C3AED', iconCor: '#FFFFFF', icon: Store },
   OUTRO:         { nome: 'Outro',         cor: '#64748B', iconCor: '#FFFFFF', icon: Store },
 }
 

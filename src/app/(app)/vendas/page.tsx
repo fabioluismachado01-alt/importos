@@ -56,6 +56,16 @@ const MARKETPLACES = [
     descricao: 'Relatório de Vendas (.csv) + Ads manual',
     recursos: ['Tecnologia, Intermediação e MDR', 'SKU -M normalizado automático', 'CMV do catálogo', 'Campo Magalu Ads manual'],
   },
+  {
+    id: 'avulsas',
+    nome: 'Vendas Avulsas',
+    cor: '#7C3AED',
+    bg: '#F5F3FF',
+    status: 'ativo' as const,
+    href: '/vendas/avulsas',
+    descricao: 'Template Excel (.xlsx) — qualquer canal',
+    recursos: ['Casas Bahia, OLX, feiras, WhatsApp', 'Template para download', 'Agrupado por canal e SKU', 'CMV do catálogo'],
+  },
 ]
 
 export default function VendasPage() {
