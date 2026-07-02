@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import path from 'path'
-import { pathToFileURL } from 'url'
 
 // Converte valor monetário: aceita "1.234,56" (BR) ou "1234.56" (EN)
 function parseBRL(str: string): number {
@@ -14,22 +12,12 @@ function parseBRL(str: string): number {
   return isNaN(n) ? 0 : n
 }
 
-// Extrai texto do PDF usando pdfjs-dist
+// Extrai texto do PDF usando pdf-parse (funciona em Node.js serverless)
 async function extrairTextoPDF(buffer: Buffer): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pdfjsLib: any = await import('pdfjs-dist/legacy/build/pdf.mjs')
-  const workerPath = path.resolve(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs')
-  pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href
-
-  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise
-  let texto = ''
-  for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i)
-    const content = await page.getTextContent()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    texto += content.items.map((item: any) => item.str ?? '').join(' ') + '\n'
-  }
-  return texto
+  const pdfParse = (await import('pdf-parse')).default as any
+  const data = await pdfParse(buffer)
+  return data.text ?? ''
 }
 
 // Extrai todos os valores monetários do texto (formato X,XX BRL ou R$ X,XX)
