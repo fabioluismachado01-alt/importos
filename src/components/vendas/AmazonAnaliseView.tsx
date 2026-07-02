@@ -416,6 +416,7 @@ export function AmazonAnaliseView() {
               numero={3} titulo="Fatura de Publicidade" subtitulo="Amazon Advertising — fatura mensal (.pdf)"
               obrigatorio aceita=".pdf" estado={estP} cor="purple"
               caminho={['Menu', 'Pagamentos', 'Histórico de Fatura de Publicidade', 'Selecionar mês', 'Download PDF']}
+              link="https://advertising.amazon.com.br/ads-bg/billing/history?ref_=xx_ads_ttab_dash&merchantId=A1XQ7TDW943HUF&locale=pt_BR&ref=RedirectedFromSellerCentralByRoutingService&invoiceTab=%2522paid%2522"
               onFile={handlePdf}
               onRemover={() => { setEstP('idle'); setDadosP(null); setPubManual(''); setErroP('') }}
               criancas={estP === 'ok' ? (
