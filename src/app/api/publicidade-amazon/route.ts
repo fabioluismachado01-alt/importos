@@ -1,4 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
+import path from 'path'
+import { pathToFileURL } from 'url'
+
+// Polyfill DOMMatrix para pdfjs-dist no ambiente Node.js serverless
+if (typeof globalThis.DOMMatrix === 'undefined') {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(globalThis as any).DOMMatrix = class DOMMatrix {
+    a=1;b=0;c=0;d=1;e=0;f=0
+    constructor(_init?: string | number[]) {}
+    multiply() { return new (globalThis as any).DOMMatrix() }
+    scale()    { return new (globalThis as any).DOMMatrix() }
+    translate(){ return new (globalThis as any).DOMMatrix() }
+    rotate()   { return new (globalThis as any).DOMMatrix() }
+    inverse()  { return new (globalThis as any).DOMMatrix() }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    transformPoint(p: any) { return p ?? { x: 0, y: 0 } }
+  }
+}
 
 // Converte valor monetário: aceita "1.234,56" (BR) ou "1234.56" (EN)
 function parseBRL(str: string): number {
@@ -12,13 +30,22 @@ function parseBRL(str: string): number {
   return isNaN(n) ? 0 : n
 }
 
-// Extrai texto do PDF usando pdf-parse (funciona em Node.js serverless)
+// Extrai texto do PDF usando pdfjs-dist com polyfill DOMMatrix
 async function extrairTextoPDF(buffer: Buffer): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pdfParseModule = await import('pdf-parse') as any
-  const pdfParse = pdfParseModule.default ?? pdfParseModule
-  const data = await pdfParse(buffer)
-  return data.text ?? ''
+  const pdfjsLib: any = await import('pdfjs-dist/legacy/build/pdf.mjs')
+  const workerPath = path.resolve(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs')
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href
+
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise
+  let texto = ''
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i)
+    const content = await page.getTextContent()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    texto += content.items.map((item: any) => item.str ?? '').join(' ') + '\n'
+  }
+  return texto
 }
 
 // Extrai todos os valores monetários do texto (formato X,XX BRL ou R$ X,XX)
