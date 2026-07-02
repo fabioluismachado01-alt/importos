@@ -352,8 +352,8 @@ export function TiktokAnaliseView() {
 
             {/* Upload 1 — Demonstrativo */}
             <UploadBox
-              numero={1} titulo="Demonstrativo TikTok" subtitulo="Relatório financeiro completo (.xlsx)"
-              aceita=".xlsx" estado={estD} cor="slate"
+              numero={1} titulo="Demonstrativo TikTok" subtitulo="Relatório financeiro completo (.xls ou .xlsx)"
+              aceita=".xls,.xlsx" estado={estD} cor="slate"
               caminho={['Menu', 'Finanças', 'Visão Geral', 'Demonstrativo', 'Exportar', 'Selecionar Período', 'Baixar']}
               link="https://seller-br.tiktok.com/finance/bills?subTab=bills&tab=statements"
               onFile={handleDemonstrativo}
