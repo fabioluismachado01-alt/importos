@@ -46,6 +46,18 @@ interface AfiliiadosData {
   produtos: string[]
 }
 
+interface SkuPedido {
+  sku: string; nome_produto: string; nome_catalogo: string; variacao: string
+  unidades: number; receita: number; custo_unit: number; custo_total: number
+  sem_custo: boolean; lucro_bruto: number; margem_perc: number; ticket_medio: number
+}
+
+interface PedidosData {
+  arquivo: string
+  pedidos_validos: number; pedidos_cancelados: number; pedidos_devolvidos: number
+  skus: SkuPedido[]
+}
+
 type UploadEstado = 'idle' | 'carregando' | 'ok' | 'erro'
 
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
@@ -202,6 +214,10 @@ export function TiktokAnaliseView() {
   const [dadosA, setDadosA] = useState<AfiliiadosData | null>(null)
   const [erroA, setErroA] = useState('')
 
+  const [estP, setEstP] = useState<UploadEstado>('idle')
+  const [dadosP, setDadosP] = useState<PedidosData | null>(null)
+  const [erroP, setErroP] = useState('')
+
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
   const [erroSalvar, setErroSalvar] = useState('')
@@ -232,6 +248,18 @@ export function TiktokAnaliseView() {
     } catch (e) { setErroA(String(e)); setEstA('erro') }
   }
 
+  async function handlePedidos(file: File) {
+    setEstP('carregando'); setErroP('')
+    const form = new FormData()
+    form.append('file', file)
+    try {
+      const res = await fetch('/api/pedidos-tiktok', { method: 'POST', body: form })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setDadosP(data); setEstP('ok')
+    } catch (e) { setErroP(String(e)); setEstP('erro') }
+  }
+
   async function handleSalvar() {
     if (!dadosD) return
     const aliq = parseFloat(aliquota.replace(',', '.')) / 100 || 0.08
@@ -258,7 +286,10 @@ export function TiktokAnaliseView() {
   const rec       = dadosD?.receita_bruta ?? 0
   const taxas     = dadosD?.taxas_plataforma_servico ?? 0
   const afiliados = dadosD?.com_afiliados ?? 0
-  const cmv       = dadosD?.cmv_estimado ?? 0
+  // CMV: usa pedidos (exato) quando disponível, senão heurística do demonstrativo
+  const cmv = dadosP
+    ? dadosP.skus.reduce((s, x) => s + x.custo_total, 0)
+    : (dadosD?.cmv_estimado ?? 0)
   const das       = rec * aliq
 
   const lucro_bruto = rec - taxas - afiliados
@@ -355,11 +386,20 @@ export function TiktokAnaliseView() {
               ) : erroA ? <p className="text-xs text-red-600">{erroA}</p> : null}
             />
 
-            {/* Upload 3 — TikTok Ads (em breve) */}
+            {/* Upload 3 — Relatório de Pedidos */}
             <UploadBox
-              numero="3" titulo="TikTok Ads" subtitulo="Faturas e extratos de campanhas pagas (.csv)"
-              aceita=".csv" estado="idle" cor="purple" disabled
-              onFile={() => {}} onRemover={() => {}}
+              numero={3} titulo="Relatório de Pedidos" subtitulo="Todos os pedidos do período (.xlsx)"
+              aceita=".xlsx" estado={estP} cor="purple" obrigatorio={false}
+              onFile={handlePedidos}
+              onRemover={() => { setEstP('idle'); setDadosP(null); setErroP('') }}
+              criancas={estP === 'ok' && dadosP ? (
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between"><span className="text-slate-400">Arquivo</span><span className="font-semibold truncate max-w-[130px]">{dadosP.arquivo}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Pedidos válidos</span><span className="font-bold text-emerald-600">{dadosP.pedidos_validos}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Cancelados</span><span className="font-bold text-slate-400">{dadosP.pedidos_cancelados}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">SKUs identificados</span><span className="font-bold text-purple-600">{dadosP.skus.length} SKUs — CMV exato</span></div>
+                </div>
+              ) : erroP ? <p className="text-xs text-red-600">{erroP}</p> : null}
             />
           </div>
 
@@ -463,13 +503,17 @@ export function TiktokAnaliseView() {
                 </Card>
               )}
 
-              {/* SKUs */}
-              {dadosD.skus.length > 0 && (
+              {/* SKUs — usa Relatório de Pedidos (exato) ou Demonstrativo (heurística) */}
+              {(dadosP ? dadosP.skus.length > 0 : dadosD.skus.length > 0) && (
                 <Card className="border-0 shadow-sm overflow-hidden">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-xs font-black text-slate-500 uppercase tracking-wide flex items-center gap-2">
                       <Package className="w-4 h-4" /> Vendas por SKU
-                      {dadosD.detalhes_incompleto && (
+                      {dadosP ? (
+                        <Badge className="text-[8px] bg-purple-100 text-purple-700 ml-1">
+                          SKUs confirmados — Relatório de Pedidos
+                        </Badge>
+                      ) : dadosD.detalhes_incompleto && (
                         <Badge className="text-[8px] bg-amber-100 text-amber-700 ml-1">
                           {dadosD.detalhes_cobertos} confirmados + {dadosD.pedidos_count - dadosD.detalhes_cobertos} por heurística
                         </Badge>
@@ -481,25 +525,24 @@ export function TiktokAnaliseView() {
                       <table className="w-full text-xs" style={{ minWidth: 620 }}>
                         <thead>
                           <tr className="bg-slate-900 text-white">
-                            {['SKU / Produto','Un.','Receita','Taxas','CMV','Margem'].map(h => (
+                            {['SKU / Produto','Un.','Receita','CMV','Margem'].map(h => (
                               <th key={h} className="px-3 py-2.5 text-[9px] font-black uppercase text-right first:text-left">{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                          {dadosD.skus.map((s, i) => (
+                          {(dadosP ? dadosP.skus : dadosD.skus).map((s, i) => (
                             <tr key={s.sku} className={cn('hover:bg-slate-50', i%2===1 && 'bg-slate-50/30')}>
                               <td className="px-3 py-2.5">
                                 <p className="font-black font-mono text-slate-800 text-[11px]">{s.sku}</p>
-                                <p className="text-[9px] text-slate-500 truncate max-w-[180px]">{s.nome_catalogo}</p>
-                                {s.fonte === 'heuristica' && (
+                                <p className="text-[9px] text-slate-500 truncate max-w-[180px]">{s.nome_catalogo || ('nome_produto' in s ? (s as SkuPedido).nome_produto : '')}</p>
+                                {'fonte' in s && s.fonte === 'heuristica' && (
                                   <Badge className="text-[8px] bg-slate-100 text-slate-500 h-3.5 px-1 mt-0.5">heurística de preço</Badge>
                                 )}
                                 {s.sem_custo && <Badge className="text-[8px] bg-amber-100 text-amber-700 h-3.5 px-1">Sem custo</Badge>}
                               </td>
                               <td className="px-3 py-2.5 text-right font-mono">{s.unidades}</td>
                               <td className="px-3 py-2.5 text-right font-mono text-emerald-600">{formatCurrency(s.receita)}</td>
-                              <td className="px-3 py-2.5 text-right font-mono text-red-500">-{formatCurrency(s.taxas)}</td>
                               <td className="px-3 py-2.5 text-right font-mono text-slate-500">
                                 {s.sem_custo ? '—' : formatCurrency(s.custo_total)}
                               </td>
@@ -514,10 +557,17 @@ export function TiktokAnaliseView() {
                         </tbody>
                       </table>
                     </div>
-                    {dadosD.detalhes_incompleto && (
+                    {!dadosP && dadosD.detalhes_incompleto && (
                       <div className="px-4 py-2.5 bg-amber-50 border-t border-amber-100">
                         <p className="text-[10px] text-amber-700">
-                          ℹ {dadosD.detalhes_cobertos} liquidações com SKU confirmado pelo TikTok · {dadosD.pedidos_count - dadosD.detalhes_cobertos} identificadas por heurística de preço (totais financeiros são exatos — vêm da aba Relatórios)
+                          ℹ {dadosD.detalhes_cobertos} liquidações com SKU confirmado · {dadosD.pedidos_count - dadosD.detalhes_cobertos} por heurística — suba o Relatório de Pedidos (Box 3) para dados exatos
+                        </p>
+                      </div>
+                    )}
+                    {dadosP && (
+                      <div className="px-4 py-2.5 bg-purple-50 border-t border-purple-100">
+                        <p className="text-[10px] text-purple-700">
+                          ✓ {dadosP.pedidos_validos} pedidos · {dadosP.pedidos_cancelados} cancelados — SKUs e CMV confirmados pelo Relatório de Pedidos
                         </p>
                       </div>
                     )}
