@@ -3,14 +3,15 @@
 import React, { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  CheckCircle2, Loader2, AlertTriangle, ArrowRight, Download,
-  Package, ShoppingBag, Upload,
+  CheckCircle2, Loader2, AlertTriangle, Download,
+  Package, ShoppingBag, Upload, Trash2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn, formatCurrency } from '@/lib/utils'
 import { salvarAnaliseAvulsas } from '@/actions/salvar-analise-avulsas'
+import { excluirAnaliseAvulsas } from '@/actions/excluir-analise-avulsas'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -57,9 +58,13 @@ function DRELinha({ label, valor, cor, indent = false, destaque = false }: {
   )
 }
 
+interface MesSalvo {
+  ano: number; mes: number; label: string; receita: number
+}
+
 // ─── View Principal ─────────────────────────────────────────────────────────────
 
-export function VendasAvulsasView() {
+export function VendasAvulsasView({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [estado, setEstado] = useState<UploadEstado>('idle')
@@ -67,6 +72,7 @@ export function VendasAvulsasView() {
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [excluindo, setExcluindo] = useState<string | null>(null)
 
   const [baixandoTemplate, setBaixandoTemplate] = useState(false)
 
@@ -108,6 +114,19 @@ export function VendasAvulsasView() {
     const f = e.dataTransfer.files[0]; if (f) processarArquivo(f)
   }
 
+  async function handleExcluir(ano: number, mes: number, label: string) {
+    if (!confirm(`Excluir todas as vendas avulsas de ${label}?`)) return
+    const key = `${ano}-${mes}`
+    setExcluindo(key)
+    try {
+      const result = await excluirAnaliseAvulsas(ano, mes)
+      if (result.ok) router.refresh()
+      else alert(result.error)
+    } finally {
+      setExcluindo(null)
+    }
+  }
+
   async function handleSalvar() {
     if (!dados) return
     setSalvando(true)
@@ -139,6 +158,39 @@ export function VendasAvulsasView() {
           Registre vendas em canais sem integração — Casas Bahia, OLX, feiras, venda direta e outros
         </p>
       </div>
+
+      {/* Meses salvos */}
+      {salvas.length > 0 && (
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-black text-slate-700">Análises salvas</CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-4">
+            <div className="flex flex-wrap gap-2">
+              {salvas.map(s => {
+                const key = `${s.ano}-${s.mes}`
+                const loading = excluindo === key
+                return (
+                  <div key={key} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                    <div>
+                      <p className="text-xs font-bold text-slate-700">{s.label}</p>
+                      <p className="text-[10px] text-slate-400">{formatCurrency(s.receita)} receita</p>
+                    </div>
+                    <button
+                      onClick={() => handleExcluir(s.ano, s.mes, s.label)}
+                      disabled={loading}
+                      className="ml-2 p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors disabled:opacity-50"
+                      title="Excluir"
+                    >
+                      {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Download template + Upload */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
