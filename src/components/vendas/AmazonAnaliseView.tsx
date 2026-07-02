@@ -394,6 +394,7 @@ export function AmazonAnaliseView() {
               numero={2} titulo="Relatório de Pedidos" subtitulo="SKUs, quantidades e margem por produto (.txt)"
               obrigatorio aceita=".txt,.csv,.tsv" estado={estG} cor="blue"
               caminho={['Menu', 'Pedidos', 'Relatório de Pedidos', 'Todos os pedidos', 'Selecionar período', 'Download']}
+              link="https://sellercentral.amazon.com.br/order-reports-and-feeds/reports/allOrders#"
               onFile={handleGeral}
               onRemover={() => { setEstG('idle'); setDadosG(null); setErroG('') }}
               criancas={estG === 'ok' && dadosG ? (
