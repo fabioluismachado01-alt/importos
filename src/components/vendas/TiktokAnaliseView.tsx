@@ -210,10 +210,6 @@ export function TiktokAnaliseView() {
   const [dadosD, setDadosD] = useState<DemonstrativoData | null>(null)
   const [erroD, setErroD] = useState('')
 
-  const [estA, setEstA] = useState<UploadEstado>('idle')
-  const [dadosA, setDadosA] = useState<AfiliiadosData | null>(null)
-  const [erroA, setErroA] = useState('')
-
   const [estP, setEstP] = useState<UploadEstado>('idle')
   const [dadosP, setDadosP] = useState<PedidosData | null>(null)
   const [erroP, setErroP] = useState('')
@@ -234,18 +230,6 @@ export function TiktokAnaliseView() {
       if (!res.ok) throw new Error(data.error)
       setDadosD(data); setEstD('ok')
     } catch (e) { setErroD(String(e)); setEstD('erro') }
-  }
-
-  async function handleAfiliados(file: File) {
-    setEstA('carregando'); setErroA('')
-    const form = new FormData()
-    form.append('file', file)
-    try {
-      const res = await fetch('/api/afiliados-tiktok', { method: 'POST', body: form })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-      setDadosA(data); setEstA('ok')
-    } catch (e) { setErroA(String(e)); setEstA('erro') }
   }
 
   async function handlePedidos(file: File) {
@@ -347,8 +331,8 @@ export function TiktokAnaliseView() {
             </div>
           </div>
 
-          {/* 3 Uploads */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* 2 Uploads */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
             {/* Upload 1 — Demonstrativo */}
             <UploadBox
@@ -370,25 +354,9 @@ export function TiktokAnaliseView() {
               ) : erroD ? <p className="text-xs text-red-600">{erroD}</p> : null}
             />
 
-            {/* Upload 2 — Afiliados */}
+            {/* Upload 2 — Relatório de Pedidos */}
             <UploadBox
-              numero={2} titulo="Pedidos de Afiliados" subtitulo="Comissões de criadores (.csv)"
-              aceita=".csv" estado={estA} cor="pink"
-              onFile={handleAfiliados}
-              onRemover={() => { setEstA('idle'); setDadosA(null); setErroA('') }}
-              criancas={estA === 'ok' && dadosA ? (
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between"><span className="text-slate-400">Arquivo</span><span className="font-semibold truncate max-w-[130px]">{dadosA.arquivo}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Pedidos</span><span className="font-bold">{dadosA.total_pedidos} ({dadosA.pedidos_liquidados} liquidados)</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Com. real paga</span><span className="font-black text-red-500 font-mono">-{formatCurrency(dadosA.com_real_total)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Com. estimada</span><span className="font-bold text-amber-600 font-mono">~{formatCurrency(dadosA.com_est_total)}</span></div>
-                </div>
-              ) : erroA ? <p className="text-xs text-red-600">{erroA}</p> : null}
-            />
-
-            {/* Upload 3 — Relatório de Pedidos */}
-            <UploadBox
-              numero={3} titulo="Relatório de Pedidos" subtitulo="Todos os pedidos do período (.csv ou .xlsx)"
+              numero={2} titulo="Relatório de Pedidos" subtitulo="Todos os pedidos do período (.csv ou .xlsx)"
               aceita=".csv,.xlsx" estado={estP} cor="purple" obrigatorio={false}
               caminho={['Pedidos', 'Gerenciar Pedidos', 'Filtro (período)', 'Exportar CSV']}
               link="https://seller-br.tiktok.com/order?selected_sort=6&tab=all"
@@ -472,38 +440,6 @@ export function TiktokAnaliseView() {
                     sub={rec > 0 ? `${((lucro_liq / rec) * 100).toFixed(1)}% margem` : undefined} />
                 </div>
               </div>
-
-              {/* Afiliados — criadores */}
-              {dadosA && dadosA.criadores.length > 0 && (
-                <Card className="border-0 shadow-sm overflow-hidden">
-                  <div className="bg-slate-800 px-5 py-3 flex items-center gap-2">
-                    <Users className="w-3.5 h-3.5 text-white" />
-                    <p className="text-xs font-black text-white uppercase tracking-widest">Top Criadores</p>
-                    <span className="text-[10px] text-slate-400 ml-auto">fonte: Pedidos de Afiliados</span>
-                  </div>
-                  <CardContent className="p-0">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="bg-slate-50">
-                          {['Criador','Pedidos','Com. Real','Com. Estimada'].map(h => (
-                            <th key={h} className="px-3 py-2 text-[9px] font-black uppercase text-right first:text-left text-slate-500">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50">
-                        {dadosA.criadores.map((c, i) => (
-                          <tr key={i} className="hover:bg-slate-50">
-                            <td className="px-3 py-2 font-mono text-slate-700">{c.nome}</td>
-                            <td className="px-3 py-2 text-right">{c.pedidos}</td>
-                            <td className="px-3 py-2 text-right font-mono text-red-500">{c.com_real > 0 ? `-${formatCurrency(c.com_real)}` : '—'}</td>
-                            <td className="px-3 py-2 text-right font-mono text-amber-600">{c.com_est > 0 ? `~${formatCurrency(c.com_est)}` : '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </CardContent>
-                </Card>
-              )}
 
               {/* SKUs — usa Relatório de Pedidos (exato) ou Demonstrativo (heurística) */}
               {(dadosP ? dadosP.skus.length > 0 : dadosD.skus.length > 0) && (
