@@ -58,11 +58,11 @@ const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
 // ─── Componente de Upload ─────────────────────────────────────────────────────
 
 function UploadBox({
-  numero, titulo, subtitulo, obrigatorio, aceita, estado, caminho,
+  numero, titulo, subtitulo, obrigatorio, aceita, estado, caminho, link,
   onFile, onRemover, criancas, cor = 'orange',
 }: {
   numero: number; titulo: string; subtitulo: string; obrigatorio: boolean
-  aceita: string; estado: UploadEstado; caminho: string[]
+  aceita: string; estado: UploadEstado; caminho: string[]; link?: string
   onFile: (f: File) => void
   onRemover: () => void; criancas?: React.ReactNode; cor?: string
 }) {
@@ -99,7 +99,7 @@ function UploadBox({
         </div>
 
         {/* Caminho de onde baixar */}
-        <div className="flex flex-wrap items-center gap-1 mb-3">
+        <div className="flex flex-wrap items-center gap-1 mb-1.5">
           {caminho.map((step, i) => (
             <span key={i} className="flex items-center gap-1">
               <span className="bg-slate-100 text-slate-600 text-[9px] font-semibold px-1.5 py-0.5 rounded">{step}</span>
@@ -107,6 +107,13 @@ function UploadBox({
             </span>
           ))}
         </div>
+        {link && (
+          <a href={link} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[9px] font-semibold text-blue-500 hover:text-blue-700 hover:underline mb-2.5">
+            <ArrowRight className="w-2.5 h-2.5" />
+            Abrir no Seller Central
+          </a>
+        )}
 
         {/* Área de upload ou conteúdo */}
         {estado === 'idle' || estado === 'carregando' ? (
@@ -369,6 +376,7 @@ export function AmazonAnaliseView() {
               numero={1} titulo="Visualizar Transações" subtitulo="Receita, Tarifas e Reembolsos (.csv)"
               obrigatorio aceita=".csv,.xlsx" estado={estV} cor="orange"
               caminho={['Menu', 'Pagamentos', 'Visualizar transações', 'Selecionar mês', 'Download CSV']}
+              link="https://sellercentral.amazon.com.br/payments/event/view?resultsPerPage=10&pageNumber=1"
               onFile={handleVendas}
               onRemover={() => { setEstV('idle'); setDadosV(null); setErroV('') }}
               criancas={estV === 'ok' && dadosV ? (
