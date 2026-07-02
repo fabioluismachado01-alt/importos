@@ -7,11 +7,12 @@ import { recalcularMes } from '@/actions/finance'
 
 // Mapeamento: marketplace → padrões de descrição reconhecidos
 const PADROES: Record<string, string[]> = {
-  AMAZON:  ['[Amazon]', 'Amazon Import'],
-  ML:      ['[ML]',     'ML Import'],
-  SHOPEE:  ['[Shopee]', 'Shopee Import'],
-  TIKTOK:  ['[TikTok]', 'TikTok Import'],
-  MAGALU:  ['[Magalu]', 'Magalu Import'],
+  AMAZON:   ['[Amazon]', 'Amazon Import'],
+  ML:       ['[ML]',     'ML Import'],
+  SHOPEE:   ['[Shopee]', 'Shopee Import'],
+  TIKTOK:   ['[TikTok]', 'TikTok Import'],
+  MAGALU:   ['[Magalu]', 'Magalu Import'],
+  AVULSAS:  ['[Avulsas]'],
 }
 
 export type MarketplaceKey = keyof typeof PADROES
@@ -37,7 +38,7 @@ export async function getStatusImportacoes(ano: number, mes: number): Promise<St
 
   const LABELS: Record<MarketplaceKey, string> = {
     AMAZON: 'Amazon', ML: 'Mercado Livre', SHOPEE: 'Shopee',
-    TIKTOK: 'TikTok Shop', MAGALU: 'Magalu',
+    TIKTOK: 'TikTok Shop', MAGALU: 'Magalu', AVULSAS: 'Vendas Avulsas',
   }
 
   return (Object.keys(PADROES) as MarketplaceKey[]).map(mkt => {
