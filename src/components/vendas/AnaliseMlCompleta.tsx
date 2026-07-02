@@ -54,8 +54,8 @@ const ABAS: Array<{ id: AbaId; label: string; icon: React.ElementType; descricao
   {
     id: 'vendas', label: '1. Relatório de Vendas', icon: ShoppingCart,
     descricao: 'Receita por SKU, tarifas e frete', formato: '.xlsx', obrigatorio: true,
-    caminho: ['Vendas', 'Data Personalizado', 'Intervalo do mês', 'Baixar Excel'],
-    link: 'https://www.mercadolivre.com.br/vendas/relatorios',
+    caminho: ['Menu', 'Vendas', 'Selecionar o período', 'Baixar arquivo Excel de Vendas'],
+    link: 'https://www.mercadolivre.com.br/vendas/omni/lista?filters=WITH_DATE_CLOSED_6M_OLD&sort=DATE_CLOSED_DESC',
   },
   {
     id: 'faturamento', label: '2. Faturamento ML', icon: DollarSign,
