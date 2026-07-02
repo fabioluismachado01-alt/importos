@@ -2,39 +2,24 @@
  * Parser do Relatório de Vendas Shopee (.xlsx)
  * Aba: "orders" — Row 0 = header, Row 1+ = dados
  *
- * Colunas relevantes:
- *  0  ID do pedido          1  Status do pedido
- *  3  Cancelar Motivo        4  Status da Devolução / Reembolso
- * 10  Data de criação       12  Nº de referência do SKU principal
- * 13  Nome do Produto       14  Número de referência SKU
- * 15  Nome da variação      17  Preço acordado
- * 18  Quantidade            19  Returned quantity
- * 20  Subtotal do produto   33  Ajuste por pagamento via PIX
- * 39  Valor Total           40  Taxa de envio paga pelo comprador
- * 41  Desconto de Frete Aprox  44  Taxa de comissão bruta
- * 45  Taxa de comissão líquida 46  Taxa de serviço bruta
- * 47  Taxa de serviço líquida  48  Total global
- * 49  Valor estimado do frete
+ * Detecta colunas dinamicamente pelo nome do cabeçalho para resistir
+ * a mudanças de formato (ex: nova coluna "Tipo de pedido" em 2026).
  *
  * Regra de receita oficial:
- * - Usar Valor Total (col 39) para DRE — exclui automaticamente cancelados e devolvidos (val=0)
+ * - Usar "Valor Total" para DRE — exclui automaticamente cancelados (val=0)
  * - Status válidos: Concluído, Entregue, Enviado, "O comprador pode pedir..."
- * - Devoluções: col 4 preenchida OU col 19 > 0
+ * - Cancelados: "Cancelar Motivo" preenchido
+ * - Devoluções: "Status da Devolução" preenchido OU Returned quantity > 0
  */
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/auth'
 
-const COL = {
-  ID: 0, STATUS: 1, MOTIVO: 3, STATUS_DEV: 4,
-  DATA: 10, SKU_PRINCIPAL: 12, NOME_PRODUTO: 13,
-  SKU: 14, VARIACAO: 15, PRECO_ACORDADO: 17,
-  QTD: 18, RETURNED_QTY: 19, SUBTOTAL: 20,
-  AJUSTE_PIX: 33, VALOR_TOTAL: 39, FRETE_COMPRADOR: 40,
-  DESC_FRETE: 41, COM_BRUTA: 44, COM_LIQUIDA: 45,
-  SERV_BRUTA: 46, SERV_LIQUIDA: 47, TOTAL_GLOBAL: 48,
-  FRETE_ESTIMADO: 49,
+// Detecta índice de coluna pelo nome (busca substring, case-insensitive)
+function colIdx(header: string[], nome: string): number {
+  const i = header.findIndex(h => h.toLowerCase().includes(nome.toLowerCase()))
+  return i >= 0 ? i : -1
 }
 
 const STATUS_VALIDOS = ['Concluído', 'Entregue', 'Enviado', 'O comprador pode pedir']
@@ -63,10 +48,36 @@ export async function POST(req: NextRequest) {
 
     if (rows.length < 3) return NextResponse.json({ error: 'Arquivo vazio ou formato incorreto' }, { status: 400 })
 
-    // Valida que é relatório Shopee
-    const header = rows[0].map(c => String(c).toLowerCase())
-    if (!header.some(h => h.includes('status do pedido')) || !header.some(h => h.includes('taxa de comissão'))) {
+    // Detecta colunas dinamicamente pelo cabeçalho
+    const headerRaw = rows[0].map(c => String(c))
+    if (!headerRaw.some(h => h.toLowerCase().includes('status do pedido')) || !headerRaw.some(h => h.toLowerCase().includes('taxa de comissão'))) {
       return NextResponse.json({ error: 'Este arquivo não parece ser o Relatório de Vendas Shopee.' }, { status: 400 })
+    }
+
+    const COL = {
+      ID:            colIdx(headerRaw, 'ID do pedido'),
+      STATUS:        colIdx(headerRaw, 'Status do pedido'),
+      MOTIVO:        colIdx(headerRaw, 'Cancelar Motivo'),
+      STATUS_DEV:    colIdx(headerRaw, 'Status da Devolução'),
+      DATA:          colIdx(headerRaw, 'Data de criação do pedido'),
+      SKU_PRINCIPAL: colIdx(headerRaw, 'Nº de referência do SKU principal'),
+      NOME_PRODUTO:  colIdx(headerRaw, 'Nome do Produto'),
+      SKU:           colIdx(headerRaw, 'Número de referência SKU'),
+      VARIACAO:      colIdx(headerRaw, 'Nome da variação'),
+      PRECO_ACORDADO:colIdx(headerRaw, 'Preço acordado'),
+      QTD:           colIdx(headerRaw, 'Quantidade'),
+      RETURNED_QTY:  colIdx(headerRaw, 'Returned quantity'),
+      SUBTOTAL:      colIdx(headerRaw, 'Subtotal do produto'),
+      AJUSTE_PIX:    colIdx(headerRaw, 'Ajuste por pagamento via PIX'),
+      VALOR_TOTAL:   colIdx(headerRaw, 'Valor Total'),
+      FRETE_COMPRADOR: colIdx(headerRaw, 'Taxa de envio pagas pelo comprador'),
+      DESC_FRETE:    colIdx(headerRaw, 'Desconto de Frete Aprox'),
+      COM_BRUTA:     colIdx(headerRaw, 'Taxa de comissão bruta'),
+      COM_LIQUIDA:   colIdx(headerRaw, 'Taxa de comissão líquida'),
+      SERV_BRUTA:    colIdx(headerRaw, 'Taxa de serviço bruta'),
+      SERV_LIQUIDA:  colIdx(headerRaw, 'Taxa de serviço líquida'),
+      TOTAL_GLOBAL:  colIdx(headerRaw, 'Total global'),
+      FRETE_ESTIMADO:colIdx(headerRaw, 'Valor estimado do frete'),
     }
 
     // Busca custos do catálogo por SKU
