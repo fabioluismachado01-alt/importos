@@ -388,8 +388,10 @@ export function TiktokAnaliseView() {
 
             {/* Upload 3 — Relatório de Pedidos */}
             <UploadBox
-              numero={3} titulo="Relatório de Pedidos" subtitulo="Todos os pedidos do período (.xlsx)"
-              aceita=".xlsx" estado={estP} cor="purple" obrigatorio={false}
+              numero={3} titulo="Relatório de Pedidos" subtitulo="Todos os pedidos do período (.csv ou .xlsx)"
+              aceita=".csv,.xlsx" estado={estP} cor="purple" obrigatorio={false}
+              caminho={['Pedidos', 'Gerenciar Pedidos', 'Filtro (período)', 'Exportar CSV']}
+              link="https://seller-br.tiktok.com/order?selected_sort=6&tab=all"
               onFile={handlePedidos}
               onRemover={() => { setEstP('idle'); setDadosP(null); setErroP('') }}
               criancas={estP === 'ok' && dadosP ? (

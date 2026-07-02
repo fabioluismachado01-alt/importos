@@ -23,7 +23,9 @@ const COL = {
 }
 
 function n(v: unknown): number {
-  return parseFloat(String(v ?? '').replace(',', '.')) || 0
+  // Aceita "BRL 39,90", "39,90", "39.90"
+  const s = String(v ?? '').replace(/BRL\s*/i, '').trim()
+  return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0
 }
 
 const STATUS_VALIDOS = ['Concluído', 'Enviado', 'Entregue']
@@ -44,12 +46,18 @@ export async function POST(req: NextRequest) {
     const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' }) as unknown[][]
 
     // Linha 0 = header, linha 1 = descrição das colunas, dados a partir da linha 2
-    if (rows.length < 3) return NextResponse.json({ error: 'Arquivo vazio ou formato incorreto' }, { status: 400 })
+    if (rows.length < 2) return NextResponse.json({ error: 'Arquivo vazio ou formato incorreto' }, { status: 400 })
 
     const header = rows[0].map(c => String(c).toLowerCase())
     if (!header.some(h => h.includes('order id') || h.includes('seller sku'))) {
       return NextResponse.json({ error: 'Este arquivo não parece ser o Relatório de Pedidos TikTok.' }, { status: 400 })
     }
+
+    // XLSX tem linha 1 como descrição das colunas; CSV começa direto nos dados
+    // Detecta pelo conteúdo da primeira célula da linha 1
+    const primeiraLinha1 = String(rows[1]?.[COL.ORDER_ID] ?? '').toLowerCase()
+    const temLinhaDescricao = primeiraLinha1.includes('platform') || primeiraLinha1.includes('unique') || primeiraLinha1.includes('id.')
+    const dataStart = temLinhaDescricao ? 2 : 1
 
     // Busca custos do catálogo
     const produtos = await prisma.produto_catalogo.findMany({
@@ -74,8 +82,7 @@ export async function POST(req: NextRequest) {
     let pedidos_cancelados = 0
     let pedidos_devolvidos = 0
 
-    // Dados começam na linha 2 (índice 2) — linha 0 é header, linha 1 é descrição
-    for (let i = 2; i < rows.length; i++) {
+    for (let i = dataStart; i < rows.length; i++) {
       const r = rows[i] as unknown[]
       if (!r?.[COL.ORDER_ID]) continue
 
