@@ -25,7 +25,7 @@ interface SkuShopee {
 interface VendasData {
   arquivo: string
   periodo: { inicio: string; fim: string; ano: number; mes: number }
-  pedidos: number; unidades: number
+  pedidos: number; pedidos_total: number; unidades: number
   receita_total: number; comissao_liquida: number; servico_liquido: number
   frete_estimado: number; custo_produtos: number
   cancelados_count: number; devolucoes_count: number
@@ -317,7 +317,8 @@ export function ShopeeAnaliseView() {
               criancas={estV === 'ok' && dadosV ? (
                 <div className="space-y-1 text-xs">
                   <div className="flex justify-between"><span className="text-slate-400">Arquivo</span><span className="font-semibold truncate max-w-[140px]">{dadosV.arquivo}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Pedidos</span><span className="font-bold">{dadosV.pedidos} · {dadosV.unidades} un.</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Pedidos no arquivo</span><span className="font-bold">{dadosV.pedidos_total}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Pedidos enviados (DRE)</span><span className="font-bold">{dadosV.pedidos} · {dadosV.unidades} un.</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Receita (Valor Total)</span><span className="font-black text-emerald-600 font-mono">{formatCurrency(dadosV.receita_total)}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Comissão</span><span className="font-bold text-red-500 font-mono">-{formatCurrency(dadosV.comissao_liquida)}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Taxa de Serviço</span><span className="font-bold text-red-500 font-mono">-{formatCurrency(dadosV.servico_liquido)}</span></div>

@@ -100,6 +100,7 @@ export async function POST(req: NextRequest) {
     let servico_liquido = 0
     let frete_estimado = 0
     let pedidos_validos = 0
+    let pedidos_total = 0
     let unidades_total = 0
     let desconto_vendedor = 0
 
@@ -126,6 +127,8 @@ export async function POST(req: NextRequest) {
       const skuRaw = String(r[COL.SKU] ?? '').trim()
       const sku = skuRaw.toUpperCase()
       const valorTotal = n(r[COL.VALOR_TOTAL])
+
+      pedidos_total++
 
       // Data
       const dataStr = String(r[COL.DATA] ?? '').slice(0, 10)
@@ -218,6 +221,7 @@ export async function POST(req: NextRequest) {
       periodo: { inicio: dataInicio, fim: dataFim, ano: anoDetect, mes: mesDetect },
       // Totais
       pedidos: pedidos_validos,
+      pedidos_total,
       unidades: unidades_total,
       receita_total,       // Valor Total (inclui frete comprador)
       comissao_liquida,
