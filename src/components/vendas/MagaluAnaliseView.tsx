@@ -185,7 +185,7 @@ export function MagaluAnaliseView() {
             : estado === 'erro' ? 'border-red-300'
             : 'border-slate-200')}>
             <CardContent className="p-5">
-              <div className="flex items-center gap-2.5 mb-4">
+              <div className="flex items-center gap-2.5 mb-2">
                 <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-black',
                   estado === 'ok' ? 'bg-emerald-500' : 'bg-blue-600')}>
                   {estado === 'carregando' ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -198,6 +198,23 @@ export function MagaluAnaliseView() {
                   <p className="text-[10px] text-slate-400">relatorio_vendas_pedidos_*.csv — pedidos, SKUs, comissões e taxas</p>
                 </div>
                 <Badge className="text-[8px] h-4 px-1.5 bg-red-100 text-red-700 border-red-200 shrink-0">Obrigatório</Badge>
+              </div>
+
+              {/* Caminho de navegação */}
+              <div className="mb-3">
+                <div className="flex flex-wrap items-center gap-1 mb-1">
+                  {['Menu', 'Gestão de Pedidos', 'Ações', 'Gerar Relatório de Vendas', 'Selecionar período', 'Exportar Relatório'].map((passo, i, arr) => (
+                    <span key={i} className="flex items-center gap-1">
+                      <span className="text-[9px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5">{passo}</span>
+                      {i < arr.length - 1 && <ArrowRight className="w-2.5 h-2.5 text-slate-300" />}
+                    </span>
+                  ))}
+                </div>
+                <a href="https://seller.magalu.com/pedidos/relatorio-vendas" target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[9px] font-semibold text-blue-600 hover:text-blue-800 hover:underline">
+                  <ArrowRight className="w-2.5 h-2.5" />
+                  Abrir no Magalu Seller
+                </a>
               </div>
 
               {estado === 'idle' || estado === 'carregando' ? (
