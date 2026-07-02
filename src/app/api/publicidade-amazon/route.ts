@@ -2,9 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import path from 'path'
 import { pathToFileURL } from 'url'
 
-// Converte "1.234,56" para número
+// Converte valor monetário: aceita "1.234,56" (BR) ou "1234.56" (EN)
 function parseBRL(str: string): number {
-  return parseFloat(str.replace(/\./g, '').replace(',', '.')) || 0
+  const s = str.trim()
+  // Formato BR com vírgula decimal: "1.234,56" → 1234.56
+  if (/^\d{1,3}(\.\d{3})*,\d{2}$/.test(s)) {
+    return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0
+  }
+  // Formato EN com ponto decimal: "284.31"
+  const n = parseFloat(s.replace(/[^0-9.]/g, ''))
+  return isNaN(n) ? 0 : n
 }
 
 // Extrai texto do PDF usando pdfjs-dist
@@ -41,8 +48,8 @@ function extrairValoresComContexto(texto: string): Array<{ contexto: string; val
       }
     }
 
-    // Padrão 2: X.XXX,XX BRL  (fatura Amazon Advertising)
-    const rgBRL = /([\d]{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})\s+BRL/g
+    // Padrão 2: X.XXX,XX BRL ou XXX.XX BRL  (fatura Amazon Advertising)
+    const rgBRL = /([\d]{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}|\d+\.\d{2})\s*BRL/g
     while ((m = rgBRL.exec(linha)) !== null) {
       const valor = parseBRL(m[1])
       if (valor > 0 && valor < 1_000_000) {
@@ -80,9 +87,9 @@ function encontrarTotalPublicidade(texto: string): { valor: number; contexto: st
     // Pega os 80 chars DEPOIS da keyword para encontrar o valor
     const trecho = texto.slice(pos + kw.length, pos + kw.length + 80)
 
-    // Tenta R$ primeiro, depois X,XX BRL
+    // Tenta R$ primeiro, depois X,XX BRL (BR) ou X.XX BRL (EN/Amazon)
     const mRS  = trecho.match(/R\$\s*([\d.,]+)/)
-    const mBRL = trecho.match(/([\d]{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})\s*BRL/i)
+    const mBRL = trecho.match(/([\d]{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}|\d+\.\d{2})\s*BRL/i)
     const raw = mRS ? mRS[1] : mBRL ? mBRL[1] : null
     if (raw) {
       const valor = parseBRL(raw)

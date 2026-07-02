@@ -54,14 +54,78 @@ export async function POST(req: NextRequest) {
     const ws = wb.Sheets[wb.SheetNames[0]]
     const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' }) as unknown[][]
 
-    if (rows.length < 12) return NextResponse.json({ error: 'Arquivo vazio ou formato incorreto' }, { status: 400 })
+    if (rows.length < 2) return NextResponse.json({ error: 'Arquivo vazio ou formato incorreto' }, { status: 400 })
 
-    // Valida que é o Relatorio Geral (linha 9 deve ter "sku" e "data/hora")
-    const headerRow = rows[9]?.map(c => String(c).toLowerCase()) ?? []
-    if (!headerRow.some(h => h.includes('sku'))) {
+    // Detecta formato:
+    // Novo "Visualizar Transações": header linha 0, 10 colunas, sem SKU
+    // Antigo "Relatório Geral": 9 linhas de metadata, header linha 9, 23+ colunas com SKU
+    const headerLinha0 = rows[0]?.map(c => String(c).toLowerCase()) ?? []
+    const isNovoFormato = headerLinha0.some(h => h.includes('tipo de transa')) &&
+                          headerLinha0.some(h => h.includes('grupo de pagamento'))
+
+    if (!isNovoFormato) {
+      // Formato antigo — validar header linha 9
+      if (rows.length < 12) return NextResponse.json({ error: 'Arquivo vazio ou formato incorreto' }, { status: 400 })
+      const headerRow = rows[9]?.map(c => String(c).toLowerCase()) ?? []
+      if (!headerRow.some(h => h.includes('sku'))) {
+        return NextResponse.json({
+          error: 'Este arquivo não parece ser o Relatório Geral Amazon nem o relatório "Visualizar Transações". Verifique o arquivo enviado.'
+        }, { status: 400 })
+      }
+    }
+
+    // ── Formato NOVO: "Visualizar Transações" (10 colunas, BRL) ──────────────
+    if (isNovoFormato) {
+      // Col: 0=Data 1=GrupoPag 2=Tipo 3=Pedido 4=Produto 5=Receita 6=Desc 7=Tarifas 8=Outros 9=Total
+      let fba_fulfillment = 0
+      let outras_taxas_servico = 0
+      let reembolsos_bruto = 0
+      let reembolsos_comissao = 0
+      let reembolsos_count = 0
+      let ajustes = 0
+
+      function parseBRL(v: unknown): number {
+        const n = parseFloat(String(v ?? '').replace(/[^0-9.\-]/g, ''))
+        return isNaN(n) ? 0 : n
+      }
+
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i] as unknown[]
+        if (!r?.[2]) continue
+        const tipo = String(r[2]).trim().toLowerCase()
+        const total = parseBRL(r[9])
+
+        if (tipo.includes('tarifas de servi')) {
+          // Toda tarifa de serviço agrupa em outras_taxas (FBA + armazenagem + etc.)
+          outras_taxas_servico += Math.abs(total)
+        } else if (tipo === 'reembolso') {
+          const rec = parseBRL(r[5])
+          const com = parseBRL(r[7])
+          reembolsos_bruto    += Math.abs(rec)
+          reembolsos_comissao += Math.abs(com)
+          reembolsos_count++
+        } else if (tipo.includes('reembolso de invent')) {
+          ajustes += Math.abs(total)
+        }
+      }
+
       return NextResponse.json({
-        error: 'Este arquivo não parece ser o Relatório Geral Amazon. Verifique se enviou o arquivo correto.'
-      }, { status: 400 })
+        arquivo:              file.name,
+        fonte:                'VISUALIZAR_TRANSACOES',
+        fba_fulfillment,
+        fba_armazenagem:      0,
+        mensalidade:          0,
+        outras_taxas_servico,
+        reembolsos_count,
+        reembolsos_bruto,
+        reembolsos_comissao,
+        reembolsos_fba:       0,
+        reembolsos_liquido:   reembolsos_bruto - reembolsos_comissao,
+        ajustes,
+        transferencias:       0,
+        publicidade_interno:  0,
+        skus:                 [],
+      })
     }
 
     // Busca custos do catálogo por SKU

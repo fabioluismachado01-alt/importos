@@ -190,6 +190,11 @@ export function AmazonAnaliseView() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setDadosV(data); setEstV('ok')
+      // "Visualizar Transações" embute dados do geral — auto-preenche o box 2
+      if (data.geral_embutido && estG === 'idle') {
+        setDadosG(data.geral_embutido)
+        setEstG('ok')
+      }
     } catch (e) { setErroV(String(e)); setEstV('erro') }
   }
 
