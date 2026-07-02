@@ -46,6 +46,14 @@ const STATUS_VALIDOS = new Set([
   'processando','envio atrasado','envio reagendado','venda entregue',
 ])
 
+// Prefixos/substrings que indicam venda válida mesmo com status composto
+const STATUS_VALIDOS_PARTIAL = [
+  'pacote de ',           // "pacote de 2 produtos" — entrega multi-produto válida
+  'reclamação',           // "reclamação esperando resposta" — venda ativa com disputa aberta
+  'mediação para responder', // mediação ainda em aberto (vendedor não perdeu)
+  'mediação com devolução habilitada', // comprador pode devolver mas ainda não devolveu
+]
+
 function limparTitulo(t: string): string {
   return t.replace(/\bnamave\b/gi, '').replace(/\s{2,}/g, ' ').trim().slice(0, 60)
 }
@@ -179,8 +187,10 @@ export async function POST(req: NextRequest) {
       // Devoluções e reembolsos completos: excluídos
       // Inclui: "Devolução...", "Mediação finalizada com reembolso", "Reembolso..."
       // Inclui: "Mediação finalizada. Te demos o dinheiro." (ML pagou o comprador)
+      // "mediação com devolução habilitada" = comprador PODE devolver mas ainda não devolveu → venda ativa
+      const ehDevolucaoAtiva = status.includes('devolu') && !status.includes('habilitada')
       if (
-        status.includes('devolu') ||
+        ehDevolucaoAtiva ||
         status.includes('reembolso') ||
         status.includes('te demos o dinheiro') ||
         status.includes('dinheiro liberado')
@@ -189,7 +199,10 @@ export async function POST(req: NextRequest) {
       // Mediações sem reembolso explícito: INCLUIR mas o Col 16 (cancelamento) deduzirá automaticamente
       // Ex: "Mediação finalizada." sem "reembolso" — vendedor pode ter ganho a mediação
 
-      const isValido = STATUS_VALIDOS.has(status) || status.includes('vamos enviar') || status.includes('processando')
+      const isValido = STATUS_VALIDOS.has(status)
+        || status.includes('vamos enviar')
+        || status.includes('processando')
+        || STATUS_VALIDOS_PARTIAL.some(p => status.includes(p))
       if (!isValido) continue
 
       const sku = String(r[COL.SKU] ?? '').trim() || 'SEM-SKU'
