@@ -112,12 +112,12 @@ export function ImportarPlanilhaView() {
       <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-4 space-y-5">
         <div className="flex items-center gap-2">
           <Info className="w-4 h-4 text-slate-500 shrink-0" />
-          <p className="text-sm font-bold text-slate-700">Como baixar os relatórios no Mercado Livre</p>
+          <p className="text-sm font-bold text-slate-700">Como baixar os relatórios por plataforma</p>
         </div>
 
-        {/* Relatório de Vendas */}
+        {/* ML — Relatório de Vendas */}
         <div className="space-y-2">
-          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">1. Relatório de Vendas</p>
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">🛒 Mercado Livre — Relatório de Vendas</p>
           <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
             {['Vendas', 'Data Personalizado', 'Intervalo do último mês', 'Baixar Arquivo Excel de Vendas'].map((step, i, arr) => (
               <span key={step} className="flex items-center gap-1.5">
@@ -130,9 +130,9 @@ export function ImportarPlanilhaView() {
 
         <div className="border-t border-slate-200" />
 
-        {/* Relatórios Financeiros */}
+        {/* ML — Relatórios Financeiros */}
         <div className="space-y-2">
-          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">2. Relatórios Financeiros</p>
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">🛒 Mercado Livre — Relatórios Financeiros</p>
           <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
             {['Faturamento', 'Tarifas e Pagamentos', 'Relatórios'].map((step, i, arr) => (
               <span key={step} className="flex items-center gap-1.5">
@@ -147,6 +147,21 @@ export function ImportarPlanilhaView() {
                 <FileSpreadsheet className="w-3.5 h-3.5 text-[#0A7E96] shrink-0" />
                 <span className="text-xs font-medium text-slate-700">{r}</span>
               </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t border-slate-200" />
+
+        {/* Amazon */}
+        <div className="space-y-2">
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">📦 Amazon — Relatório de Pagamentos</p>
+          <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+            {['Menu', 'Pagamentos', 'Repositório de Relatórios', 'Selecionar o mês de referência'].map((step, i, arr) => (
+              <span key={step} className="flex items-center gap-1.5">
+                <span className="bg-[#F59E0B] text-white px-2.5 py-1 rounded-lg">{step}</span>
+                {i < arr.length - 1 && <ArrowRight className="w-3 h-3 text-slate-400" />}
+              </span>
             ))}
           </div>
         </div>
