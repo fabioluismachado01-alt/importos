@@ -15,7 +15,8 @@ function parseBRL(str: string): number {
 // Extrai texto do PDF usando pdf-parse (funciona em Node.js serverless)
 async function extrairTextoPDF(buffer: Buffer): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pdfParse = (await import('pdf-parse')).default as any
+  const pdfParseModule = await import('pdf-parse') as any
+  const pdfParse = pdfParseModule.default ?? pdfParseModule
   const data = await pdfParse(buffer)
   return data.text ?? ''
 }
