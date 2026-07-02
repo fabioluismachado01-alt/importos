@@ -14,19 +14,19 @@ export default async function VendasAvulsasPage() {
   const lancamentos = await prisma.lancamento.findMany({
     where: {
       descricao: { contains: '[Avulsas]' },
-      faturamento_mes: { workspace_id: workspaceId },
+      faturamento: { workspace_id: workspaceId },
     },
-    include: { faturamento_mes: { select: { ano: true, mes: true } } },
+    include: { faturamento: { select: { ano: true, mes: true } } },
     orderBy: [
-      { faturamento_mes: { ano: 'desc' } },
-      { faturamento_mes: { mes: 'desc' } },
+      { faturamento: { ano: 'desc' } },
+      { faturamento: { mes: 'desc' } },
     ],
   })
 
   // Agrupa por mês/ano e soma receita
   const mesesMap: Record<string, { ano: number; mes: number; label: string; receita: number }> = {}
   for (const l of lancamentos) {
-    const { ano, mes } = l.faturamento_mes
+    const { ano, mes } = l.faturamento
     const key = `${ano}-${mes}`
     if (!mesesMap[key]) {
       mesesMap[key] = { ano, mes, label: `${MESES[mes - 1]} ${ano}`, receita: 0 }
