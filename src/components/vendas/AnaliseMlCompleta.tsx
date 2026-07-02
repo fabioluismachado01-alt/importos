@@ -3,11 +3,14 @@
 import React, { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { salvarAnaliseML } from '@/actions/salvar-analise-ml'
+import { excluirAnaliseMl } from '@/actions/excluir-analise-ml'
 import {
   Upload, FileSpreadsheet, CheckCircle2, Loader2, AlertTriangle,
   ArrowRight, X, ShoppingCart, BarChart2, Package, DollarSign,
-  Truck, Tag, TrendingDown, Info, ChevronRight,
+  Truck, Tag, TrendingDown, Info, ChevronRight, Trash2,
 } from 'lucide-react'
+
+interface MesSalvo { ano: number; mes: number; label: string; receita: number }
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -85,7 +88,7 @@ const CORES_MARGEM = (m: number) =>
 const MESES_NOMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
-export function AnaliseMlCompleta() {
+export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const router = useRouter()
   const [abaAtiva, setAbaAtiva] = useState<AbaId>('vendas')
   const [aliquota, setAliquota] = useState('8.0')
@@ -109,12 +112,24 @@ export function AnaliseMlCompleta() {
 
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
+  const [excluindo, setExcluindo] = useState<string | null>(null)
 
   const inputRefs = {
     vendas:      useRef<HTMLInputElement>(null),
     faturamento: useRef<HTMLInputElement>(null),
     full:        useRef<HTMLInputElement>(null),
     pagamentos:  useRef<HTMLInputElement>(null),
+  }
+
+  async function handleExcluir(ano: number, mes: number, label: string) {
+    if (!confirm(`Excluir análise ML de ${label}?`)) return
+    const key = `${ano}-${mes}`
+    setExcluindo(key)
+    try {
+      const result = await excluirAnaliseMl(ano, mes)
+      if (result.ok) router.refresh()
+      else alert(result.error)
+    } finally { setExcluindo(null) }
   }
 
   async function handleUpload(aba: AbaId, file: File) {
@@ -287,6 +302,39 @@ export function AnaliseMlCompleta() {
           </div>
         )}
       </div>
+
+      {/* Meses salvos */}
+      {salvas.length > 0 && (
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-black text-slate-700">Análises salvas</CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-4">
+            <div className="flex flex-wrap gap-2">
+              {salvas.map(s => {
+                const key = `${s.ano}-${s.mes}`
+                const loading = excluindo === key
+                return (
+                  <div key={key} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                    <div>
+                      <p className="text-xs font-bold text-slate-700">{s.label}</p>
+                      <p className="text-[10px] text-slate-400">{formatCurrency(s.receita)} receita</p>
+                    </div>
+                    <button
+                      onClick={() => handleExcluir(s.ano, s.mes, s.label)}
+                      disabled={loading}
+                      className="ml-2 p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors disabled:opacity-50"
+                      title="Excluir"
+                    >
+                      {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ─── PASSO 2: ALÍQUOTA + UPLOADS (só libera após confirmar mês) ── */}
       {!periodoConfirmado && (

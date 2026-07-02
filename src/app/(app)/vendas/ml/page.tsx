@@ -1,8 +1,36 @@
+import { prisma } from '@/lib/prisma'
+import { getAuthContext } from '@/lib/auth'
 import { AnaliseMlCompleta } from '@/components/vendas/AnaliseMlCompleta'
 
 export const metadata = { title: 'Análise Mercado Livre — ImportOS' }
 
-export default function VendasMlPage() {
+const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+               'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+
+export default async function VendasMlPage() {
+  const { workspaceId } = await getAuthContext()
+
+  const lancamentos = await prisma.lancamento.findMany({
+    where: {
+      descricao: { contains: 'ML Import' },
+      faturamento: { workspace_id: workspaceId },
+    },
+    include: { faturamento: { select: { ano: true, mes: true } } },
+    orderBy: [
+      { faturamento: { ano: 'desc' } },
+      { faturamento: { mes: 'desc' } },
+    ],
+  })
+
+  const mesesMap: Record<string, { ano: number; mes: number; label: string; receita: number }> = {}
+  for (const l of lancamentos) {
+    const { ano, mes } = l.faturamento
+    const key = `${ano}-${mes}`
+    if (!mesesMap[key]) mesesMap[key] = { ano, mes, label: `${MESES[mes - 1]} ${ano}`, receita: 0 }
+    if (l.tipo === 'RECEITA') mesesMap[key].receita += l.valor
+  }
+  const salvas = Object.values(mesesMap).sort((a, b) => b.ano - a.ano || b.mes - a.mes)
+
   return (
     <div className="space-y-6">
       <div>
@@ -13,7 +41,7 @@ export default function VendasMlPage() {
           Importe os 4 relatórios para apuração completa: vendas, publicidade, armazenagem e pagamentos
         </p>
       </div>
-      <AnaliseMlCompleta />
+      <AnaliseMlCompleta salvas={salvas} />
     </div>
   )
 }

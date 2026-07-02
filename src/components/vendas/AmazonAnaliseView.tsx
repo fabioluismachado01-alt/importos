@@ -4,7 +4,7 @@ import React, { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   FileSpreadsheet, FileText, CheckCircle2, Loader2,
-  AlertTriangle, ArrowRight, X, Package, Info,
+  AlertTriangle, ArrowRight, X, Package, Info, Trash2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -12,6 +12,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn, formatCurrency } from '@/lib/utils'
 import { salvarAnaliseAmazon } from '@/actions/salvar-analise-amazon'
+import { excluirAnaliseAmazon } from '@/actions/excluir-analise-amazon'
+
+interface MesSalvo { ano: number; mes: number; label: string; receita: number }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -168,7 +171,7 @@ function DRELinha({ label, valor, cor, sub, indent = false }: {
 
 // ─── View Principal ───────────────────────────────────────────────────────────
 
-export function AmazonAnaliseView() {
+export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const router = useRouter()
   const hoje = new Date()
 
@@ -194,8 +197,20 @@ export function AmazonAnaliseView() {
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo]       = useState(false)
   const [erroSalvar, setErroSalvar] = useState('')
+  const [excluindo, setExcluindo] = useState<string | null>(null)
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
+
+  async function handleExcluir(ano: number, mes: number, label: string) {
+    if (!confirm(`Excluir análise Amazon de ${label}?`)) return
+    const key = `${ano}-${mes}`
+    setExcluindo(key)
+    try {
+      const result = await excluirAnaliseAmazon(ano, mes)
+      if (result.ok) router.refresh()
+      else alert(result.error)
+    } finally { setExcluindo(null) }
+  }
 
   async function handleVendas(file: File) {
     setEstV('carregando'); setErroV('')
@@ -344,6 +359,39 @@ export function AmazonAnaliseView() {
           <p className="ml-8 mt-1 text-lg font-black text-emerald-700">{MESES[mes-1]} {ano}</p>
         )}
       </div>
+
+      {/* Meses salvos */}
+      {salvas.length > 0 && (
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-black text-slate-700">Análises salvas</CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-4">
+            <div className="flex flex-wrap gap-2">
+              {salvas.map(s => {
+                const key = `${s.ano}-${s.mes}`
+                const loading = excluindo === key
+                return (
+                  <div key={key} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                    <div>
+                      <p className="text-xs font-bold text-slate-700">{s.label}</p>
+                      <p className="text-[10px] text-slate-400">{formatCurrency(s.receita)} receita</p>
+                    </div>
+                    <button
+                      onClick={() => handleExcluir(s.ano, s.mes, s.label)}
+                      disabled={loading}
+                      className="ml-2 p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors disabled:opacity-50"
+                      title="Excluir"
+                    >
+                      {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {periodoOk && (
         <>
