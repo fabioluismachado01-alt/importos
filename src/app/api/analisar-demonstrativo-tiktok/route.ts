@@ -42,21 +42,38 @@ function n(v: unknown): number {
 
 /**
  * Lê a aba Relatórios e retorna mapa chave → valor.
- * A chave está na PRIMEIRA coluna não-vazia entre cols 1-4.
- * O valor está sempre na col 5.
+ * Detecta layout automaticamente:
+ * - Formato antigo: chave em col 1-4, valor em col 5
+ * - Formato novo:   chave em col 0, valor em col 1
  */
 function lerRelatorios(ws: XLSX.WorkSheet): Record<string, number> {
   const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' }) as unknown[][]
   const mapa: Record<string, number> = {}
+
+  // Detecta layout: se alguma linha de dados tem valor numérico na col 1 e texto na col 0
+  const formatoNovo = rows.some(r => {
+    const c0 = String(r[0] ?? '').trim()
+    const c1 = String(r[1] ?? '').trim()
+    return c0.length > 3 && !isNaN(parseFloat(c1)) && parseFloat(c1) !== 0
+  })
+
   for (const row of rows) {
-    // Encontra a primeira coluna não-vazia entre 1 e 4
     let chave = ''
-    for (let c = 1; c <= 4; c++) {
-      const v = String(row[c] ?? '').trim()
-      if (v) { chave = v; break }
+    let valor = 0
+
+    if (formatoNovo) {
+      chave = String(row[0] ?? '').trim()
+      valor = n(row[1])
+    } else {
+      for (let c = 1; c <= 4; c++) {
+        const v = String(row[c] ?? '').trim()
+        if (v) { chave = v; break }
+      }
+      valor = n(row[5])
     }
-    const valor = n(row[5])
-    if (chave && chave !== 'Período' && chave !== 'Fuso horário' && chave !== 'Moeda') {
+
+    const META = ['Período', 'Fuso horário', 'Moeda']
+    if (chave && !META.includes(chave)) {
       mapa[chave] = valor
     }
   }

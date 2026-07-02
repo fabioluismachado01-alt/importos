@@ -55,11 +55,11 @@ const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
 
 function UploadBox({
   numero, titulo, subtitulo, aceita, estado, cor = 'slate', obrigatorio = true,
-  disabled = false, onFile, onRemover, criancas,
+  disabled = false, caminho, link, onFile, onRemover, criancas,
 }: {
   numero: number | string; titulo: string; subtitulo: string
   aceita: string; estado: UploadEstado; cor?: string; obrigatorio?: boolean
-  disabled?: boolean
+  disabled?: boolean; caminho?: string[]; link?: string
   onFile: (f: File) => void; onRemover: () => void; criancas?: React.ReactNode
 }) {
   const ref = useRef<HTMLInputElement>(null)
@@ -96,7 +96,7 @@ function UploadBox({
       : estado === 'erro' ? 'border-red-300'
       : 'border-slate-200')}>
       <CardContent className="p-5">
-        <div className="flex items-center gap-2.5 mb-4">
+        <div className="flex items-center gap-2.5 mb-2">
           <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-black shrink-0',
             estado === 'ok' ? 'bg-emerald-500' : 'bg-slate-700')}>
             {estado === 'carregando' ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -113,6 +113,27 @@ function UploadBox({
             {obrigatorio ? 'Obrigatório' : 'Opcional'}
           </Badge>
         </div>
+
+        {/* Caminho de navegação */}
+        {caminho && caminho.length > 0 && (
+          <div className="mb-3">
+            <div className="flex flex-wrap items-center gap-1 mb-1">
+              {caminho.map((passo, i) => (
+                <span key={i} className="flex items-center gap-1">
+                  <span className="text-[9px] font-semibold text-slate-500 bg-slate-100 rounded px-1.5 py-0.5">{passo}</span>
+                  {i < caminho.length - 1 && <ArrowRight className="w-2.5 h-2.5 text-slate-300" />}
+                </span>
+              ))}
+            </div>
+            {link && (
+              <a href={link} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[9px] font-semibold text-pink-600 hover:text-pink-800 hover:underline">
+                <ArrowRight className="w-2.5 h-2.5" />
+                Abrir no TikTok Seller
+              </a>
+            )}
+          </div>
+        )}
 
         {estado === 'idle' || estado === 'carregando' ? (
           <div
@@ -157,43 +178,6 @@ function DRELinha({ label, valor, cor, sub, indent = false, destaque = false }: 
           ? <span className={cn('text-xs font-black font-mono', cor ?? 'text-slate-800', destaque && 'text-sm')}>{formatCurrency(valor)}</span>
           : <span className="text-xs text-slate-300">—</span>}
         {sub && <p className="text-[9px] text-slate-400">{sub}</p>}
-      </div>
-    </div>
-  )
-}
-
-// ─── Checklist de Conferência ─────────────────────────────────────────────────
-
-function Checklist({ dados, afiliados }: { dados: DemonstrativoData; afiliados: AfiliiadosData | null }) {
-  const checks = [
-    { label: 'Receita (Vendas líquidas)', esperado: 497.00, atual: dados.receita_bruta },
-    { label: 'Taxas e impostos TikTok',   esperado: 105.57, atual: dados.taxas_total },
-    { label: 'Frete bruto',               esperado: 99.50,  atual: dados.frete_bruto },
-    { label: 'Valor a liquidar',          esperado: 391.43, atual: dados.liquidado },
-    { label: 'Liquidações (Extratos)',    esperado: 9,      atual: dados.pedidos_count },
-    { label: 'Unidades vendidas',         esperado: 10,     atual: dados.unidades_total },
-    ...(afiliados ? [{ label: 'Pedidos afiliados', esperado: 13, atual: afiliados.total_pedidos }] : []),
-  ]
-  return (
-    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-      <p className="text-[10px] font-black text-slate-600 uppercase tracking-wide mb-3">✓ Checklist de Conferência</p>
-      <div className="space-y-1.5">
-        {checks.map(c => {
-          const ok = Math.abs(c.atual - c.esperado) < 0.02
-          return (
-            <div key={c.label} className="flex items-center justify-between text-xs">
-              <span className="text-slate-500">{c.label}</span>
-              <div className="flex items-center gap-2">
-                <span className={cn('font-mono font-bold', ok ? 'text-emerald-600' : 'text-red-500')}>
-                  {typeof c.atual === 'number' && c.atual % 1 === 0 ? c.atual : formatCurrency(c.atual)}
-                </span>
-                <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded', ok ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600')}>
-                  {ok ? '✓' : '⚠'}
-                </span>
-              </div>
-            </div>
-          )
-        })}
       </div>
     </div>
   )
@@ -339,6 +323,8 @@ export function TiktokAnaliseView() {
             <UploadBox
               numero={1} titulo="Demonstrativo TikTok" subtitulo="Relatório financeiro completo (.xlsx)"
               aceita=".xlsx" estado={estD} cor="slate"
+              caminho={['Menu', 'Finanças', 'Visão Geral', 'Demonstrativo', 'Exportar', 'Selecionar Período', 'Baixar']}
+              link="https://seller-br.tiktok.com/finance/bills?subTab=bills&tab=statements"
               onFile={handleDemonstrativo}
               onRemover={() => { setEstD('idle'); setDadosD(null); setErroD('') }}
               criancas={estD === 'ok' && dadosD ? (
@@ -376,11 +362,6 @@ export function TiktokAnaliseView() {
               onFile={() => {}} onRemover={() => {}}
             />
           </div>
-
-          {/* Checklist de conferência */}
-          {dadosD && (
-            <Checklist dados={dadosD} afiliados={dadosA} />
-          )}
 
           {/* DRE */}
           {dadosD && (
