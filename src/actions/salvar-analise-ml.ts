@@ -163,17 +163,7 @@ export async function salvarAnaliseML(dados: DadosConsolidadosML) {
   }
 
   // ── Página ML ─────────────────────────────────────────────────────
-  if (dados.pagina_ml > 0) {
-    lancamentos.push({
-      faturamento_id: fat.id,
-      tipo: 'DESPESA_VARIAVEL',
-      categoria: 'FATURA_ML',
-      descricao: 'ML Import — Página Oficial ML',
-      valor: dados.pagina_ml,
-      data: primeiroDia,
-      status: 'CONFIRMADO',
-    })
-  }
+  // NÃO importada: já registrada como despesa fixa mensal para evitar dupla contagem
 
   // ── Afiliados ─────────────────────────────────────────────────────
   if (dados.afiliados > 0) {
