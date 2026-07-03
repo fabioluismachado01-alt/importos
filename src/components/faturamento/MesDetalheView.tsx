@@ -332,7 +332,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
             {nomeMes} <span className="text-slate-400 font-normal">{ano}</span>
           </h1>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
-            <span className="text-xs text-slate-500">Alíquota: <strong>{(d.aliquota_simples * 100).toFixed(2)}%</strong></span>
+            <span className="text-xs text-slate-500">Alíquota: <strong>{(d.aliquota_simples > 1 ? d.aliquota_simples : d.aliquota_simples * 100).toFixed(2)}%</strong></span>
             {d.meta_mes > 0 && (
               <span className="text-xs text-slate-500">Meta: <strong>{formatCurrency(d.meta_mes)}</strong></span>
             )}
@@ -408,7 +408,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
       {/* ── ALERTA ALÍQUOTA NÃO CONFIRMADA ── */}
       {/* Aparece quando a alíquota do mês é exatamente o padrão (6%) e o mês não está fechado
           Isso indica que o usuário provavelmente ainda não informou a alíquota real deste mês */}
-      {!d.fechado && Math.round(d.aliquota_simples * 10000) === 600 && d.receita_total > 0 && (
+      {!d.fechado && (d.aliquota_simples > 1 ? Math.round(d.aliquota_simples * 100) === 600 : Math.round(d.aliquota_simples * 10000) === 600) && d.receita_total > 0 && (
         <div className="bg-orange-50 border border-orange-300 rounded-2xl p-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <AlertTriangle className="w-5 h-5 text-orange-600 shrink-0" />
@@ -472,7 +472,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
         <KPICard label="Faturamento Bruto" value={formatCurrency(d.receita_total)} color="emerald" big />
         <KPICard label="Lucro Bruto" value={formatCurrency(d.lucro_bruto)} color={d.lucro_bruto >= 0 ? 'blue' : 'red'} big />
         <KPICard label="Lucro Líquido" value={formatCurrency(d.lucro_liquido)} color={d.lucro_liquido >= 0 ? 'emerald' : 'red'} big />
-        <KPICard label={`DAS (${(d.aliquota_simples * 100).toFixed(2)}%)`} value={formatCurrency(d.das_valor_calc)} color="amber"
+        <KPICard label={`DAS (${(d.aliquota_simples > 1 ? d.aliquota_simples : d.aliquota_simples * 100).toFixed(2)}%)`} value={formatCurrency(d.das_valor_calc)} color="amber"
           sub={d.das_status === 'PAGO' ? `Pago: ${formatCurrency(d.das_valor_real ?? 0)}` : undefined} big />
       </div>
 

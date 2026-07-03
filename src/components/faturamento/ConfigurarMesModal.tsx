@@ -33,7 +33,9 @@ interface Props {
 export function ConfigurarMesModal({
   ano, mes, aliquotaAtual, metaAtual, templates = [], onClose, onSuccess
 }: Props) {
-  const [aliquota, setAliquota] = useState((aliquotaAtual * 100).toFixed(2))
+  const [aliquota, setAliquota] = useState(
+    (aliquotaAtual > 1 ? aliquotaAtual : aliquotaAtual * 100).toFixed(2)
+  )
   const [meta, setMeta] = useState(metaAtual > 0 ? metaAtual.toFixed(2) : '')
   const [replicarFixas, setReplicarFixas] = useState(true)
   const [loading, setLoading] = useState(false)
@@ -77,7 +79,7 @@ export function ConfigurarMesModal({
     setErro(null)
     try {
       await configurarMes(ano, mes, {
-        aliquota_simples: parseFloat(aliquota) / 100,
+        aliquota_simples: parseFloat(aliquota),
         meta_mes: parseFloat(meta) || 0,
         replicar_fixas: replicarFixas,
       })

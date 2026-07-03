@@ -194,8 +194,8 @@ export async function configurarMes(
   // Sincroniza histórico de alíquota para uso nos cálculos de impostos dos pedidos ML
   await prisma.aliquota_historico.upsert({
     where: { workspace_id_ano_mes: { workspace_id: workspaceId, ano, mes } },
-    update: { aliquota: data.aliquota_simples * 100 },
-    create: { workspace_id: workspaceId, ano, mes, aliquota: data.aliquota_simples * 100 },
+    update: { aliquota: data.aliquota_simples },
+    create: { workspace_id: workspaceId, ano, mes, aliquota: data.aliquota_simples },
   })
 
   // Replicar despesas fixas
