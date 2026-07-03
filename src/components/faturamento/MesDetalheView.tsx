@@ -221,13 +221,20 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
 
   async function handleRemove(id: string) {
     startTransition(async () => {
-      try { await removeLancamento(id); router.refresh() }
+      try { await removeLancamento(id) }
       catch (e) { alert(e instanceof Error ? e.message : 'Erro ao remover lançamento') }
+      router.refresh()
     })
   }
   async function handleEditFixo(id: string, valor: number) {
     startTransition(async () => {
       try { await editarLancamento(id, { valor }); router.refresh() }
+      catch (e) { alert(e instanceof Error ? e.message : 'Erro ao editar lançamento') }
+    })
+  }
+  async function handleEdit(id: string, updates: { valor: number; data: string; descricao: string }) {
+    startTransition(async () => {
+      try { await editarLancamento(id, { valor: updates.valor, data: new Date(updates.data), descricao: updates.descricao }); router.refresh() }
       catch (e) { alert(e instanceof Error ? e.message : 'Erro ao editar lançamento') }
     })
   }
@@ -554,6 +561,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
             fechado={d.fechado}
             isPending={isPending}
             onRemove={handleRemove}
+            onEdit={handleEdit}
           />
 
           {/* Lista de Despesas Variáveis */}
@@ -566,6 +574,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
             fechado={d.fechado}
             isPending={isPending}
             onRemove={handleRemove}
+            onEdit={handleEdit}
           />
 
           {/* Lista de Despesas Fixas */}
@@ -893,28 +902,37 @@ function KPICard({ label, value, color, sub, big }: {
   )
 }
 
-function GrupoLancamentos({ titulo, lancamentos, total, totalLabel, cor, fechado, isPending, onRemove, onEditFixo }: {
+function GrupoLancamentos({ titulo, lancamentos, total, totalLabel, cor, fechado, isPending, onRemove, onEditFixo, onEdit }: {
   titulo: string; lancamentos: Lancamento[]; total: number; totalLabel: string
   cor: 'emerald' | 'red' | 'slate'; fechado: boolean; isPending: boolean
   onRemove: (id: string) => void
   onEditFixo?: (id: string, valor: number) => void
+  onEdit?: (id: string, updates: { valor: number; data: string; descricao: string }) => void
 }) {
   const COR = { emerald: 'text-emerald-600', red: 'text-red-500', slate: 'text-slate-600' }
   const [editandoId, setEditandoId] = useState<string | null>(null)
   const [novoValor, setNovoValor] = useState('')
+  const [novaData, setNovaData] = useState('')
+  const [novaDescricao, setNovaDescricao] = useState('')
 
   if (lancamentos.length === 0) return null
 
   function iniciarEdicao(l: Lancamento) {
     setEditandoId(l.id)
     setNovoValor(l.valor.toFixed(2))
+    setNovaData(format(new Date(l.data), 'yyyy-MM-dd'))
+    setNovaDescricao(l.descricao)
   }
 
-  function confirmarEdicao() {
-    if (!editandoId || !onEditFixo) return
+  function confirmarEdicao(l: Lancamento) {
+    if (!editandoId) return
     const v = parseFloat(novoValor.replace(',', '.'))
     if (!v || v <= 0) return
-    onEditFixo(editandoId, v)
+    if (l.e_fixo && onEditFixo) {
+      onEditFixo(editandoId, v)
+    } else if (onEdit) {
+      onEdit(editandoId, { valor: v, data: novaData, descricao: novaDescricao })
+    }
     setEditandoId(null)
   }
 
@@ -945,25 +963,44 @@ function GrupoLancamentos({ titulo, lancamentos, total, totalLabel, cor, fechado
                 </p>
               </div>
 
-              {/* Edição inline de valor — só para despesas fixas */}
+              {/* Edição inline */}
               {editandoId === l.id ? (
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-[10px] text-slate-400">R$</span>
-                  <input
-                    type="number" step="0.01" autoFocus
-                    value={novoValor}
-                    onChange={e => setNovoValor(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') confirmarEdicao(); if (e.key === 'Escape') setEditandoId(null) }}
-                    className="w-24 h-7 px-2 text-xs font-mono border border-blue-400 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  />
-                  <button onClick={confirmarEdicao} disabled={isPending}
-                    className="h-7 px-2 text-[10px] font-bold bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50">
-                    OK
-                  </button>
-                  <button onClick={() => setEditandoId(null)}
-                    className="h-7 px-1.5 text-[10px] text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100">
-                    <X className="w-3 h-3" />
-                  </button>
+                <div className="flex flex-col gap-1.5 shrink-0 items-end">
+                  {!l.e_fixo && (
+                    <>
+                      <input
+                        type="date"
+                        value={novaData}
+                        onChange={e => setNovaData(e.target.value)}
+                        className="w-36 h-7 px-2 text-xs border border-blue-400 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                      <input
+                        type="text"
+                        value={novaDescricao}
+                        onChange={e => setNovaDescricao(e.target.value)}
+                        placeholder="Descrição"
+                        className="w-36 h-7 px-2 text-xs border border-blue-400 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                    </>
+                  )}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-400">R$</span>
+                    <input
+                      type="number" step="0.01" autoFocus={l.e_fixo}
+                      value={novoValor}
+                      onChange={e => setNovoValor(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') confirmarEdicao(l); if (e.key === 'Escape') setEditandoId(null) }}
+                      className="w-24 h-7 px-2 text-xs font-mono border border-blue-400 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                    <button onClick={() => confirmarEdicao(l)} disabled={isPending}
+                      className="h-7 px-2 text-[10px] font-bold bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50">
+                      OK
+                    </button>
+                    <button onClick={() => setEditandoId(null)}
+                      className="h-7 px-1.5 text-[10px] text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <span className={cn('text-xs font-black font-mono shrink-0', COR[cor])}>
@@ -973,12 +1010,12 @@ function GrupoLancamentos({ titulo, lancamentos, total, totalLabel, cor, fechado
 
               {!fechado && editandoId !== l.id && (
                 <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all shrink-0">
-                  {l.e_fixo && onEditFixo && (
+                  {(l.e_fixo ? (onEditFixo != null) : (onEdit != null)) && (
                     <button
                       onClick={() => iniciarEdicao(l)}
                       disabled={isPending}
                       className="p-1 text-slate-300 hover:text-blue-500 transition-colors"
-                      title="Editar valor deste mês"
+                      title="Editar lançamento"
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
@@ -987,6 +1024,7 @@ function GrupoLancamentos({ titulo, lancamentos, total, totalLabel, cor, fechado
                     onClick={() => onRemove(l.id)}
                     disabled={isPending}
                     className="p-1 text-slate-300 hover:text-red-500 transition-colors"
+                    title="Excluir"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
