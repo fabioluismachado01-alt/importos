@@ -4,7 +4,7 @@ import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Plus, Lock, TrendingUp, TrendingDown, DollarSign,
-  AlertTriangle, CheckCircle2, Clock, Trash2, Target, FileDown, X, MoreHorizontal,
+  AlertTriangle, CheckCircle2, Clock, Trash2, Target, FileDown, X, MoreHorizontal, Pencil,
 } from 'lucide-react'
 import { PageTitle } from '@/components/layout/PageTitle'
 import { InsightsExecutivos, type CanalAnalise } from './InsightsExecutivos'
@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { cn, formatCurrency, getMesNome, getDiasParaVencimento } from '@/lib/utils'
-import { removeLancamento, registrarPagamentoDAS, cancelarPagamentoDAS, fecharMes, configurarMes } from '@/actions/finance'
+import { removeLancamento, registrarPagamentoDAS, cancelarPagamentoDAS, fecharMes, configurarMes, editarLancamento } from '@/actions/finance'
 import { CATEGORIA_LABELS, CANAIS_RECEITA } from '@/engines/finance'
 import { LancamentoModal } from './LancamentoModal'
 import { DASPagamentoForm } from './DASPagamentoForm'
@@ -223,6 +223,12 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
     startTransition(async () => {
       try { await removeLancamento(id); router.refresh() }
       catch (e) { alert(e instanceof Error ? e.message : 'Erro ao remover lançamento') }
+    })
+  }
+  async function handleEditFixo(id: string, valor: number) {
+    startTransition(async () => {
+      try { await editarLancamento(id, { valor }); router.refresh() }
+      catch (e) { alert(e instanceof Error ? e.message : 'Erro ao editar lançamento') }
     })
   }
   async function handlePagamentoDAS(valor: number, data: Date) {
@@ -572,6 +578,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
             fechado={d.fechado}
             isPending={isPending}
             onRemove={handleRemove}
+            onEditFixo={handleEditFixo}
           />
         </div>
 
@@ -886,13 +893,31 @@ function KPICard({ label, value, color, sub, big }: {
   )
 }
 
-function GrupoLancamentos({ titulo, lancamentos, total, totalLabel, cor, fechado, isPending, onRemove }: {
+function GrupoLancamentos({ titulo, lancamentos, total, totalLabel, cor, fechado, isPending, onRemove, onEditFixo }: {
   titulo: string; lancamentos: Lancamento[]; total: number; totalLabel: string
   cor: 'emerald' | 'red' | 'slate'; fechado: boolean; isPending: boolean
   onRemove: (id: string) => void
+  onEditFixo?: (id: string, valor: number) => void
 }) {
   const COR = { emerald: 'text-emerald-600', red: 'text-red-500', slate: 'text-slate-600' }
+  const [editandoId, setEditandoId] = useState<string | null>(null)
+  const [novoValor, setNovoValor] = useState('')
+
   if (lancamentos.length === 0) return null
+
+  function iniciarEdicao(l: Lancamento) {
+    setEditandoId(l.id)
+    setNovoValor(l.valor.toFixed(2))
+  }
+
+  function confirmarEdicao() {
+    if (!editandoId || !onEditFixo) return
+    const v = parseFloat(novoValor.replace(',', '.'))
+    if (!v || v <= 0) return
+    onEditFixo(editandoId, v)
+    setEditandoId(null)
+  }
+
   return (
     <Card className="border-0 shadow-sm overflow-hidden">
       <CardHeader className="pb-2 pt-4 px-5 bg-slate-50/50">
@@ -919,17 +944,53 @@ function GrupoLancamentos({ titulo, lancamentos, total, totalLabel, cor, fechado
                   {l.categoria && l.categoria !== l.canal && ` · ${CATEGORIA_LABELS[l.categoria] ?? l.categoria}`}
                 </p>
               </div>
-              <span className={cn('text-xs font-black font-mono shrink-0', COR[cor])}>
-                {cor === 'emerald' ? '+' : '-'}{formatCurrency(l.valor)}
-              </span>
-              {!fechado && (
-                <button
-                  onClick={() => onRemove(l.id)}
-                  disabled={isPending}
-                  className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all shrink-0"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+
+              {/* Edição inline de valor — só para despesas fixas */}
+              {editandoId === l.id ? (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[10px] text-slate-400">R$</span>
+                  <input
+                    type="number" step="0.01" autoFocus
+                    value={novoValor}
+                    onChange={e => setNovoValor(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') confirmarEdicao(); if (e.key === 'Escape') setEditandoId(null) }}
+                    className="w-24 h-7 px-2 text-xs font-mono border border-blue-400 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  />
+                  <button onClick={confirmarEdicao} disabled={isPending}
+                    className="h-7 px-2 text-[10px] font-bold bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50">
+                    OK
+                  </button>
+                  <button onClick={() => setEditandoId(null)}
+                    className="h-7 px-1.5 text-[10px] text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <span className={cn('text-xs font-black font-mono shrink-0', COR[cor])}>
+                  {cor === 'emerald' ? '+' : '-'}{formatCurrency(l.valor)}
+                </span>
+              )}
+
+              {!fechado && editandoId !== l.id && (
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                  {l.e_fixo && onEditFixo && (
+                    <button
+                      onClick={() => iniciarEdicao(l)}
+                      disabled={isPending}
+                      className="p-1 text-slate-300 hover:text-blue-500 transition-colors"
+                      title="Editar valor deste mês"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onRemove(l.id)}
+                    disabled={isPending}
+                    className="p-1 text-slate-300 hover:text-red-500 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               )}
             </div>
           ))}
