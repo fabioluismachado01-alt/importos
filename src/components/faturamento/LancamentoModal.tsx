@@ -18,6 +18,8 @@ interface Props {
 
 type TipoLanc = 'RECEITA' | 'DESPESA_VARIAVEL' | 'DESPESA_FIXA'
 
+const CUSTOM_VALUE = '__CUSTOM__'
+
 export function LancamentoModal({ ano, mes, onClose, onSuccess }: Props) {
   const today = new Date()
   const defaultDate = new Date(ano, mes - 1, Math.min(today.getDate(), new Date(ano, mes, 0).getDate()))
@@ -25,8 +27,10 @@ export function LancamentoModal({ ano, mes, onClose, onSuccess }: Props) {
 
   const [tipo, setTipo] = useState<TipoLanc>('RECEITA')
   const [canal, setCanal] = useState('MERCADO_LIVRE')
+  const [canalCustom, setCanalCustom] = useState('')
   const [categoria, setCategoria] = useState('ARMAZENAGEM')
   const [categoriaFixa, setCategoriaFixa] = useState('PRO_LABORE')
+  const [categoriaCustom, setCategoriaCustom] = useState('')
   const [valor, setValor] = useState('')
   const [data, setData] = useState(defaultDate)
   const [descricao, setDescricao] = useState('')
@@ -35,22 +39,39 @@ export function LancamentoModal({ ano, mes, onClose, onSuccess }: Props) {
 
   const categorias = tipo === 'DESPESA_VARIAVEL' ? CATEGORIAS_VARIAVEL : CATEGORIAS_FIXA
   const categoriaAtual = tipo === 'DESPESA_VARIAVEL' ? categoria : categoriaFixa
+  const isCustomCanal = canal === CUSTOM_VALUE
+  const isCustomCategoria = categoriaAtual === CUSTOM_VALUE
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const v = parseFloat(valor.replace(',', '.'))
     if (isNaN(v) || v <= 0) { setError('Informe um valor válido'); return }
+
+    // Valida campos custom
+    if (tipo === 'RECEITA' && isCustomCanal && !canalCustom.trim()) {
+      setError('Informe o nome do canal'); return
+    }
+    if (tipo !== 'RECEITA' && isCustomCategoria && !categoriaCustom.trim()) {
+      setError('Informe o nome da categoria'); return
+    }
+
     setLoading(true); setError('')
     try {
-      const cat = tipo === 'RECEITA' ? canal : categoriaAtual
-      const desc = descricao || (tipo === 'RECEITA'
-        ? CANAIS_RECEITA.find(c => c.value === canal)?.label ?? canal
-        : categorias.find(c => c.value === categoriaAtual)?.label ?? categoriaAtual)
+      let cat: string
+      let desc: string
+
+      if (tipo === 'RECEITA') {
+        cat = isCustomCanal ? canalCustom.trim() : canal
+        desc = descricao || (isCustomCanal ? canalCustom.trim() : (CANAIS_RECEITA.find(c => c.value === canal)?.label ?? canal))
+      } else {
+        cat = isCustomCategoria ? categoriaCustom.trim() : categoriaAtual
+        desc = descricao || (isCustomCategoria ? categoriaCustom.trim() : (categorias.find(c => c.value === categoriaAtual)?.label ?? categoriaAtual))
+      }
 
       await addLancamento(ano, mes, {
         tipo,
         categoria: cat,
-        canal: tipo === 'RECEITA' ? canal : undefined,
+        canal: tipo === 'RECEITA' ? cat : undefined,
         descricao: desc,
         valor: v,
         data: new Date(data),
@@ -110,7 +131,17 @@ export function LancamentoModal({ ano, mes, onClose, onSuccess }: Props) {
                 {CANAIS_RECEITA.map(c => (
                   <option key={c.value} value={c.value}>{c.label}</option>
                 ))}
+                <option value={CUSTOM_VALUE}>✏ Outro canal (digitar)...</option>
               </select>
+              {isCustomCanal && (
+                <Input
+                  autoFocus
+                  value={canalCustom}
+                  onChange={e => setCanalCustom(e.target.value)}
+                  placeholder="Ex: Site próprio, Feira..."
+                  className="mt-2"
+                />
+              )}
             </div>
           )}
 
@@ -119,14 +150,24 @@ export function LancamentoModal({ ano, mes, onClose, onSuccess }: Props) {
             <div>
               <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria *</Label>
               <select
-                value={tipo === 'DESPESA_VARIAVEL' ? categoria : categoriaFixa}
+                value={categoriaAtual}
                 onChange={(e) => tipo === 'DESPESA_VARIAVEL' ? setCategoria(e.target.value) : setCategoriaFixa(e.target.value)}
                 className="mt-1.5 w-full h-10 px-3 rounded-xl border border-slate-200 text-sm bg-white focus:outline-none focus:border-emerald-500"
               >
                 {categorias.map(c => (
                   <option key={c.value} value={c.value}>{c.label}</option>
                 ))}
+                <option value={CUSTOM_VALUE}>✏ Outra (digitar)...</option>
               </select>
+              {isCustomCategoria && (
+                <Input
+                  autoFocus
+                  value={categoriaCustom}
+                  onChange={e => setCategoriaCustom(e.target.value)}
+                  placeholder="Ex: Embalagens, Software, Consultor..."
+                  className="mt-2"
+                />
+              )}
             </div>
           )}
 
@@ -154,13 +195,13 @@ export function LancamentoModal({ ano, mes, onClose, onSuccess }: Props) {
             </div>
           </div>
 
-          {/* Descrição opcional */}
+          {/* Descrição */}
           <div>
             <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição (opcional)</Label>
             <Input
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
-              placeholder="Ex: NF 4421, Lote Shopee..."
+              placeholder="Ex: NF 4421, fornecedor, referência..."
               className="mt-1.5"
             />
           </div>
