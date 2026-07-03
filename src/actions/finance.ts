@@ -421,6 +421,94 @@ export async function deleteDespesaFixaTemplate(id: string) {
 }
 
 // =============================================
+// REAJUSTE DE DESPESA FIXA
+// =============================================
+
+export async function reajustarDespesaFixa(params: {
+  id: string
+  nome: string
+  novoValor: number
+  ativo: boolean
+  observacoes?: string
+  recorrente: boolean
+  // se propagarMeses=true, atualiza lançamentos e_fixo de meses abertos >= anoInicio/mesInicio
+  propagarMeses: boolean
+  anoInicio?: number
+  mesInicio?: number
+}): Promise<{ ok: boolean; mesesAtualizados: number }> {
+  const { workspaceId } = await getAuthContext()
+
+  const template = await prisma.despesa_fixa_template.findFirst({
+    where: { id: params.id, workspace_id: workspaceId },
+  })
+  if (!template) throw new Error('Despesa fixa não encontrada')
+
+  // 1. Atualiza o template
+  await prisma.despesa_fixa_template.update({
+    where: { id: params.id },
+    data: {
+      nome: params.nome,
+      valor_padrao: params.novoValor,
+      ativo: params.ativo,
+      observacoes: params.observacoes ?? null,
+      recorrente: params.recorrente,
+    },
+  })
+
+  let mesesAtualizados = 0
+
+  // 2. Propaga para meses abertos se solicitado
+  if (params.propagarMeses && params.anoInicio !== undefined && params.mesInicio !== undefined) {
+    const { anoInicio, mesInicio } = params
+
+    // Busca todos os faturamento_mes do workspace que não estão fechados e são >= anoInicio/mesInicio
+    const meses = await prisma.faturamento_mes.findMany({
+      where: {
+        workspace_id: workspaceId,
+        fechado: false,
+        OR: [
+          { ano: { gt: anoInicio } },
+          { ano: anoInicio, mes: { gte: mesInicio } },
+        ],
+      },
+      include: {
+        lancamentos: {
+          where: {
+            e_fixo: true,
+            // Busca pelo nome antigo OU nome novo (caso renomeou)
+            descricao: { in: [template.nome, params.nome] },
+          },
+          select: { id: true },
+        },
+      },
+    })
+
+    for (const fat of meses) {
+      if (fat.lancamentos.length === 0) continue
+
+      await prisma.lancamento.updateMany({
+        where: {
+          id: { in: fat.lancamentos.map(l => l.id) },
+        },
+        data: {
+          valor: params.novoValor,
+          descricao: params.nome,
+        },
+      })
+
+      await recalcularMes(fat.id, workspaceId, fat.ano, fat.mes)
+      revalidatePath(`/faturamento/${fat.ano}/${fat.mes}`)
+      mesesAtualizados++
+    }
+  }
+
+  revalidatePath('/config')
+  revalidatePath('/faturamento')
+
+  return { ok: true, mesesAtualizados }
+}
+
+// =============================================
 // REGISTRAR PAGAMENTO DAS
 // =============================================
 
