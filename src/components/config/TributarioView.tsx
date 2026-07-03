@@ -15,7 +15,14 @@ interface Empresa {
   aliquota_simples: number; icms_padrao: number; regime_tributario: string
 }
 interface Aliquota { mes: number; aliquota: number }
-interface Props { empresa: Empresa | null; aliquotas: Aliquota[]; ano: number }
+interface MesFat { mes: number; aliquota_simples: number }
+interface Props { empresa: Empresa | null; aliquotas: Aliquota[]; mesesFaturamento: MesFat[]; ano: number }
+
+// Normaliza valores que podem estar em decimal (0.06) ou percentual (6.0)
+function normAliquota(v: number): number {
+  if (v === 0) return 0
+  return v > 1 ? v : v * 100
+}
 
 const ESTADOS_BR = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
 const REGIMES = [
@@ -26,22 +33,40 @@ const REGIMES = [
 ]
 const MESES_ANO = Array.from({ length: 12 }, (_, i) => i + 1)
 
-export function TributarioView({ empresa, aliquotas, ano }: Props) {
+export function TributarioView({ empresa, aliquotas, mesesFaturamento, ano }: Props) {
   const [form, setForm] = useState({
     razao_social: empresa?.razao_social ?? '',
     cnpj: empresa?.cnpj ?? '',
     estado_uf: empresa?.estado_uf ?? 'SP',
-    aliquota_simples: ((empresa?.aliquota_simples ?? 0.06) * 100).toFixed(2),
+    aliquota_simples: normAliquota(empresa?.aliquota_simples ?? 6).toFixed(2),
     icms_padrao: (empresa?.icms_padrao ?? 17).toFixed(1),
     regime_tributario: empresa?.regime_tributario ?? 'SIMPLES_NACIONAL',
   })
-  const [aliquotasMes, setAliquotasMes] = useState<Record<number, string>>(
-    MESES_ANO.reduce((acc, m) => {
-      const a = aliquotas.find(x => x.mes === m)
-      acc[m] = a ? (a.aliquota * 100).toFixed(2) : ''
+
+  // Monta grade: aliquota_historico tem prioridade; fallback para faturamento_mes; futuro usa último valor
+  const [aliquotasMes, setAliquotasMes] = useState<Record<number, string>>(() => {
+    const mesAtualNum = new Date().getMonth() + 1
+    let ultimaKnown = normAliquota(empresa?.aliquota_simples ?? 6)
+    return MESES_ANO.reduce((acc, m) => {
+      const hist = aliquotas.find(x => x.mes === m)
+      const fat = mesesFaturamento.find(x => x.mes === m)
+      if (hist) {
+        const v = normAliquota(hist.aliquota)
+        acc[m] = v.toFixed(2)
+        ultimaKnown = v
+      } else if (fat && fat.aliquota_simples > 0) {
+        const v = normAliquota(fat.aliquota_simples)
+        acc[m] = v.toFixed(2)
+        ultimaKnown = v
+      } else if (m > mesAtualNum) {
+        // Mês futuro: pré-preenche com último valor conhecido como sugestão
+        acc[m] = ultimaKnown.toFixed(2)
+      } else {
+        acc[m] = ''
+      }
       return acc
     }, {} as Record<number, string>)
-  )
+  })
   const [saving, startTransition] = useTransition()
   const [saved, setSaved] = useState(false)
 
@@ -51,7 +76,7 @@ export function TributarioView({ empresa, aliquotas, ano }: Props) {
         razao_social: form.razao_social,
         cnpj: form.cnpj,
         estado_uf: form.estado_uf,
-        aliquota_simples: parseFloat(form.aliquota_simples) / 100,
+        aliquota_simples: parseFloat(form.aliquota_simples) || 6,
         icms_padrao: parseFloat(form.icms_padrao),
         regime_tributario: form.regime_tributario,
       })
@@ -62,8 +87,8 @@ export function TributarioView({ empresa, aliquotas, ano }: Props) {
 
   async function handleSaveAliquota(mes: number) {
     const val = parseFloat(aliquotasMes[mes].replace(',', '.'))
-    if (isNaN(val)) return
-    await upsertAliquota(ano, mes, val / 100)
+    if (isNaN(val) || val <= 0) return
+    await upsertAliquota(ano, mes, val)
   }
 
   const mesAtual = new Date().getMonth() + 1
@@ -149,13 +174,16 @@ export function TributarioView({ empresa, aliquotas, ano }: Props) {
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
             {MESES_ANO.map(mes => {
               const isAtual = mes === mesAtual
+              const isFuturo = mes > mesAtual
+              const temValorSalvo = !!aliquotas.find(x => x.mes === mes) || !!mesesFaturamento.find(x => x.mes === mes && x.aliquota_simples > 0)
               const temValor = aliquotasMes[mes] !== ''
               return (
-                <div key={mes} className={`p-3 rounded-xl border transition-all ${isAtual ? 'border-emerald-400 bg-emerald-50/30' : 'border-slate-200'}`}>
+                <div key={mes} className={`p-3 rounded-xl border transition-all ${isAtual ? 'border-emerald-400 bg-emerald-50/30' : isFuturo ? 'border-slate-200 bg-slate-50/50' : 'border-slate-200'}`}>
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[10px] font-black text-slate-500 uppercase">{getMesNome(mes).slice(0, 3)}</span>
+                    <span className={`text-[10px] font-black uppercase ${isFuturo ? 'text-slate-400' : 'text-slate-500'}`}>{getMesNome(mes).slice(0, 3)}</span>
                     {isAtual && <Badge className="text-[8px] bg-emerald-100 text-emerald-700 border-emerald-200 h-3.5 px-1">Atual</Badge>}
-                    {!isAtual && temValor && <Badge className="text-[8px] bg-slate-100 text-slate-500 border-slate-200 h-3.5 px-1">✓</Badge>}
+                    {!isAtual && temValorSalvo && <Badge className="text-[8px] bg-slate-100 text-slate-500 border-slate-200 h-3.5 px-1">✓</Badge>}
+                    {isFuturo && !temValorSalvo && temValor && <Badge className="text-[8px] bg-amber-50 text-amber-600 border-amber-200 h-3.5 px-1">prev</Badge>}
                   </div>
                   <div className="flex items-center gap-1">
                     <Input

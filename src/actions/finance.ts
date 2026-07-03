@@ -12,6 +12,11 @@ import {
 // HELPERS
 // =============================================
 
+// Normaliza alíquota para decimal (0.06 = 6%) independente de como foi salva
+function toDecimalAliq(v: number): number {
+  return v > 1 ? v / 100 : v
+}
+
 async function getConfig(workspaceId: string, ano: number): Promise<FinanceConfig> {
   const empresa = await prisma.empresa.findUnique({
     where: { workspace_id: workspaceId },
@@ -21,7 +26,7 @@ async function getConfig(workspaceId: string, ano: number): Promise<FinanceConfi
     where: { workspace_id_ano: { workspace_id: workspaceId, ano } },
   })
   return {
-    aliquota_simples: empresa?.aliquota_simples ?? 0.06,
+    aliquota_simples: toDecimalAliq(empresa?.aliquota_simples ?? 6),
     percentual_dlr_socio: finConfig?.percentual_dlr_socio ?? 0.5,
     percentual_reinvestimento: finConfig?.percentual_reinvestimento ?? 0.5,
     formula_previdencia: finConfig?.formula_previdencia ?? 'PRO_LABORE*0.20+LUCRO_BRUTO*0.11',
@@ -47,7 +52,7 @@ export async function recalcularMes(faturamentoId: string, workspaceId: string, 
 
   const config = await getConfig(workspaceId, ano)
   if (fat) {
-    config.aliquota_simples = fat.aliquota_simples
+    config.aliquota_simples = toDecimalAliq(fat.aliquota_simples)
     config.meta_mes = fat.meta_mes
     config.dias_no_mes = fat.dias_no_mes
     config.dlr_modo = (fat.dlr_modo as 'PERCENTUAL' | 'FIXO') ?? 'PERCENTUAL'
