@@ -125,10 +125,19 @@ export async function recalcularMes(faturamentoId: string, workspaceId: string, 
       roas_atual: kpis.roas_atual,
       dlr_socio: kpis.dlr_socio,
       reinvestimento: kpis.reinvestimento,
-      // dias_com_venda: NÃO sobrescrever aqui.
-      // O valor real vem da importação por marketplace (Amazon salva o count real).
-      // Se reescrevêssemos aqui, ficaríamos com 1 (todos os lançamentos = data 01/mês).
-      // Preservar o valor já persistido no DB.
+      // dias_com_venda: calculado abaixo.
+      // Canais consolidados (ML, Shopee, Magalu, TikTok, Avulsas) salvam 1 lançamento
+      // com data 01/mês — se há receita deles, cobrem o mês inteiro → dias_no_mes.
+      // Amazon salva o count real de dias. Usamos o maior entre os dois.
+      dias_com_venda: (() => {
+        const temConsolidado = lancamentos.some(l =>
+          l.tipo === 'RECEITA' &&
+          /\[ML\]|\[Shopee\]|\[Magalu\]|\[TikTok\]|\[Avulsas\]|ML Import/.test(l.descricao)
+        )
+        const diasAmazon = fat?.dias_com_venda ?? 0
+        if (temConsolidado) return fat?.dias_no_mes ?? 30
+        return diasAmazon > 1 ? diasAmazon : (fat?.dias_no_mes ?? 30)
+      })(),
     },
   })
 }
