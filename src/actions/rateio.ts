@@ -28,6 +28,7 @@ export interface SalvarRateioInput {
   modo: 'SIMPLIFICADA' | 'FORMAL'
   modal: 'MARITIMO' | 'AEREO'
   cambio: number
+  cambio_frete?: number | null
   frete_usd: number
   imposto_simpl_brl?: number
   siscomex_brl?: number
@@ -40,6 +41,7 @@ export interface SalvarRateioInput {
   valor_aduaneiro_brl: number
   cbm_total?: number
   origem?: string
+  custo_vigencia_data?: Date | null
   itens: RateioItemInput[]
 }
 
@@ -58,6 +60,7 @@ export async function salvarRateio(input: SalvarRateioInput) {
       modo: input.modo,
       modal: input.modal,
       cambio: input.cambio,
+      cambio_frete: input.cambio_frete ?? null,
       frete_usd: input.frete_usd,
       imposto_simpl_brl: input.imposto_simpl_brl ?? null,
       siscomex_brl: input.siscomex_brl ?? null,
@@ -71,6 +74,7 @@ export async function salvarRateio(input: SalvarRateioInput) {
       cbm_total: input.cbm_total ?? null,
       peso_total_kg: pesoTotal,
       origem: input.origem ?? null,
+      custo_vigencia_data: input.custo_vigencia_data ?? null,
       status: 'SALVO',
       created_by: user.id,
       itens: {
@@ -104,7 +108,7 @@ export async function salvarRateio(input: SalvarRateioInput) {
       pesoKg: pesoTotal,
       cbm: input.cbm_total ?? null,
       freteUsd: input.frete_usd,
-      cambio: input.cambio,
+      cambio: input.cambio_frete ?? input.cambio,
     })
   }
 
@@ -125,9 +129,12 @@ export async function listarRateios() {
       id: true, nome: true, modo: true,
       ano_ref: true, mes_ref: true,
       valor_aduaneiro_brl: true,
-      cambio: true, frete_usd: true,
+      cambio: true, cambio_frete: true, frete_usd: true,
+      custo_vigencia_data: true,
+      custos_aplicados: true,
+      custos_aplicados_em: true,
       created_at: true,
-      itens: { select: { nome: true, qty: true, unit_usd: true, custo_unit_brl: true } },
+      itens: { select: { nome: true, qty: true, unit_usd: true, custo_unit_brl: true, produto_id: true } },
     },
   })
 }
@@ -151,7 +158,7 @@ export async function getRateioCompleto(id: string) {
     where: { id, workspace_id: workspaceId },
     select: {
       id: true, nome: true, modo: true,
-      cambio: true, frete_usd: true,
+      cambio: true, cambio_frete: true, frete_usd: true,
       imposto_simpl_brl: true, siscomex_brl: true, extras_brl: true,
       venda_imposto_perc: true, venda_taxa_mkt_perc: true, venda_taxa_fixa_brl: true,
       ano_ref: true, mes_ref: true,
@@ -166,6 +173,40 @@ export async function getRateioCompleto(id: string) {
       },
     },
   })
+}
+
+// ─── Aplicar custos ao catálogo ──────────────────────────────────────────────
+
+export async function aplicarCustosRateio(id: string, vigenciaData?: Date) {
+  const { workspaceId } = await getAuthContext()
+  const rateio = await prisma.rateio.findFirst({
+    where: { id, workspace_id: workspaceId },
+    include: { itens: { where: { produto_id: { not: null } } } },
+  })
+  if (!rateio) throw new Error('Rateio não encontrado')
+
+  const itensComProduto = rateio.itens.filter(i => i.produto_id && i.custo_unit_brl)
+  if (itensComProduto.length === 0) throw new Error('Nenhum item com produto vinculado e custo calculado')
+
+  for (const item of itensComProduto) {
+    await prisma.produto_catalogo.update({
+      where: { id: item.produto_id! },
+      data: { custo_brl: item.custo_unit_brl! },
+    })
+  }
+
+  await prisma.rateio.update({
+    where: { id },
+    data: {
+      custos_aplicados: true,
+      custos_aplicados_em: new Date(),
+      custo_vigencia_data: vigenciaData ?? rateio.custo_vigencia_data ?? new Date(),
+    },
+  })
+
+  revalidatePath('/ferramentas/rateio')
+  revalidatePath('/produtos')
+  return { ok: true, count: itensComProduto.length }
 }
 
 // ─── Deletar Rateio ───────────────────────────────────────────────────────────

@@ -5,7 +5,8 @@ import { usePersistedState } from '@/hooks/usePersistedState'
 import { cn } from '@/lib/utils'
 import { Plus, Trash2, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, ChevronRight, Printer, Save, X, CheckCheck } from 'lucide-react'
 import { RateioReport } from './reports/RateioReport'
-import { salvarRateio, deletarRateio, getRateioCompleto } from '@/actions/rateio'
+import { salvarRateio, deletarRateio, getRateioCompleto, aplicarCustosRateio } from '@/actions/rateio'
+import { DashboardUsd } from '@/components/dashboard/DashboardUsd'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -13,6 +14,7 @@ type Mode = 'simplificada' | 'formal'
 
 interface GlobalParams {
   dolar: number
+  dolarFrete: number   // câmbio do frete (courier/DIR) — pode diferir do dólar da mercadoria
   freightUsd: number
   // Simplificada
   taxesBrl: number
@@ -78,7 +80,7 @@ const INITIAL_ITEMS: RateioItem[] = [
 ]
 
 const DEFAULT_PARAMS: GlobalParams = {
-  dolar: 5.80, freightUsd: 350,
+  dolar: 5.80, dolarFrete: 5.80, freightUsd: 350,
   taxesBrl: 6500, siscomex: 675, extras: 6715,
   dasPercent: 6, mktPercent: 16.5, mktFixed: 5.50,
 }
@@ -103,7 +105,7 @@ function calcResults(items: RateioItem[], p: GlobalParams, mode: Mode): ItemResu
     const propFob  = totalFobUsd  > 0 ? fobTotalUsd  / totalFobUsd  : 0
 
     const fobBrl   = fobTotalUsd * p.dolar
-    const freteBrl = p.freightUsd * propPeso * p.dolar
+    const freteBrl = p.freightUsd * propPeso * p.dolarFrete
     // CIF = FOB + Frete+Seguro (base dos créditos PIS/COFINS de importação)
     const cifBrl   = fobBrl + freteBrl
     const cifUnitBrl = item.qty > 0 ? cifBrl / item.qty : 0
@@ -196,8 +198,12 @@ interface RateioSalvo {
   mes_ref: number | null
   valor_aduaneiro_brl: number | null
   cambio: number
+  cambio_frete: number | null
+  custo_vigencia_data: Date | null
+  custos_aplicados: boolean
+  custos_aplicados_em: Date | null
   created_at: Date
-  itens: { nome: string; qty: number; unit_usd: number; custo_unit_brl: number | null }[]
+  itens: { nome: string; qty: number; unit_usd: number; custo_unit_brl: number | null; produto_id: string | null }[]
 }
 
 const MESES_ABREV = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
@@ -216,6 +222,7 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
     setMode(r.modo.toLowerCase() as Mode)
     setParams({
       dolar: r.cambio,
+      dolarFrete: r.cambio_frete ?? r.cambio,
       freightUsd: r.frete_usd,
       taxesBrl: r.imposto_simpl_brl ?? DEFAULT_PARAMS.taxesBrl,
       siscomex: r.siscomex_brl ?? DEFAULT_PARAMS.siscomex,
@@ -297,12 +304,13 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
   const saveModal = mode === 'simplificada' ? 'AEREO' : 'MARITIMO'
   const [saveCbm, setSaveCbm] = useState('')
   const [saveOrigem, setSaveOrigem] = useState('')
+  const [saveVigencia, setSaveVigencia] = useState('')
   const [saveFeedback, setSaveFeedback] = useState<'idle' | 'ok' | 'erro'>('idle')
   const [isPending, startTransition] = useTransition()
 
-  // Valor aduaneiro CIF total = (totalFOB + frete) × câmbio
+  // Valor aduaneiro CIF total = FOB×dólar_mercadoria + frete×dólar_frete
   const totalFobUsd = items.reduce((s, item) => s + item.qty * item.unitUsd, 0)
-  const valorAduaneiroBrl = (totalFobUsd + params.freightUsd) * params.dolar
+  const valorAduaneiroBrl = totalFobUsd * params.dolar + params.freightUsd * params.dolarFrete
 
   function handleSave() {
     const nomeParaSalvar = saveNome.trim() || `Lote ${String(saveMes).padStart(2, '0')}/${saveAno}`
@@ -314,6 +322,7 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
           modo: mode === 'simplificada' ? 'SIMPLIFICADA' : 'FORMAL',
           modal: saveModal,
           cambio: params.dolar,
+          cambio_frete: params.dolarFrete !== params.dolar ? params.dolarFrete : null,
           frete_usd: params.freightUsd,
           imposto_simpl_brl: mode === 'simplificada' ? params.taxesBrl : undefined,
           siscomex_brl: mode === 'formal' ? params.siscomex : undefined,
@@ -326,6 +335,7 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
           valor_aduaneiro_brl: valorAduaneiroBrl,
           cbm_total: !isNaN(cbmParsed) && cbmParsed > 0 ? cbmParsed : undefined,
           origem: saveOrigem.trim() || undefined,
+          custo_vigencia_data: saveVigencia ? new Date(saveVigencia) : null,
           itens: items.map(item => ({
             nome: item.name,
             produto_id: item.produtoId ?? undefined,
@@ -418,14 +428,22 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
         {/* ── COLUNA ESQUERDA: PARÂMETROS ── */}
         <div className="no-print col-span-12 lg:col-span-3 space-y-4">
 
+          {/* Cotação do dólar ao vivo */}
+          <DashboardUsd />
+
           {/* Import params */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 border-t-4 border-t-slate-900">
             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4">Parâmetros de Importação</p>
             <div className="space-y-3">
               <div>
-                <Label>Dólar de Câmbio (R$)</Label>
+                <Label>Dólar FOB — Mercadoria (R$)</Label>
                 <NInput value={params.dolar} onChange={v => setP('dolar', v)} step="0.01"
                   className="font-black text-emerald-700" />
+              </div>
+              <div>
+                <Label>Dólar Frete — DIR/Courier (R$)</Label>
+                <NInput value={params.dolarFrete} onChange={v => setP('dolarFrete', v)} step="0.01"
+                  className="font-black text-sky-700" />
               </div>
               <div>
                 <Label>Frete + Seguro Total (USD)</Label>
@@ -514,16 +532,35 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
                 {brl(totalLucro)}
               </p>
             </div>
-            <div className="border-t border-slate-700 pt-3">
-              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Margem Média do Lote</p>
-              <div className="flex items-center gap-2 mt-1">
-                {avgMargem >= 0
-                  ? <TrendingUp className="w-4 h-4 text-emerald-400" />
-                  : <TrendingDown className="w-4 h-4 text-red-400" />
-                }
-                <p className={cn('text-lg font-black font-mono', avgMargem > 20 ? 'text-emerald-400' : avgMargem > 10 ? 'text-amber-400' : 'text-red-400')}>
-                  {fmtPct(avgMargem)}
-                </p>
+            <div className="border-t border-slate-700 pt-3 grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Margem Média</p>
+                <div className="flex items-center gap-1.5 mt-1">
+                  {avgMargem >= 0
+                    ? <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                    : <TrendingDown className="w-3.5 h-3.5 text-red-400" />
+                  }
+                  <p className={cn('text-lg font-black font-mono', avgMargem > 20 ? 'text-emerald-400' : avgMargem > 10 ? 'text-amber-400' : 'text-red-400')}>
+                    {fmtPct(avgMargem)}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">ROI do Lote</p>
+                {(() => {
+                  const roi = totalInvestido > 0 ? (totalLucro / totalInvestido) * 100 : 0
+                  return (
+                    <div className="flex items-center gap-1.5 mt-1">
+                      {roi >= 0
+                        ? <TrendingUp className="w-3.5 h-3.5 text-purple-400" />
+                        : <TrendingDown className="w-3.5 h-3.5 text-red-400" />
+                      }
+                      <p className={cn('text-lg font-black font-mono', roi > 50 ? 'text-purple-400' : roi > 20 ? 'text-amber-400' : 'text-red-400')}>
+                        {fmtPct(roi)}
+                      </p>
+                    </div>
+                  )
+                })()}
               </div>
             </div>
           </div>
@@ -808,6 +845,19 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
                     />
                   </div>
                 </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Vigência do custo
+                    <span className="ml-1 text-[10px] font-normal text-slate-400">— a partir de quando o novo custo entra em vigor</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={saveVigencia}
+                    onChange={e => setSaveVigencia(e.target.value)}
+                    className="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Deixe em branco para aplicar manualmente depois. Use esta data quando já tiver estoque antigo em andamento.</p>
+                </div>
               </div>
 
               <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-500 space-y-1">
@@ -881,12 +931,15 @@ export function RateioView({ workspaceId = 'default', produtos = [], rateiosSalv
 // ─── RateioSalvoRow ───────────────────────────────────────────────────────────
 
 function RateioSalvoRow({ rateio, onEditar }: {
-  rateio: { id: string; nome: string; modo: string; ano_ref: number | null; mes_ref: number | null; valor_aduaneiro_brl: number | null; cambio: number; created_at: Date; itens: { nome: string; qty: number; unit_usd: number; custo_unit_brl: number | null }[] }
+  rateio: RateioSalvo
   onEditar: (r: Awaited<ReturnType<typeof getRateioCompleto>>) => void
 }) {
   const [isPending, startTransition] = useTransition()
   const [confirmDel, setConfirmDel] = useState(false)
   const [isLoadingEdit, setIsLoadingEdit] = useState(false)
+  const [confirmAplicar, setConfirmAplicar] = useState(false)
+  const [aplicarVigencia, setAplicarVigencia] = useState(() => new Date().toISOString().split('T')[0])
+  const [aplicarFeedback, setAplicarFeedback] = useState<'idle' | 'ok' | 'erro'>('idle')
 
   async function handleEditar() {
     setIsLoadingEdit(true)
@@ -906,42 +959,109 @@ function RateioSalvoRow({ rateio, onEditar }: {
     })
   }
 
+  function handleAplicar() {
+    startTransition(async () => {
+      try {
+        await aplicarCustosRateio(rateio.id, new Date(aplicarVigencia))
+        setAplicarFeedback('ok')
+        setTimeout(() => { setConfirmAplicar(false); setAplicarFeedback('idle') }, 2000)
+      } catch {
+        setAplicarFeedback('erro')
+      }
+    })
+  }
+
+  const itensVinculados = rateio.itens.filter(i => i.produto_id).length
+
   return (
-    <div className="py-4 flex items-start gap-4">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-semibold text-slate-800 truncate">{rateio.nome}</span>
-          <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{rateio.modo}</span>
-          {mesRef && <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">Ref. {mesRef}</span>}
+    <div className="py-4 space-y-3">
+      <div className="flex items-start gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-slate-800 truncate">{rateio.nome}</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{rateio.modo}</span>
+            {mesRef && <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">Ref. {mesRef}</span>}
+            {rateio.custos_aplicados
+              ? <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">✓ Custos aplicados {rateio.custos_aplicados_em ? new Date(rateio.custos_aplicados_em).toLocaleDateString('pt-BR') : ''}</span>
+              : itensVinculados > 0 && <span className="text-[10px] font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">⚠ Custos pendentes</span>
+            }
+            {rateio.custo_vigencia_data && (
+              <span className="text-[10px] font-bold bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full">
+                Vigência: {new Date(rateio.custo_vigencia_data).toLocaleDateString('pt-BR')}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-4 mt-1 text-xs text-slate-400">
+            <span>{rateio.itens.length} produto{rateio.itens.length !== 1 ? 's' : ''}</span>
+            <span>{totalItens} un. totais</span>
+            <span>USD {totalUsd.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} FOB</span>
+            {rateio.valor_aduaneiro_brl && <span className="text-emerald-600 font-medium">R$ {rateio.valor_aduaneiro_brl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} CIF</span>}
+            <span>
+              {rateio.cambio_frete && rateio.cambio_frete !== rateio.cambio
+                ? <>Dólar FOB R$ {rateio.cambio.toFixed(4)} · Frete R$ {rateio.cambio_frete.toFixed(4)}</>
+                : <>Câmbio R$ {rateio.cambio.toFixed(4)}</>}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-4 mt-1 text-xs text-slate-400">
-          <span>{rateio.itens.length} produto{rateio.itens.length !== 1 ? 's' : ''}</span>
-          <span>{totalItens} un. totais</span>
-          <span>USD {totalUsd.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} FOB</span>
-          {rateio.valor_aduaneiro_brl && <span className="text-emerald-600 font-medium">R$ {rateio.valor_aduaneiro_brl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} CIF</span>}
-          <span>Câmbio R$ {rateio.cambio.toFixed(2)}</span>
-        </div>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <button onClick={handleEditar} disabled={isLoadingEdit} className="flex items-center gap-1 text-xs font-semibold text-emerald-600 border border-emerald-200 hover:bg-emerald-50 rounded-lg px-2 py-1.5 transition-colors">
-          {isLoadingEdit ? 'Carregando…' : '✏️ Editar'}
-        </button>
-        {confirmDel ? (
-          <>
-            <span className="text-xs text-slate-500">Confirmar exclusão?</span>
-            <button onClick={handleDelete} disabled={isPending} className="text-xs font-semibold text-red-600 border border-red-300 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
-              {isPending ? 'Excluindo…' : 'Sim, excluir'}
-            </button>
-            <button onClick={() => setConfirmDel(false)} className="text-xs font-semibold text-slate-500 border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors">
-              Cancelar
-            </button>
-          </>
-        ) : (
-          <button onClick={() => setConfirmDel(true)} className="flex items-center gap-1 text-xs font-semibold text-red-500 border border-red-200 hover:bg-red-50 rounded-lg px-2 py-1.5 transition-colors">
-            <Trash2 className="w-3.5 h-3.5" /> Excluir
+        <div className="flex items-center gap-2 shrink-0">
+          <button onClick={handleEditar} disabled={isLoadingEdit} className="flex items-center gap-1 text-xs font-semibold text-emerald-600 border border-emerald-200 hover:bg-emerald-50 rounded-lg px-2 py-1.5 transition-colors">
+            {isLoadingEdit ? 'Carregando…' : '✏️ Editar'}
           </button>
-        )}
+          {!rateio.custos_aplicados && itensVinculados > 0 && !confirmAplicar && (
+            <button onClick={() => setConfirmAplicar(true)} className="flex items-center gap-1 text-xs font-semibold text-blue-600 border border-blue-200 hover:bg-blue-50 rounded-lg px-2 py-1.5 transition-colors">
+              💰 Aplicar Custos
+            </button>
+          )}
+          {confirmDel ? (
+            <>
+              <span className="text-xs text-slate-500">Confirmar exclusão?</span>
+              <button onClick={handleDelete} disabled={isPending} className="text-xs font-semibold text-red-600 border border-red-300 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                {isPending ? 'Excluindo…' : 'Sim, excluir'}
+              </button>
+              <button onClick={() => setConfirmDel(false)} className="text-xs font-semibold text-slate-500 border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors">
+                Cancelar
+              </button>
+            </>
+          ) : (
+            <button onClick={() => setConfirmDel(true)} className="flex items-center gap-1 text-xs font-semibold text-red-500 border border-red-200 hover:bg-red-50 rounded-lg px-2 py-1.5 transition-colors">
+              <Trash2 className="w-3.5 h-3.5" /> Excluir
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Painel aplicar custos */}
+      {confirmAplicar && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+          {aplicarFeedback === 'ok' ? (
+            <p className="text-sm font-semibold text-blue-700">✓ Custos aplicados ao catálogo com sucesso!</p>
+          ) : (
+            <>
+              <p className="text-xs text-blue-700 font-semibold">Atualizar custo de {itensVinculados} produto{itensVinculados !== 1 ? 's' : ''} vinculado{itensVinculados !== 1 ? 's' : ''} no catálogo</p>
+              <div className="flex items-center gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Data de vigência</label>
+                  <input
+                    type="date"
+                    value={aplicarVigencia}
+                    onChange={e => setAplicarVigencia(e.target.value)}
+                    className="mt-1 block border border-blue-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400 bg-white"
+                  />
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <button onClick={handleAplicar} disabled={isPending} className="text-xs font-black text-white bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
+                    {isPending ? 'Aplicando…' : 'Confirmar'}
+                  </button>
+                  <button onClick={() => { setConfirmAplicar(false); setAplicarFeedback('idle') }} className="text-xs font-semibold text-slate-500 border border-slate-200 hover:bg-slate-50 px-3 py-2 rounded-lg transition-colors">
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+              {aplicarFeedback === 'erro' && <p className="text-xs text-red-600">Erro ao aplicar custos. Verifique se os produtos estão vinculados.</p>}
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }

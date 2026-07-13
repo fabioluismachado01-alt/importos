@@ -446,6 +446,7 @@ model rateio {
   nome                String
   modo                String   @default("SIMPLIFICADA")
   cambio              Float
+  cambio_frete        Float?   // câmbio do frete (courier/DIR); se null usa cambio
   frete_usd           Float    @default(0)
   imposto_simpl_brl   Float?
   siscomex_brl        Float?
@@ -464,6 +465,10 @@ model rateio {
   cbm_total           Float?   // volume total em m³ (da BL ou calculado pelas dims dos itens)
   peso_total_kg       Float?   // peso total do lote em kg (calculado ao salvar)
   origem              String?  // ex: Guangzhou, Yiwu
+  // Vigência e aplicação do custo ao catálogo
+  custo_vigencia_data DateTime?
+  custos_aplicados    Boolean  @default(false)
+  custos_aplicados_em DateTime?
   created_at          DateTime @default(now())
   updated_at          DateTime @updatedAt
   created_by          String
@@ -625,6 +630,7 @@ model produto_catalogo {
   custo_medio_usd Float?
   custo_brl       Float?   // custo já nacionalizado em R$ (análise de vendas ML)
   sku_interno     String?  // código SKU para vincular com relatórios ML
+  sku_alias       String?  // SKUs alternativos separados por vírgula — para quando ML/canal usa SKU errado
   ean             String?  // código EAN-13 para etiquetas
   preco_venda     Float?   // preço de venda sugerido para etiquetas
   peso_medio_kg   Float?
