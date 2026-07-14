@@ -65,7 +65,7 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
   const anoAtual = hoje.getFullYear()
   const mesAtual = hoje.getMonth() + 1
 
-  const [empresa, fatAtual, historico, aliquotasHist] = await Promise.all([
+  const [empresa, fatAtual, historico, aliquotasHist, mesesAliquota] = await Promise.all([
     prisma.empresa.findUnique({
       where: { workspace_id: workspaceId },
       select: { regime_tributario: true, aliquota_simples: true },
@@ -82,6 +82,11 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
     }),
     prisma.aliquota_historico.findMany({
       where: { workspace_id: workspaceId },
+    }),
+    // Fallback: aliquota_simples gravada por mês em faturamento_mes (mesma lógica do /config/tributario)
+    prisma.faturamento_mes.findMany({
+      where: { workspace_id: workspaceId, aliquota_simples: { gt: 0 } },
+      select: { ano: true, mes: true, aliquota_simples: true },
     }),
   ])
 
@@ -104,8 +109,13 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
     .reduce((acc, h) => acc + h.faturamento, 0)
 
   function getAliqMes(ano: number, mes: number): number {
+    // 1ª prioridade: aliquota_historico (registro explícito por mês)
     const hist = aliquotasHist.find(a => a.ano === ano && a.mes === mes)
     if (hist) return hist.aliquota > 1 ? hist.aliquota / 100 : hist.aliquota
+    // 2ª prioridade: aliquota_simples gravada em faturamento_mes (mesma lógica do /config/tributario)
+    const fat = mesesAliquota.find(f => f.ano === ano && f.mes === mes)
+    if (fat && fat.aliquota_simples > 0) return fat.aliquota_simples > 1 ? fat.aliquota_simples / 100 : fat.aliquota_simples
+    // fallback: alíquota global da empresa
     return aliquotaSimples
   }
 
