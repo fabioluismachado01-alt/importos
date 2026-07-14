@@ -6,7 +6,9 @@ import {
   ArrowRight, Wrench,
 } from 'lucide-react'
 import { getFaturamentoAnual, getProvisionalMesAtual } from '@/actions/finance'
+import { getAlertasCatalogo } from '@/actions/alertas-catalogo'
 import { DashboardUsd } from '@/components/dashboard/DashboardUsd'
+import { AlertasCatalogoBanner } from '@/components/dashboard/AlertasCatalogoBanner'
 
 export const metadata = { title: 'Dashboard — ImportOS' }
 
@@ -26,9 +28,11 @@ const FERRAMENTAS = [
 export default async function DashboardPage() {
   const ano    = new Date().getFullYear()
   const mesAtual = new Date().getMonth() + 1  // 1-12
-  const meses  = await getFaturamentoAnual(ano)
+  const [meses, alertas] = await Promise.all([
+    getFaturamentoAnual(ano),
+    getAlertasCatalogo(),
+  ])
 
-  // Mês atual — usa planilha importada se disponível, senão API ML (provisório)
   const mesData = meses.find(m => m.mes === mesAtual)
   const temPlanilha = (mesData?.receita_total ?? 0) > 0
   const provisional = !temPlanilha ? await getProvisionalMesAtual() : null
@@ -58,6 +62,9 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6 pb-10">
+
+      {/* ── ALERTAS DE CATÁLOGO ── */}
+      <AlertasCatalogoBanner alertas={alertas} />
 
       {/* ── HEADER ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
