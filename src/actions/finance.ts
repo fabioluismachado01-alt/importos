@@ -32,6 +32,9 @@ async function getConfig(workspaceId: string, ano: number): Promise<FinanceConfi
     formula_previdencia: finConfig?.formula_previdencia ?? 'PRO_LABORE*0.20+LUCRO_BRUTO*0.11',
     dias_no_mes: 30,
     meta_mes: 0,
+    // DLR global: lido aqui para que recalcularMes não sobrescreva com valor do mês armazenado
+    dlr_modo: (finConfig?.dlr_modo as 'PERCENTUAL' | 'FIXO') ?? undefined,
+    dlr_valor_fixo: finConfig?.dlr_valor_fixo ?? null,
   }
 }
 
@@ -55,9 +58,9 @@ export async function recalcularMes(faturamentoId: string, workspaceId: string, 
     config.aliquota_simples = toDecimalAliq(fat.aliquota_simples)
     config.meta_mes = fat.meta_mes
     config.dias_no_mes = fat.dias_no_mes
-    config.dlr_modo = (fat.dlr_modo as 'PERCENTUAL' | 'FIXO') ?? 'PERCENTUAL'
+    // dlr_modo e dlr_valor_fixo vêm do config global (getConfig acima)
+    // NÃO sobrescrever com o valor do mês — seria o modo antigo antes da mudança de config
     config.dlr_percentual_custom = fat.dlr_percentual_custom
-    config.dlr_valor_fixo = fat.dlr_valor_fixo
     // DAS real: só substitui a estimativa no cálculo do lucro depois de pago
     config.das_valor_real = fat.das_status === 'PAGO' ? fat.das_valor_real : null
   }

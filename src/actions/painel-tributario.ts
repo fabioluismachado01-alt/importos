@@ -121,10 +121,11 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
   const dasEstimado = estimarDAS(faturamentoMes, rbt12, anoRef, mesRef)
   const cargaEfetiva = faturamentoMes > 0 ? (dasEstimado / faturamentoMes) * 100 : 0
 
-  // Histórico 12 meses com DAS estimado por mês
-  let rbt12Acumulado = rbt12
+  // Histórico 12 meses: usa alíquota registrada em aliquota_historico para cada mês
+  // (não chama calcularSimples com RBT12 estático — isso daria a mesma alíquota para todos os meses)
   const historicoFormatado: MesHistorico[] = histOrdenado.slice(-12).map(h => {
-    const das = estimarDAS(h.faturamento, rbt12Acumulado, h.ano, h.mes)
+    const aliq = getAliqMes(h.ano, h.mes)
+    const das = h.faturamento * aliq
     const carga = h.faturamento > 0 ? (das / h.faturamento) * 100 : 0
     return {
       ano: h.ano,

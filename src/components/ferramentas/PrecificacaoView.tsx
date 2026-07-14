@@ -237,7 +237,7 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
   })
 
   const [chs, setChs] = usePersistedState<Record<string, ChannelState>>(
-    `${workspaceId}_prec_chs`,
+    `${workspaceId}_prec_chs_v3`,
     () => Object.fromEntries(CHANNELS.map(ch => [ch.id, initChannel(ch)]))
   )
 
@@ -719,15 +719,17 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
           <div className="space-y-2">
             {CHANNELS.map(ch => {
               const cs = chs[ch.id]
-              const safeN = (v: unknown, fb: number) => typeof v === 'number' && isFinite(v) ? v : fb
-              const custo  = safeN(global.costPrice, 0)
-              const taxR   = safeN(global.taxRate,   6)
-              const pack   = safeN(global.packaging, 0)
-              const defFee = ch.tiered ? tikTokFees(safeN(cs?.price, 19)).fee   : ch.defaultFee
-              const defFix = ch.tiered ? tikTokFees(safeN(cs?.price, 19)).fixed : ch.defaultFixed
-              const feeP   = safeN(cs?.feePercent, defFee)
-              const fixF   = safeN(cs?.fixedFee,   defFix)
-              const frt    = safeN(cs?.freight,     0)
+              // safeN: rejeita NaN/Infinity E valores fora do intervalo esperado
+              const safeN = (v: unknown, fb: number, min = -Infinity, max = Infinity) =>
+                typeof v === 'number' && isFinite(v) && v >= min && v <= max ? v : fb
+              const custo  = safeN(global.costPrice, 0,  0, 99999)
+              const taxR   = safeN(global.taxRate,   6,  0, 50)
+              const pack   = safeN(global.packaging, 0,  0, 9999)
+              const defFee = ch.tiered ? tikTokFees(safeN(cs?.price, 19, 0, 99999)).fee   : ch.defaultFee
+              const defFix = ch.tiered ? tikTokFees(safeN(cs?.price, 19, 0, 99999)).fixed : ch.defaultFixed
+              const feeP   = safeN(cs?.feePercent, defFee, 0, 50)
+              const fixF   = safeN(cs?.fixedFee,   defFix, 0, 999)
+              const frt    = safeN(cs?.freight,     0,      0, 9999)
               const preco = calcPrecoIdeal(custo, taxR, pack, frt, feeP, fixF, margemIdeal)
               const inviavel = !isFinite(preco) || preco <= 0
               return (
@@ -756,15 +758,16 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
           <div className="space-y-2 mt-10">
             {CHANNELS.map(ch => {
               const cs = chs[ch.id]
-              const safeN = (v: unknown, fb: number) => typeof v === 'number' && isFinite(v) ? v : fb
-              const custo  = safeN(global.costPrice, 0)
-              const taxR   = safeN(global.taxRate,   6)
-              const pack   = safeN(global.packaging, 0)
-              const defFee = ch.tiered ? tikTokFees(safeN(cs?.price, 19)).fee   : ch.defaultFee
-              const defFix = ch.tiered ? tikTokFees(safeN(cs?.price, 19)).fixed : ch.defaultFixed
-              const feeP   = safeN(cs?.feePercent, defFee)
-              const fixF   = safeN(cs?.fixedFee,   defFix)
-              const frt    = safeN(cs?.freight,     0)
+              const safeN = (v: unknown, fb: number, min = -Infinity, max = Infinity) =>
+                typeof v === 'number' && isFinite(v) && v >= min && v <= max ? v : fb
+              const custo  = safeN(global.costPrice, 0,  0, 99999)
+              const taxR   = safeN(global.taxRate,   6,  0, 50)
+              const pack   = safeN(global.packaging, 0,  0, 9999)
+              const defFee = ch.tiered ? tikTokFees(safeN(cs?.price, 19, 0, 99999)).fee   : ch.defaultFee
+              const defFix = ch.tiered ? tikTokFees(safeN(cs?.price, 19, 0, 99999)).fixed : ch.defaultFixed
+              const feeP   = safeN(cs?.feePercent, defFee, 0, 50)
+              const fixF   = safeN(cs?.fixedFee,   defFix, 0, 999)
+              const frt    = safeN(cs?.freight,     0,      0, 9999)
               const preco = calcPrecoMinimo(custo, taxR, pack, frt, feeP, fixF)
               const atual = safeN(cs?.price, 0)
               const precoValido = isFinite(preco) && preco > 0
