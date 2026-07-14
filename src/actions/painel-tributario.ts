@@ -75,10 +75,10 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
       orderBy: [{ ano: 'desc' }, { mes: 'desc' }],
       select: { receita_total: true, ano: true, mes: true },
     }),
+    // Busca todos os registros — take:14 não é suficiente quando há duplicatas ou meses extras
     prisma.historico_faturamento_anual.findMany({
       where: { workspace_id: workspaceId },
-      orderBy: [{ ano: 'desc' }, { mes: 'desc' }],
-      take: 14,
+      orderBy: [{ ano: 'asc' }, { mes: 'asc' }],
     }),
     prisma.aliquota_historico.findMany({
       where: { workspace_id: workspaceId },
@@ -96,9 +96,8 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
   const aliquotaSimples = rawAliq > 1 ? rawAliq / 100 : rawAliq
 
   // RBT12 — soma dos 12 meses anteriores ao mês de referência
-  const histOrdenado = [...historico].sort((a, b) =>
-    a.ano !== b.ano ? a.ano - b.ano : a.mes - b.mes
-  )
+  // Mesma lógica de impostos.ts: filtra < mesRef, pega os últimos 12
+  const histOrdenado = historico // já vem ASC do banco
   const rbt12 = histOrdenado
     .filter(h => h.ano < anoRef || (h.ano === anoRef && h.mes < mesRef))
     .slice(-12)
