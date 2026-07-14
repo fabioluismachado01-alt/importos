@@ -743,17 +743,22 @@ export async function getDREAnual(ano: number) {
     }),
     prisma.finance_config.findUnique({
       where: { workspace_id_ano: { workspace_id: workspaceId, ano } },
-      select: { percentual_dlr_socio: true },
+      select: { percentual_dlr_socio: true, dlr_modo: true, dlr_valor_fixo: true },
     }),
   ])
 
   const pctGlobal = finConfig?.percentual_dlr_socio ?? 0.5
+  const globalModo = finConfig?.dlr_modo ?? null
+  const globalFixo = finConfig?.dlr_valor_fixo ?? null
 
   return meses.map(m => {
-    // Meses com DLR fixo mantêm o valor salvo
-    if (m.dlr_modo === 'FIXO' && m.dlr_valor_fixo != null) return m
-    const pct = m.dlr_percentual_custom ?? pctGlobal
     const lucroLiq = m.lucro_liquido ?? 0
+    // Usa o modo GLOBAL atual (finance_config), não o modo salvo no mês
+    if (globalModo === 'FIXO' && globalFixo != null) {
+      const dlr = Math.max(0, Math.min(globalFixo, Math.max(0, lucroLiq)))
+      return { ...m, dlr_socio: dlr, reinvestimento: lucroLiq - dlr }
+    }
+    const pct = m.dlr_percentual_custom ?? pctGlobal
     const dlr = Math.max(0, lucroLiq) * pct
     return { ...m, dlr_socio: dlr, reinvestimento: lucroLiq - dlr }
   })
@@ -781,8 +786,18 @@ export async function getProvisionalMesAtual(): Promise<ProvisionalMes | null> {
 
   if (pedidos.length === 0) return null
 
-  const config = await getConfig(workspaceId, now.getFullYear())
-  const aliquota = config.aliquota_simples > 1 ? config.aliquota_simples / 100 : config.aliquota_simples
+  const anoAtual = now.getFullYear()
+  const mesAtual = now.getMonth() + 1
+  const [config, aliqHist] = await Promise.all([
+    getConfig(workspaceId, anoAtual),
+    prisma.aliquota_historico.findFirst({
+      where: { workspace_id: workspaceId, ano: anoAtual, mes: mesAtual },
+    }),
+  ])
+  // Prefere alíquota do mês configurada em /config/tributario
+  const aliquota = aliqHist
+    ? (aliqHist.aliquota > 1 ? aliqHist.aliquota / 100 : aliqHist.aliquota)
+    : (config.aliquota_simples > 1 ? config.aliquota_simples / 100 : config.aliquota_simples)
 
   const receita_total  = pedidos.reduce((s, p) => s + p.valor_venda, 0)
   const tarifas        = pedidos.reduce((s, p) => s + p.tarifa, 0)

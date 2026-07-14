@@ -719,8 +719,16 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
           <div className="space-y-2">
             {CHANNELS.map(ch => {
               const cs = chs[ch.id]
-              const custo = isNaN(global.costPrice) || !isFinite(global.costPrice) ? 0 : global.costPrice
-              const preco = calcPrecoIdeal(custo, global.taxRate, global.packaging, cs.freight, cs.feePercent, cs.fixedFee, margemIdeal)
+              const safeN = (v: unknown, fb: number) => typeof v === 'number' && isFinite(v) ? v : fb
+              const custo  = safeN(global.costPrice, 0)
+              const taxR   = safeN(global.taxRate,   6)
+              const pack   = safeN(global.packaging, 0)
+              const defFee = ch.tiered ? tikTokFees(safeN(cs?.price, 19)).fee   : ch.defaultFee
+              const defFix = ch.tiered ? tikTokFees(safeN(cs?.price, 19)).fixed : ch.defaultFixed
+              const feeP   = safeN(cs?.feePercent, defFee)
+              const fixF   = safeN(cs?.fixedFee,   defFix)
+              const frt    = safeN(cs?.freight,     0)
+              const preco = calcPrecoIdeal(custo, taxR, pack, frt, feeP, fixF, margemIdeal)
               const inviavel = !isFinite(preco) || preco <= 0
               return (
                 <div key={ch.id} className="flex items-center justify-between rounded-xl px-3 py-2" style={{ backgroundColor: ch.accentBg + '18' }}>
@@ -748,9 +756,17 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
           <div className="space-y-2 mt-10">
             {CHANNELS.map(ch => {
               const cs = chs[ch.id]
-              const custo = isNaN(global.costPrice) || !isFinite(global.costPrice) ? 0 : global.costPrice
-              const preco = calcPrecoMinimo(custo, global.taxRate, global.packaging, cs.freight, cs.feePercent, cs.fixedFee)
-              const atual = cs.price
+              const safeN = (v: unknown, fb: number) => typeof v === 'number' && isFinite(v) ? v : fb
+              const custo  = safeN(global.costPrice, 0)
+              const taxR   = safeN(global.taxRate,   6)
+              const pack   = safeN(global.packaging, 0)
+              const defFee = ch.tiered ? tikTokFees(safeN(cs?.price, 19)).fee   : ch.defaultFee
+              const defFix = ch.tiered ? tikTokFees(safeN(cs?.price, 19)).fixed : ch.defaultFixed
+              const feeP   = safeN(cs?.feePercent, defFee)
+              const fixF   = safeN(cs?.fixedFee,   defFix)
+              const frt    = safeN(cs?.freight,     0)
+              const preco = calcPrecoMinimo(custo, taxR, pack, frt, feeP, fixF)
+              const atual = safeN(cs?.price, 0)
               const precoValido = isFinite(preco) && preco > 0
               const folga = atual - preco
               return (

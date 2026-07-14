@@ -65,7 +65,7 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
   const anoAtual = hoje.getFullYear()
   const mesAtual = hoje.getMonth() + 1
 
-  const [empresa, fatAtual, historico] = await Promise.all([
+  const [empresa, fatAtual, historico, aliquotasHist] = await Promise.all([
     prisma.empresa.findUnique({
       where: { workspace_id: workspaceId },
       select: { regime_tributario: true, aliquota_simples: true },
@@ -79,6 +79,9 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
       where: { workspace_id: workspaceId },
       orderBy: [{ ano: 'desc' }, { mes: 'desc' }],
       take: 14,
+    }),
+    prisma.aliquota_historico.findMany({
+      where: { workspace_id: workspaceId },
     }),
   ])
 
@@ -101,20 +104,27 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
     .slice(-12)
     .reduce((acc, h) => acc + h.faturamento, 0)
 
-  function estimarDAS(fat: number, rbt: number): number {
-    if (!fat) return 0
-    if (!isSimples) return fat * aliquotaSimples
-    const res = calcularSimples({ faturamentoMes: fat, rbt12: rbt > 0 ? rbt : fat * 12, anexo: anexoSimples })
-    return res.ok ? res.valorDAS : fat * aliquotaSimples
+  function getAliqMes(ano: number, mes: number): number {
+    const hist = aliquotasHist.find(a => a.ano === ano && a.mes === mes)
+    if (hist) return hist.aliquota > 1 ? hist.aliquota / 100 : hist.aliquota
+    return aliquotaSimples
   }
 
-  const dasEstimado = estimarDAS(faturamentoMes, rbt12)
+  function estimarDAS(fat: number, rbt: number, ano?: number, mes?: number): number {
+    if (!fat) return 0
+    const aliqMes = (ano != null && mes != null) ? getAliqMes(ano, mes) : aliquotaSimples
+    if (!isSimples) return fat * aliqMes
+    const res = calcularSimples({ faturamentoMes: fat, rbt12: rbt > 0 ? rbt : fat * 12, anexo: anexoSimples })
+    return res.ok ? res.valorDAS : fat * aliqMes
+  }
+
+  const dasEstimado = estimarDAS(faturamentoMes, rbt12, anoRef, mesRef)
   const cargaEfetiva = faturamentoMes > 0 ? (dasEstimado / faturamentoMes) * 100 : 0
 
   // Histórico 12 meses com DAS estimado por mês
   let rbt12Acumulado = rbt12
   const historicoFormatado: MesHistorico[] = histOrdenado.slice(-12).map(h => {
-    const das = estimarDAS(h.faturamento, rbt12Acumulado)
+    const das = estimarDAS(h.faturamento, rbt12Acumulado, h.ano, h.mes)
     const carga = h.faturamento > 0 ? (das / h.faturamento) * 100 : 0
     return {
       ano: h.ano,
