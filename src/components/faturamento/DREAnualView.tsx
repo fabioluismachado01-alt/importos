@@ -114,6 +114,15 @@ export function DREAnualView({ ano, meses, config, historico }: Props) {
     return acc
   }, {} as Partial<MesDRE>)
 
+  // Ratios não podem ser somados — recalcular a partir dos agregados
+  {
+    const totRec = (totais.receita_total as number) || 0
+    const totLB  = (totais.lucro_bruto  as number) || 0
+    const totAds = ((totais.desp_ads_ml as number) || 0) + ((totais.desp_ads_outros as number) || 0)
+    ;(totais as any).margem_contribuicao = totRec > 0 ? (totLB / totRec) * 100 : 0
+    ;(totais as any).roas_atual          = totAds > 0 ? totRec / totAds : 0
+  }
+
   // Dados para o gráfico
   const dadosGrafico = mesesCompletos.map(m => ({
     mes: MESES_ABREV[m.mes - 1],

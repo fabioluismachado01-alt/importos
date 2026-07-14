@@ -736,9 +736,26 @@ export async function seedHistorico2023a2025() {
 
 export async function getDREAnual(ano: number) {
   const { workspaceId } = await getAuthContext()
-  return prisma.faturamento_mes.findMany({
-    where: { workspace_id: workspaceId, ano },
-    orderBy: { mes: 'asc' },
+  const [meses, finConfig] = await Promise.all([
+    prisma.faturamento_mes.findMany({
+      where: { workspace_id: workspaceId, ano },
+      orderBy: { mes: 'asc' },
+    }),
+    prisma.finance_config.findUnique({
+      where: { workspace_id_ano: { workspace_id: workspaceId, ano } },
+      select: { percentual_dlr_socio: true },
+    }),
+  ])
+
+  const pctGlobal = finConfig?.percentual_dlr_socio ?? 0.5
+
+  return meses.map(m => {
+    // Meses com DLR fixo mantêm o valor salvo
+    if (m.dlr_modo === 'FIXO' && m.dlr_valor_fixo != null) return m
+    const pct = m.dlr_percentual_custom ?? pctGlobal
+    const lucroLiq = m.lucro_liquido ?? 0
+    const dlr = Math.max(0, lucroLiq) * pct
+    return { ...m, dlr_socio: dlr, reinvestimento: lucroLiq - dlr }
   })
 }
 

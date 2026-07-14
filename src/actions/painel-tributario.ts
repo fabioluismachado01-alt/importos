@@ -78,7 +78,7 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
     prisma.historico_faturamento_anual.findMany({
       where: { workspace_id: workspaceId },
       orderBy: [{ ano: 'desc' }, { mes: 'desc' }],
-      take: 12,
+      take: 14,
     }),
   ])
 

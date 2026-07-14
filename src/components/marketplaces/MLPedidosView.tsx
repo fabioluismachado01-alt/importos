@@ -158,6 +158,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
   const [custosLocais, setCustosLocais] = useState<Record<string, { custo: number; lucro: number; margem: number }>>({})
   const [isPending, startTransition] = useTransition()
   const [syncMsg, setSyncMsg] = useState('')
+  const [syncVisivel, setSyncVisivel] = useState(false)
   const [vis, setVis] = useState<Vis>(0)
   const mascaraNome  = (s: string) => vis >= 1 ? '••••••••••' : s
   const mascaraValor = (s: string) => vis >= 2 ? '—' : s
@@ -353,7 +354,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
   })()
 
   function handleSync(silencioso = false) {
-    if (!silencioso) setSyncMsg('')
+    if (!silencioso) { setSyncMsg(''); setSyncVisivel(true) }
     startTransition(async () => {
       try {
         let total = 0
@@ -365,6 +366,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
         router.refresh()
         setTimeout(() => setSyncMsg(''), 4000)
       } catch { setSyncMsg('Erro na sincronização') }
+      finally { setSyncVisivel(false) }
     })
   }
 
@@ -538,7 +540,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
       <PageTitle title="Vendas" subtitle="Mercado Livre" />
 
       {/* ── BANNER DE SINCRONIZAÇÃO ── */}
-      {isPending && (
+      {isPending && syncVisivel && (
         <div className="flex items-center gap-2.5 px-4 py-2.5 bg-blue-50 border border-blue-100 rounded-xl">
           <RefreshCw className="w-3.5 h-3.5 text-blue-600 animate-spin shrink-0" />
           <span className="text-xs font-bold text-blue-700">Sincronizando pedidos com o Mercado Livre...</span>

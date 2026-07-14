@@ -719,8 +719,9 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
           <div className="space-y-2">
             {CHANNELS.map(ch => {
               const cs = chs[ch.id]
-              const preco = calcPrecoIdeal(global.costPrice, global.taxRate, global.packaging, cs.freight, cs.feePercent, cs.fixedFee, margemIdeal)
-              const inviavel = preco <= 0
+              const custo = isNaN(global.costPrice) || !isFinite(global.costPrice) ? 0 : global.costPrice
+              const preco = calcPrecoIdeal(custo, global.taxRate, global.packaging, cs.freight, cs.feePercent, cs.fixedFee, margemIdeal)
+              const inviavel = !isFinite(preco) || preco <= 0
               return (
                 <div key={ch.id} className="flex items-center justify-between rounded-xl px-3 py-2" style={{ backgroundColor: ch.accentBg + '18' }}>
                   <div className="flex items-center gap-2">
@@ -747,8 +748,10 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
           <div className="space-y-2 mt-10">
             {CHANNELS.map(ch => {
               const cs = chs[ch.id]
-              const preco = calcPrecoMinimo(global.costPrice, global.taxRate, global.packaging, cs.freight, cs.feePercent, cs.fixedFee)
+              const custo = isNaN(global.costPrice) || !isFinite(global.costPrice) ? 0 : global.costPrice
+              const preco = calcPrecoMinimo(custo, global.taxRate, global.packaging, cs.freight, cs.feePercent, cs.fixedFee)
               const atual = cs.price
+              const precoValido = isFinite(preco) && preco > 0
               const folga = atual - preco
               return (
                 <div key={ch.id} className="flex items-center justify-between rounded-xl px-3 py-2 bg-slate-50">
@@ -757,10 +760,12 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
                     <span className="text-[10px] font-bold text-slate-600">{ch.name}</span>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-black font-mono text-orange-600">{brl(preco)}</p>
-                    <p className={`text-[9px] font-bold ${folga >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                      {folga >= 0 ? `+${brl(folga)} de folga` : `${brl(folga)} abaixo do mín.`}
-                    </p>
+                    <p className="text-sm font-black font-mono text-orange-600">{precoValido ? brl(preco) : '—'}</p>
+                    {precoValido && (
+                      <p className={`text-[9px] font-bold ${folga >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                        {folga >= 0 ? `+${brl(folga)} de folga` : `${brl(folga)} abaixo do mín.`}
+                      </p>
+                    )}
                   </div>
                 </div>
               )
