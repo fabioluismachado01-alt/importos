@@ -10,6 +10,7 @@ import {
 } from 'recharts'
 import { formatCurrency, getMesNome } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import type { AlertasCatalogo } from '@/actions/alertas-catalogo'
 
 interface MesDRE {
   mes: number; lucro_bruto: number; lucro_liquido: number; receita_total: number
@@ -18,11 +19,11 @@ interface MesDRE {
   dlr_socio: number; reinvestimento: number
 }
 interface Config { percentual_dlr_socio: number; meta_faturamento_anual: number }
-interface Props { meses: MesDRE[]; config: Config; ano: number }
+interface Props { meses: MesDRE[]; config: Config; ano: number; alertas?: AlertasCatalogo; rbt12?: number }
 
 const MESES_ABREV = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
 
-export function PainelExecutivoView({ meses, config, ano }: Props) {
+export function PainelExecutivoView({ meses, config, ano, alertas, rbt12 }: Props) {
   const [mesAtivo, setMesAtivo] = useState<number | null>(null)
   const [analiseIA, setAnaliseIA] = useState<string>('')
   const [loadingIA, setLoadingIA] = useState(false)
@@ -41,6 +42,20 @@ export function PainelExecutivoView({ meses, config, ano }: Props) {
     'Lucro Bruto': m.lucro_bruto,
   }))
 
+  function mesParaPayload(m: MesDRE) {
+    return {
+      mes: getMesNome(m.mes),
+      faturamento: m.receita_total,
+      lucro_bruto: m.lucro_bruto,
+      lucro_liquido: m.lucro_liquido,
+      margem: m.margem_contribuicao,
+      das: m.das_valor_calc,
+      dlr_socio: m.dlr_socio,
+      desp_ads: m.desp_ads_ml + m.desp_ads_outros,
+      desp_custo_produtos: 0,
+    }
+  }
+
   async function carregarIA(mes: MesDRE) {
     setLoadingIA(true)
     setAnaliseIA('')
@@ -48,29 +63,22 @@ export function PainelExecutivoView({ meses, config, ano }: Props) {
       const mesIdx = meses.findIndex(m => m.mes === mes.mes)
       const anterior = mesIdx > 0 ? meses[mesIdx - 1] : undefined
 
+      // Histórico: até 5 meses anteriores com dados (excluindo o mês atual)
+      const historicoMeses = meses
+        .slice(0, mesIdx)
+        .filter(m => m.receita_total > 0)
+        .slice(-5)
+        .map(mesParaPayload)
+
       const payload = {
-        mesAtual: {
-          mes: getMesNome(mes.mes),
-          faturamento: mes.receita_total,
-          lucro_bruto: mes.lucro_bruto,
-          lucro_liquido: mes.lucro_liquido,
-          margem: mes.margem_contribuicao,
-          das: mes.das_valor_calc,
-          dlr_socio: mes.dlr_socio,
-          desp_ads: mes.desp_ads_ml + mes.desp_ads_outros,
-          desp_custo_produtos: 0,
+        mesAtual: mesParaPayload(mes),
+        mesAnterior: anterior && anterior.receita_total > 0 ? mesParaPayload(anterior) : undefined,
+        opcoes: {
+          historicoMeses,
+          rbt12: rbt12 ?? 0,
+          skusSemCusto: alertas?.skusSemCusto ?? 0,
+          skusSemCustoVendidos: alertas?.skusSemCustoVendidos.map(s => s.nome) ?? [],
         },
-        mesAnterior: anterior && anterior.receita_total > 0 ? {
-          mes: getMesNome(anterior.mes),
-          faturamento: anterior.receita_total,
-          lucro_bruto: anterior.lucro_bruto,
-          lucro_liquido: anterior.lucro_liquido,
-          margem: anterior.margem_contribuicao,
-          das: anterior.das_valor_calc,
-          dlr_socio: anterior.dlr_socio,
-          desp_ads: anterior.desp_ads_ml + anterior.desp_ads_outros,
-          desp_custo_produtos: 0,
-        } : undefined,
       }
 
       const res = await fetch('/api/ia/analisar-mes', {

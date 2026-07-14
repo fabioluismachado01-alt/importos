@@ -4,7 +4,7 @@ import { analisarResultadoMes } from '@/lib/groq'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const analise = await analisarResultadoMes(body.mesAtual, body.mesAnterior, body.mesAnoAnterior)
+    const analise = await analisarResultadoMes(body.mesAtual, body.mesAnterior, body.mesAnoAnterior, body.opcoes)
     return NextResponse.json({ analise })
   } catch (err) {
     return NextResponse.json({ analise: 'Análise indisponível.' }, { status: 200 })

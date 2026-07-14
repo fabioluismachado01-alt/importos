@@ -7,7 +7,7 @@ import {
   Tag, Ship, Sigma, FileText,
   DollarSign, RefreshCw, CheckCircle2, Circle,
   ExternalLink, Anchor, FileSearch, TrendingUp,
-  CheckCheck,
+  CheckCheck, BarChart3, Calculator, Globe,
 } from 'lucide-react'
 
 // ─── Ferramentas ──────────────────────────────────────────────────────────────
@@ -44,6 +44,33 @@ const TOOLS = [
     Icon: FileText,
     accent: '#8b5cf6',
     tag: 'PI · CI · PL · A4 Paisagem',
+  },
+]
+
+const TOOLS_FISCAL = [
+  {
+    href: '/ferramentas/painel-tributario',
+    label: 'Painel Tributário',
+    desc: 'DAS estimado, alíquota mensal e guias a vencer',
+    Icon: BarChart3,
+    accent: '#ef4444',
+    tag: 'Simples Nacional · Alíquota · RBT12',
+  },
+  {
+    href: '/ferramentas/impostos',
+    label: 'Simulador Tributário',
+    desc: 'Compare Simples vs Lucro Presumido no seu cenário',
+    Icon: Calculator,
+    accent: '#f97316',
+    tag: 'Simples · Lucro Presumido',
+  },
+  {
+    href: '/ferramentas/difal',
+    label: 'DIFAL',
+    desc: 'Calcule a diferença de alíquota em vendas interestaduais',
+    Icon: Globe,
+    accent: '#0ea5e9',
+    tag: 'Interestadual · ICMS · UF',
   },
 ]
 
@@ -207,6 +234,35 @@ export function CentralOperacoesView() {
                   </div>
                   <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between">
                     <span className="text-[9px] font-black text-slate-400 uppercase">Abrir ferramenta</span>
+                    <ExternalLink className="w-3 h-3 text-slate-300 group-hover:text-slate-600 transition-colors" />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* Ferramentas Fiscais */}
+          <div>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Gestão Fiscal</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {TOOLS_FISCAL.map(({ href, label, desc, Icon, accent, tag }) => (
+                <Link key={href} href={href}
+                  className="group bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all overflow-hidden flex flex-col">
+                  <div className="h-1" style={{ backgroundColor: accent }} />
+                  <div className="p-4 flex-1">
+                    <div className="flex items-start gap-3 mb-2">
+                      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${accent}18` }}>
+                        <Icon className="w-4 h-4" style={{ color: accent }} />
+                      </div>
+                      <div>
+                        <p className="font-black text-slate-900 text-sm">{label}</p>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{tag}</p>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">{desc}</p>
+                  </div>
+                  <div className="px-4 py-2.5 border-t border-slate-100 flex items-center justify-between">
+                    <span className="text-[9px] font-black text-slate-400 uppercase">Abrir</span>
                     <ExternalLink className="w-3 h-3 text-slate-300 group-hover:text-slate-600 transition-colors" />
                   </div>
                 </Link>
