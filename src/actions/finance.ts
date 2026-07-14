@@ -32,9 +32,8 @@ async function getConfig(workspaceId: string, ano: number): Promise<FinanceConfi
     formula_previdencia: finConfig?.formula_previdencia ?? 'PRO_LABORE*0.20+LUCRO_BRUTO*0.11',
     dias_no_mes: 30,
     meta_mes: 0,
-    // DLR global: lido aqui para que recalcularMes não sobrescreva com valor do mês armazenado
-    dlr_modo: (finConfig?.dlr_modo as 'PERCENTUAL' | 'FIXO') ?? undefined,
-    dlr_valor_fixo: finConfig?.dlr_valor_fixo ?? null,
+    // dlr_modo e dlr_valor_fixo NÃO existem em finance_config (são per-mês em faturamento_mes)
+    // Deixamos undefined para que calcularKPIs use o padrão: percentual_dlr_socio
   }
 }
 
@@ -746,21 +745,18 @@ export async function getDREAnual(ano: number) {
     }),
     prisma.finance_config.findUnique({
       where: { workspace_id_ano: { workspace_id: workspaceId, ano } },
-      select: { percentual_dlr_socio: true, dlr_modo: true, dlr_valor_fixo: true },
+      select: { percentual_dlr_socio: true },
     }),
   ])
 
+  // dlr_modo não existe em finance_config — cada mês tem seu próprio dlr_modo em faturamento_mes.
+  // Porém recalcularMes agora ignora o dlr_modo salvo no mês e usa sempre percentual_dlr_socio global,
+  // então aqui também recalculamos na leitura para meses que ainda têm valor FIXO antigo no banco.
   const pctGlobal = finConfig?.percentual_dlr_socio ?? 0.5
-  const globalModo = finConfig?.dlr_modo ?? null
-  const globalFixo = finConfig?.dlr_valor_fixo ?? null
 
   return meses.map(m => {
     const lucroLiq = m.lucro_liquido ?? 0
-    // Usa o modo GLOBAL atual (finance_config), não o modo salvo no mês
-    if (globalModo === 'FIXO' && globalFixo != null) {
-      const dlr = Math.max(0, Math.min(globalFixo, Math.max(0, lucroLiq)))
-      return { ...m, dlr_socio: dlr, reinvestimento: lucroLiq - dlr }
-    }
+    // Per-month custom percentage takes priority; fall back to global
     const pct = m.dlr_percentual_custom ?? pctGlobal
     const dlr = Math.max(0, lucroLiq) * pct
     return { ...m, dlr_socio: dlr, reinvestimento: lucroLiq - dlr }
