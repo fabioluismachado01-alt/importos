@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server'
-import { corrigirSkuAzulATS6 } from '@/actions/produtos'
+import { prisma } from '@/lib/prisma'
+import { revalidatePath } from 'next/cache'
 
 export async function GET() {
-  const result = await corrigirSkuAzulATS6()
-  return NextResponse.json(result)
+  const produto = await prisma.produto_catalogo.findFirst({
+    where: { sku_interno: 'ATS-2', nome: { contains: 'Azul' } },
+  })
+  if (!produto) return NextResponse.json({ corrigido: false })
+  await prisma.produto_catalogo.update({ where: { id: produto.id }, data: { sku_interno: 'ATS-6' } })
+  revalidatePath('/produtos')
+  return NextResponse.json({ corrigido: true, nome: produto.nome })
 }
