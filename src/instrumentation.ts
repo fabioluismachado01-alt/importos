@@ -31,6 +31,25 @@ export async function register() {
     }
   }
 
+  // Fix one-time: corrige SKU ATS-2 → ATS-6 no produto Comedouro Azul
+  async function fixSkuAzul() {
+    try {
+      const { prisma } = await import('@/lib/prisma')
+      const produto = await prisma.produto_catalogo.findFirst({
+        where: { sku_interno: 'ATS-2', nome: { contains: 'Azul' } },
+      })
+      if (produto) {
+        await prisma.produto_catalogo.update({ where: { id: produto.id }, data: { sku_interno: 'ATS-6' } })
+        console.log('[fix-sku] ATS-2 → ATS-6 corrigido:', produto.nome)
+      } else {
+        console.log('[fix-sku] Nada a corrigir (ATS-2 Azul não encontrado — já foi feito ou não existe)')
+      }
+    } catch (err) {
+      console.error('[fix-sku] Erro:', err)
+    }
+  }
+  fixSkuAzul()
+
   // Aguarda 60s após o boot — dá tempo para as múltiplas instâncias do cold-start
   // estabilizarem antes de disputar conexões do pool do Prisma
   setTimeout(tick, 60_000)
