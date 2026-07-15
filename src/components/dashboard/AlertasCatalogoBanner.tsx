@@ -3,7 +3,7 @@ import { AlertTriangle, X } from 'lucide-react'
 import type { AlertasCatalogo } from '@/actions/alertas-catalogo'
 
 export function AlertasCatalogoBanner({ alertas }: { alertas: AlertasCatalogo }) {
-  const { skusSemCustoVendidos, ncmDuplicados, skusSemNcm, skusSemCusto } = alertas
+  const { skusSemCustoVendidos, skusSemCusto } = alertas
 
   const itens: { texto: string; detalhe?: string }[] = []
 
@@ -14,14 +14,6 @@ export function AlertasCatalogoBanner({ alertas }: { alertas: AlertasCatalogo })
     itens.push({
       texto: `${skusSemCusto} produto${skusSemCusto > 1 ? 's' : ''} ativo${skusSemCusto > 1 ? 's' : ''} sem custo cadastrado — margem e DAS por produto incorretos`,
       detalhe,
-    })
-  }
-
-  if (ncmDuplicados.length > 0) {
-    const exemplos = ncmDuplicados.slice(0, 2).map(n => `${n.ncm} (${n.produtos.join(', ')})`).join(' · ')
-    itens.push({
-      texto: `${ncmDuplicados.length} NCM${ncmDuplicados.length > 1 ? 's' : ''} compartilhado${ncmDuplicados.length > 1 ? 's' : ''} entre produtos diferentes`,
-      detalhe: exemplos,
     })
   }
 

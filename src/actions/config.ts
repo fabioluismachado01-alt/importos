@@ -243,47 +243,40 @@ export async function updateDLRConfig(ano: number, percentual_dlr_socio: number,
 }
 
 // =============================================
-// RECONCILIAR ALÍQUOTAS COM DAS REAL PAGO
+// RESTAURAÇÃO PONTUAL DE ALÍQUOTAS JAN–ABR/2026
 // =============================================
 
-// Corrige meses onde a alíquota registrada difere do DAS real pago.
-// Chamada na abertura de /config/tributario para auto-corrigir desyncs históricos.
-export async function reconciliarAliquotasComDASReal(): Promise<number> {
+// Restaura os valores auditados de Jan–Abr/2026 que foram sobrescritos
+// incorretamente. Idempotente: só escreve se o valor estiver diferente.
+// Meses fechados nunca são recalculados automaticamente — apenas o campo
+// aliquota_simples / aliquota_historico é corrigido.
+export async function restaurarAliquotasJanAbr2026(): Promise<void> {
   const { workspaceId } = await getAuthContext()
-
-  const mesesPagos = await prisma.faturamento_mes.findMany({
-    where: {
-      workspace_id: workspaceId,
-      das_status: 'PAGO',
-      das_valor_real: { gt: 0 },
-      receita_total: { gt: 0 },
-    },
-  })
-
-  let corrigidos = 0
-  for (const fat of mesesPagos) {
-    const aliquotaEfetiva = parseFloat(((fat.das_valor_real! / fat.receita_total) * 100).toFixed(2))
-    const aliquotaAtual = fat.aliquota_simples > 1 ? fat.aliquota_simples : fat.aliquota_simples * 100
-
-    if (Math.abs(aliquotaEfetiva - aliquotaAtual) > 0.05) {
-      await Promise.all([
-        prisma.aliquota_historico.upsert({
-          where: { workspace_id_ano_mes: { workspace_id: workspaceId, ano: fat.ano, mes: fat.mes } },
-          update: { aliquota: aliquotaEfetiva },
-          create: { workspace_id: workspaceId, ano: fat.ano, mes: fat.mes, aliquota: aliquotaEfetiva },
-        }),
-        prisma.faturamento_mes.update({
-          where: { id: fat.id },
-          data: { aliquota_simples: aliquotaEfetiva },
-        }),
-      ])
-      corrigidos++
-    }
+  const ano = 2026
+  const corretos = [
+    { mes: 1, aliquota: 6.74 },
+    { mes: 2, aliquota: 6.97 },
+    { mes: 3, aliquota: 7.50 },
+    { mes: 4, aliquota: 8.00 },
+  ]
+  for (const { mes, aliquota } of corretos) {
+    const atual = await prisma.aliquota_historico.findUnique({
+      where: { workspace_id_ano_mes: { workspace_id: workspaceId, ano, mes } },
+      select: { aliquota: true },
+    })
+    if (atual && Math.abs(Number(atual.aliquota) - aliquota) < 0.01) continue
+    await Promise.all([
+      prisma.aliquota_historico.upsert({
+        where: { workspace_id_ano_mes: { workspace_id: workspaceId, ano, mes } },
+        update: { aliquota },
+        create: { workspace_id: workspaceId, ano, mes, aliquota },
+      }),
+      prisma.faturamento_mes.updateMany({
+        where: { workspace_id: workspaceId, ano, mes },
+        data: { aliquota_simples: aliquota },
+      }),
+    ])
   }
-
-  if (corrigidos > 0) {
-    revalidatePath('/config')
-    revalidatePath('/faturamento')
-  }
-  return corrigidos
+  revalidatePath('/config/tributario')
+  revalidatePath('/faturamento')
 }

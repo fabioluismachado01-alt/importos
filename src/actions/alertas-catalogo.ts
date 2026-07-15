@@ -6,8 +6,6 @@ import { getAuthContext } from '@/lib/auth'
 export interface AlertasCatalogo {
   // SKUs ativos sem custo que tiveram venda no mês atual
   skusSemCustoVendidos: { nome: string; sku: string }[]
-  // NCMs usados por mais de um produto (sem contar os sem NCM)
-  ncmDuplicados: { ncm: string; produtos: string[] }[]
   // SKUs sem NCM
   skusSemNcm: number
   // SKUs sem custo (total, independente de venda)
@@ -26,7 +24,7 @@ export async function getAlertasCatalogo(): Promise<AlertasCatalogo> {
   const [produtos, pedidosMes] = await Promise.all([
     prisma.produto_catalogo.findMany({
       where: { workspace_id: workspaceId, ativo: true },
-      select: { id: true, nome: true, sku_interno: true, sku_alias: true, custo_brl: true, ncm: true },
+      select: { id: true, nome: true, sku_interno: true, sku_alias: true, custo_brl: true, ncm: true  },
     }),
     // Pedidos ML do mês atual sem custo definido
     prisma.ml_pedido.findMany({
@@ -67,20 +65,8 @@ export async function getAlertasCatalogo(): Promise<AlertasCatalogo> {
     }
   }
 
-  // NCMs duplicados entre produtos de categorias diferentes
-  const ncmMap = new Map<string, string[]>()
-  for (const p of produtos) {
-    if (!p.ncm) continue
-    const list = ncmMap.get(p.ncm) ?? []
-    list.push(p.nome)
-    ncmMap.set(p.ncm, list)
-  }
-  const ncmDuplicados = [...ncmMap.entries()]
-    .filter(([, nomes]) => nomes.length > 1)
-    .map(([ncm, produtos]) => ({ ncm, produtos }))
-
   const skusSemNcm = produtos.filter(p => !p.ncm).length
   const skusSemCusto = produtos.filter(p => !p.custo_brl || p.custo_brl <= 0).length
 
-  return { skusSemCustoVendidos, ncmDuplicados, skusSemNcm, skusSemCusto }
+  return { skusSemCustoVendidos, skusSemNcm, skusSemCusto }
 }

@@ -60,8 +60,9 @@ export default async function DashboardPage() {
   hoje.setHours(0, 0, 0, 0)
 
   // Encontra o mês mais antigo com DAS pendente e mês já fechado
+  // Nota: das_valor_calc pode ser null em registros antigos — usa receita_total como fallback
   const mesesDASPendente = meses
-    .filter(m => m.fechado && m.das_status === 'PENDENTE' && m.das_valor_calc > 0)
+    .filter(m => m.fechado && m.das_status === 'PENDENTE' && Number(m.receita_total) > 0)
     .sort((a, b) => a.mes - b.mes)
 
   let dasAlerta: DasAlerta | null = null
@@ -72,10 +73,13 @@ export default async function DashboardPage() {
     dataVencimento.setHours(0, 0, 0, 0)
     const diasRestantes = Math.ceil((dataVencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
     if (diasRestantes <= DAS_DIAS_AVISO) {
+      const valorDas = Number(m.das_valor_calc ?? 0) > 0
+        ? Number(m.das_valor_calc)
+        : Number(m.receita_total) * Number(m.aliquota_simples > 1 ? m.aliquota_simples / 100 : m.aliquota_simples)
       dasAlerta = {
         mesFat: m.mes,
         anoFat: m.ano,
-        valor: m.das_valor_calc,
+        valor: valorDas,
         diasRestantes,
         urgente: diasRestantes <= DAS_DIAS_URGENTE,
         vencido: diasRestantes < 0,

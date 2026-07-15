@@ -1,4 +1,4 @@
-import { getEmpresa, getAliquotasHistorico, reconciliarAliquotasComDASReal } from '@/actions/config'
+import { getEmpresa, getAliquotasHistorico, restaurarAliquotasJanAbr2026 } from '@/actions/config'
 import { estimarAliquotasFuturas } from '@/actions/aliquotas'
 import { getAuthContext } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -10,8 +10,8 @@ export default async function TributarioPage() {
   const ano = new Date().getFullYear()
   const { workspaceId } = await getAuthContext()
 
-  // Auto-reconcilia alíquotas onde o DAS real pago diverge do registrado
-  await reconciliarAliquotasComDASReal()
+  // Restaura alíquotas Jan–Abr/2026 que foram sobrescritas incorretamente
+  await restaurarAliquotasJanAbr2026()
 
   const [empresa, aliquotas, mesesFaturamento, estimativas] = await Promise.all([
     getEmpresa(),
