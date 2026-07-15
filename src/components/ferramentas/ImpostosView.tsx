@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import {
   Receipt, Building2, TrendingUp, Trophy, Info,
-  ChevronDown, ChevronUp, AlertTriangle, CheckCircle2,
+  ChevronDown, ChevronUp, ChevronRight, AlertTriangle, CheckCircle2,
   Lightbulb, ArrowRight, MapPin,
 } from 'lucide-react'
 import {
@@ -698,6 +698,8 @@ function PainelDIFAL({
   impostoSimples: number | null; impostoPresumido: number; impostoReal: number
   faturamento: number
 }) {
+  const [showMemoria, setShowMemoria] = useState(false)
+
   // DIFAL:
   // Simples Nacional → isento (0)
   // Lucro Presumido → custo bruto (sem crédito)
@@ -781,6 +783,50 @@ function PainelDIFAL({
             </div>
           )
         })}
+      </div>
+
+      {/* Memória de cálculo */}
+      <div>
+        <button
+          onClick={() => setShowMemoria(v => !v)}
+          className="flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-200 transition-colors"
+        >
+          <ChevronRight className={cn('w-3 h-3 transition-transform', showMemoria && 'rotate-90')} />
+          Ver memória de cálculo
+        </button>
+        {showMemoria && (
+          <div className="mt-3 bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 space-y-4 text-xs text-slate-300">
+            <div className="space-y-1.5">
+              <p className="font-semibold text-slate-100">Alíquota DIFAL: {(difalRate * 100).toFixed(1)}% (média ponderada)</p>
+              <p className="text-slate-400 leading-relaxed">
+                O DIFAL é calculado como <strong className="text-slate-200">alíquota interna do estado destino − alíquota interestadual + FCP</strong>.
+                Como este comparador não possui seletor de estado de destino, usamos uma média ponderada pela distribuição populacional dos estados brasileiros.
+              </p>
+              <p className="text-slate-400 leading-relaxed">
+                Exemplo típico SP → SE/ES: 18% − 12% + 2% FCP = <strong className="text-slate-200">8%</strong>.
+                Estados com menor alíquota interna (12–17%) reduzem a média. O resultado ponderado é aproximadamente <strong className="text-slate-200">{(difalRate * 100).toFixed(1)}%</strong>,
+                representando um cenário conservador.
+              </p>
+              <p className="text-slate-500 italic">Para cálculo exato por UF de destino, use a ferramenta "DIFAL Interestadual" no menu.</p>
+            </div>
+            <div className="border-t border-slate-700/50 pt-4 space-y-1.5">
+              <p className="font-semibold text-slate-100">Redução de 24% no Lucro Real</p>
+              <p className="text-slate-400 leading-relaxed">
+                No Lucro Real, o DIFAL é uma <strong className="text-slate-200">despesa operacional dedutível</strong> da base de cálculo do IRPJ e da CSLL.
+                Cada R$ 1,00 de DIFAL pago reduz o lucro tributável, gerando um benefício fiscal de:
+              </p>
+              <div className="bg-slate-900/60 rounded-lg p-3 font-mono text-[10px] space-y-1">
+                <div className="flex justify-between"><span className="text-slate-400">IRPJ (alíquota base)</span><span className="text-slate-200">15%</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">CSLL</span><span className="text-slate-200">9%</span></div>
+                <div className="flex justify-between border-t border-slate-700 pt-1 mt-1"><span className="text-slate-300">Benefício total (dedutibilidade)</span><span className="text-amber-300 font-bold">24%</span></div>
+                <div className="flex justify-between"><span className="text-slate-300">Custo líquido do DIFAL</span><span className="text-emerald-300 font-bold">76% do bruto</span></div>
+              </div>
+              <p className="text-slate-500">
+                DIFAL bruto: {BRL(difalBruto)} → custo líquido Lucro Real: {BRL(difalReal)} (economia de {BRL(difalBruto - difalReal)}/mês)
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {melhorTotal.key !== 'simples' && impostoSimples !== null && (
