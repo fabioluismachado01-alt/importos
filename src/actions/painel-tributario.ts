@@ -42,6 +42,8 @@ export interface PainelTributarioData {
 
   // Guias a vencer
   guias: GuiaVencer[]
+  // true quando o mês de referência está fechado (DAS usa alíquota histórica)
+  mesFechado: boolean
 }
 
 const MESES_ABREV = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
@@ -73,7 +75,7 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
     prisma.faturamento_mes.findFirst({
       where: { workspace_id: workspaceId, receita_total: { gt: 0 } },
       orderBy: [{ ano: 'desc' }, { mes: 'desc' }],
-      select: { receita_total: true, ano: true, mes: true },
+      select: { receita_total: true, ano: true, mes: true, fechado: true },
     }),
     // Busca todos os registros — take:14 não é suficiente quando há duplicatas ou meses extras
     prisma.historico_faturamento_anual.findMany({
@@ -93,6 +95,7 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
   const anoRef = fatAtual?.ano ?? anoAtual
   const mesRef = fatAtual?.mes ?? mesAtual
   const faturamentoMes = fatAtual?.receita_total ?? 0
+  const mesFechado = fatAtual?.fechado ?? false
   const regime = empresa?.regime_tributario ?? null
   const isSimples = regime?.toLowerCase().includes('simples') ?? false
   const anexoSimples: AnexoSimples = 'comercio'
@@ -127,7 +130,11 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
     return res.ok ? res.valorDAS : fat * aliqMes
   }
 
-  const dasEstimado = estimarDAS(faturamentoMes, rbt12, anoRef, mesRef)
+  // Mês fechado: usa alíquota histórica travada (mesma base do gráfico 12 meses)
+  // Mês aberto: recalcula ao vivo com RBT12 atual via calcularSimples
+  const dasEstimado = mesFechado
+    ? faturamentoMes * getAliqMes(anoRef, mesRef)
+    : estimarDAS(faturamentoMes, rbt12, anoRef, mesRef)
   const cargaEfetiva = faturamentoMes > 0 ? (dasEstimado / faturamentoMes) * 100 : 0
 
   // Histórico 12 meses: usa alíquota registrada em aliquota_historico para cada mês
@@ -193,5 +200,6 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
     anexoSimples,
     rbt12,
     guias,
+    mesFechado,
   }
 }

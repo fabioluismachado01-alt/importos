@@ -184,11 +184,14 @@ export function PainelTributarioView({ data }: { data: PainelTributarioData }) {
         {/* DAS estimado */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-1">
           <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
-            <Receipt className="w-3.5 h-3.5" /> DAS estimado do mês
+            <Receipt className="w-3.5 h-3.5" />
+            {data.mesFechado ? 'DAS histórico (mês fechado)' : 'DAS estimado do mês'}
           </div>
           <p className="text-2xl font-black text-slate-800 font-mono">{BRL(data.dasEstimado)}</p>
           <p className="text-xs text-slate-400">
-            sobre {BRL(data.faturamentoMes)} faturados
+            {data.mesFechado
+              ? 'Valor travado — alíquota do mês de competência'
+              : `sobre ${BRL(data.faturamentoMes)} faturados`}
           </p>
         </div>
 

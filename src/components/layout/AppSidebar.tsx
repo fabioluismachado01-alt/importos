@@ -64,7 +64,7 @@ const NAV_ITEMS: NavItem[] = [
       { href: '/faturamento/dre', label: 'DRE Anual' },
       { href: '/faturamento/executivo', label: 'Painel Executivo' },
       { href: '/faturamento/importar', label: 'Importar Planilha' },
-      { href: '/faturamento/relatorios', label: 'Relatórios Mkt.' },
+      { href: '/vendas', label: 'Análise de Vendas' },
     ],
   },
   {

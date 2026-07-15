@@ -7,11 +7,13 @@ export function AlertasCatalogoBanner({ alertas }: { alertas: AlertasCatalogo })
 
   const itens: { texto: string; detalhe?: string }[] = []
 
-  if (skusSemCustoVendidos.length > 0) {
-    const nomes = skusSemCustoVendidos.map(s => s.nome).join(', ')
+  if (skusSemCusto > 0) {
+    const detalhe = skusSemCustoVendidos.length > 0
+      ? `Vendidos este mês sem custo: ${skusSemCustoVendidos.map(s => s.nome).join(', ')}`
+      : undefined
     itens.push({
-      texto: `${skusSemCustoVendidos.length} SKU${skusSemCustoVendidos.length > 1 ? 's' : ''} vendido${skusSemCustoVendidos.length > 1 ? 's' : ''} este mês sem custo cadastrado — margem pode estar incorreta`,
-      detalhe: nomes,
+      texto: `${skusSemCusto} produto${skusSemCusto > 1 ? 's' : ''} ativo${skusSemCusto > 1 ? 's' : ''} sem custo cadastrado — margem e DAS por produto incorretos`,
+      detalhe,
     })
   }
 
