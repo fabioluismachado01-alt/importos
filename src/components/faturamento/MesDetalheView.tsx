@@ -47,7 +47,6 @@ interface DadosMes {
   dlr_socio: number; reinvestimento: number; dias_com_venda: number
   dlr_modo: string; dlr_percentual_custom: number | null; dlr_valor_fixo: number | null
   lancamentos: Lancamento[]
-  das_registros?: { id: string; created_at: Date; valor: number }[]
 }
 
 interface Props { dados: DadosMes; ano: number; mes: number; templates: DespesaTemplate[] }
@@ -481,9 +480,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
         <KPICard label="Lucro Bruto" value={formatCurrency(d.lucro_bruto)} color={d.lucro_bruto >= 0 ? 'blue' : 'red'} big />
         <KPICard label="Lucro Líquido" value={formatCurrency(d.lucro_liquido)} color={d.lucro_liquido >= 0 ? 'emerald' : 'red'} big />
         <KPICard label={`DAS (${(d.aliquota_simples > 1 ? d.aliquota_simples : d.aliquota_simples * 100).toFixed(2)}%)`} value={formatCurrency(d.das_valor_calc)} color="amber"
-          sub={d.das_status === 'PAGO'
-            ? `Pago em ${d.das_registros?.[0]?.created_at ? format(new Date(d.das_registros[0].created_at), 'dd/MM/yyyy', { locale: ptBR }) : '—'} · ${formatCurrency(d.das_valor_real ?? 0)}`
-            : undefined} big />
+          sub={d.das_status === 'PAGO' ? `Pago: ${formatCurrency(d.das_valor_real ?? 0)}` : undefined} big />
       </div>
 
       {/* ── KPIs ROW 2: Gerenciais ── */}

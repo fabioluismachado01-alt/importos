@@ -47,7 +47,6 @@ export async function saveProduto(data: {
   id?: string
   nome: string
   sku_interno?: string
-  sku_alias?: string
   custo_brl?: number
   descricao?: string
   ncm?: string
@@ -58,15 +57,9 @@ export async function saveProduto(data: {
 }) {
   const { workspaceId } = await getAuthContext()
 
-  // Normaliza aliases: uppercase, sem espaços extras, sem duplicatas
-  const aliasNorm = data.sku_alias
-    ? data.sku_alias.split(',').map(s => s.trim().toUpperCase()).filter(Boolean).join(',') || null
-    : null
-
   const payload = {
     nome: data.nome,
     sku_interno: data.sku_interno ?? null,
-    sku_alias: aliasNorm,
     custo_brl: data.custo_brl ?? null,
     descricao: data.descricao ?? null,
     ncm: data.ncm ?? null,
@@ -117,32 +110,4 @@ export async function atualizarCustoDesdeData(
   revalidatePath('/marketplaces/pedidos')
 
   return { pedidosAtualizados: result.count }
-}
-
-// Correção pontual: SKU do produto "Azul" era ATS-2 (errado) — deve ser ATS-6.
-// Idempotente: só atualiza se o produto ainda tiver sku_interno = 'ATS-2' e 'Azul' no nome.
-export async function corrigirSkuAzulATS6(): Promise<{
-  corrigido: boolean
-  produto?: string
-  mensagem: string
-}> {
-  const { workspaceId } = await getAuthContext()
-  const produto = await prisma.produto_catalogo.findFirst({
-    where: {
-      workspace_id: workspaceId,
-      sku_interno: 'ATS-2',
-      nome: { contains: 'Azul', mode: 'insensitive' },
-      ativo: true,
-    },
-    select: { id: true, nome: true },
-  })
-  if (!produto) {
-    return { corrigido: false, mensagem: 'Produto não encontrado (já corrigido ou SKU diferente).' }
-  }
-  await prisma.produto_catalogo.update({
-    where: { id: produto.id },
-    data: { sku_interno: 'ATS-6' },
-  })
-  revalidatePath('/produtos')
-  return { corrigido: true, produto: produto.nome, mensagem: `SKU do produto "${produto.nome}" atualizado: ATS-2 → ATS-6.` }
 }

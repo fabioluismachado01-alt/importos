@@ -11,8 +11,6 @@ import { DashboardUsd } from '@/components/dashboard/DashboardUsd'
 import { AlertasCatalogoBanner } from '@/components/dashboard/AlertasCatalogoBanner'
 import { DasAlertaBanner, type DasAlerta } from '@/components/dashboard/DasAlertaBanner'
 
-export const dynamic = 'force-dynamic'
-
 export const metadata = { title: 'Dashboard — ImportOS' }
 
 function brl(v: number) {
@@ -64,7 +62,7 @@ export default async function DashboardPage() {
   // Encontra o mês mais antigo com DAS pendente e mês já fechado
   // Nota: das_valor_calc pode ser null em registros antigos — usa receita_total como fallback
   const mesesDASPendente = meses
-    .filter(m => (m.fechado || m.mes < mesAtual) && (!m.das_status || m.das_status === 'PENDENTE') && Number(m.receita_total) > 0)
+    .filter(m => (m.fechado || m.mes < mesAtual) && m.das_status === 'PENDENTE' && Number(m.receita_total) > 0)
     .sort((a, b) => a.mes - b.mes)
 
   let dasAlerta: DasAlerta | null = null
