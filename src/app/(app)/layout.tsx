@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getAuthUser } from '@/lib/auth'
 import { AppSidebar, SidebarProvider } from '@/components/layout/AppSidebar'
 import { AppTopbar } from '@/components/layout/AppTopbar'
+import { NavigationProgress } from '@/components/layout/NavigationProgress'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getAuthUser()
@@ -9,6 +10,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <SidebarProvider>
+      <NavigationProgress />
       <div className="flex h-screen overflow-hidden" style={{ background: '#F8FAFD' }}>
         <AppSidebar />
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">

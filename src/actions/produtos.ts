@@ -80,6 +80,17 @@ export async function deleteProduto(id: string) {
   revalidatePath('/produtos')
 }
 
+export async function corrigirSkuAzulATS6(): Promise<{ corrigido: boolean; nome?: string }> {
+  const { workspaceId } = await getAuthContext()
+  const produto = await prisma.produto_catalogo.findFirst({
+    where: { workspace_id: workspaceId, sku_interno: 'ATS-2', nome: { contains: 'Azul' } },
+  })
+  if (!produto) return { corrigido: false }
+  await prisma.produto_catalogo.update({ where: { id: produto.id }, data: { sku_interno: 'ATS-6' } })
+  revalidatePath('/produtos')
+  return { corrigido: true, nome: produto.nome }
+}
+
 // Atualiza custo do produto e retroage nos pedidos ML a partir de uma data
 export async function atualizarCustoDesdeData(
   produtoId: string,
