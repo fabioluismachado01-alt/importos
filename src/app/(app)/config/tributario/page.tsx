@@ -1,4 +1,5 @@
-import { getEmpresa, getAliquotasHistorico, estimarAliquotasFuturas } from '@/actions/config'
+import { getEmpresa, getAliquotasHistorico, reconciliarAliquotasComDASReal } from '@/actions/config'
+import { estimarAliquotasFuturas } from '@/actions/aliquotas'
 import { getAuthContext } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { TributarioView } from '@/components/config/TributarioView'
@@ -8,6 +9,10 @@ export const metadata = { title: 'Configuração Tributária — ImportOS' }
 export default async function TributarioPage() {
   const ano = new Date().getFullYear()
   const { workspaceId } = await getAuthContext()
+
+  // Auto-reconcilia alíquotas onde o DAS real pago diverge do registrado
+  await reconciliarAliquotasComDASReal()
+
   const [empresa, aliquotas, mesesFaturamento, estimativas] = await Promise.all([
     getEmpresa(),
     getAliquotasHistorico(ano),

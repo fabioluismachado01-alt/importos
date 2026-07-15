@@ -3,12 +3,13 @@ import {
   Tag, Ship, Sigma, FileText,
   DollarSign, BarChart3, Package, ShoppingBag,
   TrendingUp, AlertCircle, CheckCircle2, Clock,
-  ArrowRight, Wrench,
+  ArrowRight,
 } from 'lucide-react'
 import { getFaturamentoAnual, getProvisionalMesAtual } from '@/actions/finance'
 import { getAlertasCatalogo } from '@/actions/alertas-catalogo'
 import { DashboardUsd } from '@/components/dashboard/DashboardUsd'
 import { AlertasCatalogoBanner } from '@/components/dashboard/AlertasCatalogoBanner'
+import { DasAlertaBanner, type DasAlerta } from '@/components/dashboard/DasAlertaBanner'
 
 export const metadata = { title: 'Dashboard — ImportOS' }
 
@@ -52,6 +53,37 @@ export default async function DashboardPage() {
   const mesesComDados = meses.filter(m => m.receita_total > 0)
   const maiorReceita  = Math.max(...meses.map(m => m.receita_total), isProvisional ? receitaMes : 0, 1)
 
+  // Alerta de vencimento DAS: janelas de 5 dias (aviso) e 2 dias (urgente)
+  const DAS_DIAS_AVISO = 5
+  const DAS_DIAS_URGENTE = 2
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+
+  // Encontra o mês mais antigo com DAS pendente e mês já fechado
+  const mesesDASPendente = meses
+    .filter(m => m.fechado && m.das_status === 'PENDENTE' && m.das_valor_calc > 0)
+    .sort((a, b) => a.mes - b.mes)
+
+  let dasAlerta: DasAlerta | null = null
+  for (const m of mesesDASPendente) {
+    const mesVenc = m.mes === 12 ? 1 : m.mes + 1
+    const anoVenc = m.mes === 12 ? m.ano + 1 : m.ano
+    const dataVencimento = new Date(anoVenc, mesVenc - 1, 20)
+    dataVencimento.setHours(0, 0, 0, 0)
+    const diasRestantes = Math.ceil((dataVencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
+    if (diasRestantes <= DAS_DIAS_AVISO) {
+      dasAlerta = {
+        mesFat: m.mes,
+        anoFat: m.ano,
+        valor: m.das_valor_calc,
+        diasRestantes,
+        urgente: diasRestantes <= DAS_DIAS_URGENTE,
+        vencido: diasRestantes < 0,
+      }
+      break  // mostra apenas o mais urgente
+    }
+  }
+
   const dasConfig = {
     PENDENTE: { label: 'Pendente',  Icon: Clock,         color: 'text-amber-600',  bg: 'bg-amber-50',  border: 'border-amber-200' },
     PAGO:     { label: 'Pago',      Icon: CheckCircle2,  color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
@@ -62,6 +94,9 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6 pb-10">
+
+      {/* ── ALERTA DAS ── */}
+      <DasAlertaBanner alerta={dasAlerta} />
 
       {/* ── ALERTAS DE CATÁLOGO ── */}
       <AlertasCatalogoBanner alertas={alertas} />

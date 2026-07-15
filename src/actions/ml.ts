@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { getAuthContext } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getMLAuthUrl, refreshMLToken, getMLOrders, getMLUserItemIds, getMLItemsBatch } from '@/lib/ml-api'
-import { estimarAliquotasFuturas } from '@/actions/config'
+import { estimarAliquotasFuturas } from '@/actions/aliquotas'
 
 // ─── URL de conexão OAuth ─────────────────────────────────────────────────────
 

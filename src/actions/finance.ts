@@ -7,6 +7,7 @@ import {
   calcularKPIs, calcularDASVencimento, getDiasNoMes,
   type LancamentoRaw, type FinanceConfig,
 } from '@/engines/finance'
+import { estimarAliquotasFuturas } from '@/actions/aliquotas'
 
 // =============================================
 // HELPERS
@@ -537,12 +538,31 @@ export async function registrarPagamentoDAS(ano: number, mes: number, valorPago:
     data: { das_valor_real: valorPago, das_status: 'PAGO' },
   })
 
+  // Back-calcula a alíquota efetiva real a partir do DAS pago.
+  // Isso mantém aliquota_historico sincronizado com o DAS realmente pago,
+  // evitando dessincronia entre o campo de alíquota e o DAS efetivo.
+  if (fat.receita_total > 0) {
+    const aliquotaEfetiva = parseFloat(((valorPago / fat.receita_total) * 100).toFixed(2))
+    await Promise.all([
+      prisma.aliquota_historico.upsert({
+        where: { workspace_id_ano_mes: { workspace_id: workspaceId, ano, mes } },
+        update: { aliquota: aliquotaEfetiva },
+        create: { workspace_id: workspaceId, ano, mes, aliquota: aliquotaEfetiva },
+      }),
+      prisma.faturamento_mes.update({
+        where: { id: fat.id },
+        data: { aliquota_simples: aliquotaEfetiva },
+      }),
+    ])
+  }
+
   // Recalcula o mês usando o DAS real informado — Lucro Bruto/Líquido,
   // DLR do Sócio e Reinvestimento passam a refletir a diferença (pra mais ou pra menos)
   // entre o DAS estimado e o DAS efetivamente pago.
   await recalcularMes(fat.id, workspaceId, ano, mes)
 
   revalidatePath(`/faturamento/${ano}/${mes}`)
+  revalidatePath('/config')
   revalidatePath('/faturamento')
 }
 
@@ -795,16 +815,20 @@ export async function getProvisionalMesAtual(): Promise<ProvisionalMes | null> {
 
   const anoAtual = now.getFullYear()
   const mesAtual = now.getMonth() + 1
-  const [config, aliqHist] = await Promise.all([
+  const [config, aliqHist, estimativas] = await Promise.all([
     getConfig(workspaceId, anoAtual),
     prisma.aliquota_historico.findFirst({
       where: { workspace_id: workspaceId, ano: anoAtual, mes: mesAtual },
     }),
+    estimarAliquotasFuturas(anoAtual),
   ])
-  // Prefere alíquota do mês configurada em /config/tributario
-  const aliquota = aliqHist
-    ? (aliqHist.aliquota > 1 ? aliqHist.aliquota / 100 : aliqHist.aliquota)
-    : (config.aliquota_simples > 1 ? config.aliquota_simples / 100 : config.aliquota_simples)
+  // Mesma prioridade do TributarioView: exato (RBT12 100% real) sobrescreve DB
+  const exato = estimativas.find(e => e.mes === mesAtual && e.tipo === 'exato')
+  const aliquota = exato
+    ? exato.aliquota / 100
+    : aliqHist
+      ? (aliqHist.aliquota > 1 ? aliqHist.aliquota / 100 : aliqHist.aliquota)
+      : (config.aliquota_simples > 1 ? config.aliquota_simples / 100 : config.aliquota_simples)
 
   const receita_total  = pedidos.reduce((s, p) => s + p.valor_venda, 0)
   const tarifas        = pedidos.reduce((s, p) => s + p.tarifa, 0)

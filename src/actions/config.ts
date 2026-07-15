@@ -3,8 +3,11 @@
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/auth'
-import { calcularSimples } from '@/engines/impostos'
 import { recalcularMes } from '@/actions/finance'
+import { estimarAliquotasFuturas } from '@/actions/aliquotas'
+
+export type { EstimativaAliquota } from '@/actions/aliquotas'
+export { estimarAliquotasFuturas } from '@/actions/aliquotas'
 
 // =============================================
 // EMPRESA / CONFIGURAÇÃO TRIBUTÁRIA
@@ -244,75 +247,47 @@ export async function updateDLRConfig(ano: number, percentual_dlr_socio: number,
 }
 
 // =============================================
-// ESTIMATIVA DE ALÍQUOTAS FUTURAS
+// RECONCILIAR ALÍQUOTAS COM DAS REAL PAGO
 // =============================================
 
-export type EstimativaAliquota = {
-  mes: number
-  aliquota: number
-  rbt12: number
-  tipo: 'exato' | 'estimativa'
-}
-
-export async function estimarAliquotasFuturas(ano: number): Promise<EstimativaAliquota[]> {
+// Corrige meses onde a alíquota registrada difere do DAS real pago.
+// Chamada na abertura de /config/tributario para auto-corrigir desyncs históricos.
+export async function reconciliarAliquotasComDASReal(): Promise<number> {
   const { workspaceId } = await getAuthContext()
 
-  // Último mês fechado do ano (desc → primeiro é o mais recente)
-  const mesesFechados = await prisma.faturamento_mes.findMany({
-    where: { workspace_id: workspaceId, ano, fechado: true },
-    select: { mes: true },
-    orderBy: { mes: 'desc' },
+  const mesesPagos = await prisma.faturamento_mes.findMany({
+    where: {
+      workspace_id: workspaceId,
+      das_status: 'PAGO',
+      das_valor_real: { gt: 0 },
+      receita_total: { gt: 0 },
+    },
   })
-  if (mesesFechados.length === 0) return []
 
-  const lastClosed = mesesFechados[0].mes
+  let corrigidos = 0
+  for (const fat of mesesPagos) {
+    const aliquotaEfetiva = parseFloat(((fat.das_valor_real! / fat.receita_total) * 100).toFixed(2))
+    const aliquotaAtual = fat.aliquota_simples > 1 ? fat.aliquota_simples : fat.aliquota_simples * 100
 
-  // Histórico de faturamento (ano atual + anterior para a janela de 12 meses)
-  const historicoFat = await prisma.historico_faturamento_anual.findMany({
-    where: { workspace_id: workspaceId, ano: { gte: ano - 1, lte: ano } },
-    orderBy: [{ ano: 'asc' }, { mes: 'asc' }],
-  })
-  const fatMap = new Map<string, number>()
-  for (const h of historicoFat) fatMap.set(`${h.ano}-${h.mes}`, h.faturamento)
-
-  // Média dos últimos 3 meses fechados para projetar os meses futuros
-  const last3Fats = mesesFechados.slice(0, 3).map(m => fatMap.get(`${ano}-${m.mes}`) ?? 0)
-  const avgLast3 = last3Fats.length > 0
-    ? last3Fats.reduce((a, b) => a + b, 0) / last3Fats.length
-    : 0
-  if (avgLast3 <= 0) return []
-
-  const estimativas: EstimativaAliquota[] = []
-
-  for (let m = lastClosed + 1; m <= 12; m++) {
-    let rbt12 = 0
-    let allReal = true
-
-    // RBT12(m) = soma dos 12 meses imediatamente anteriores a m
-    for (let offset = 1; offset <= 12; offset++) {
-      let tMes = m - offset
-      let tAno = ano
-      if (tMes <= 0) { tMes += 12; tAno = ano - 1 }
-
-      const isReal = tAno < ano || (tAno === ano && tMes <= lastClosed)
-      if (isReal) {
-        rbt12 += fatMap.get(`${tAno}-${tMes}`) ?? 0
-      } else {
-        rbt12 += avgLast3
-        allReal = false
-      }
+    if (Math.abs(aliquotaEfetiva - aliquotaAtual) > 0.05) {
+      await Promise.all([
+        prisma.aliquota_historico.upsert({
+          where: { workspace_id_ano_mes: { workspace_id: workspaceId, ano: fat.ano, mes: fat.mes } },
+          update: { aliquota: aliquotaEfetiva },
+          create: { workspace_id: workspaceId, ano: fat.ano, mes: fat.mes, aliquota: aliquotaEfetiva },
+        }),
+        prisma.faturamento_mes.update({
+          where: { id: fat.id },
+          data: { aliquota_simples: aliquotaEfetiva },
+        }),
+      ])
+      corrigidos++
     }
-
-    const resultado = calcularSimples({ faturamentoMes: avgLast3, rbt12, anexo: 'comercio' })
-    if (!resultado.ok) continue
-
-    estimativas.push({
-      mes: m,
-      aliquota: parseFloat(resultado.aliquotaEfetiva.toFixed(2)),
-      rbt12: Math.round(rbt12),
-      tipo: allReal ? 'exato' : 'estimativa',
-    })
   }
 
-  return estimativas
+  if (corrigidos > 0) {
+    revalidatePath('/config')
+    revalidatePath('/faturamento')
+  }
+  return corrigidos
 }
