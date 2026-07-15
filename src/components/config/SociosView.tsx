@@ -13,7 +13,7 @@ import { saveSocio, updateDLRConfig } from '@/actions/config'
 
 interface Socio { id: string; nome: string; email: string | null; percentual_participacao: number }
 type Config = { percentual_dlr_socio: number; formula_previdencia: string } | null
-interface MesDRE { mes: number; lucro_liquido: number; desp_pro_labore: number }
+interface MesDRE { mes: number; lucro_liquido: number; dlr_socio: number; reinvestimento: number; desp_pro_labore: number }
 interface Props { socios: Socio[]; config: Config; meses: MesDRE[]; ano: number }
 
 export function SociosView({ socios: sociosIniciais, config, meses, ano }: Props) {
@@ -35,7 +35,9 @@ export function SociosView({ socios: sociosIniciais, config, meses, ano }: Props
     ? mesesFechados.reduce((s, m) => s + m.lucro_liquido, 0) / mesesFechados.length : 0
   const proLaboreMedio = mesesFechados.length > 0
     ? mesesFechados.reduce((s, m) => s + m.desp_pro_labore, 0) / mesesFechados.length : 0
-  const dlrMedio = mediaLucroLiq * dlr
+  // DLR real de cada mês (respeita modo FIXO/PERCENTUAL configurado) — vem pré-calculado de getDREAnual
+  const dlrMedio = mesesFechados.length > 0
+    ? mesesFechados.reduce((s, m) => s + m.dlr_socio, 0) / mesesFechados.length : 0
   const rendaTotalSocio = proLaboreMedio + dlrMedio
 
   async function handleSaveConfig() {
@@ -141,7 +143,7 @@ export function SociosView({ socios: sociosIniciais, config, meses, ano }: Props
               </div>
               <div className="text-center p-3 bg-blue-50 rounded-xl">
                 <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wide">Reinvest. Médio</p>
-                <p className="text-lg font-black font-mono text-blue-600">{formatCurrency(mediaLucroLiq * reinvest)}</p>
+                <p className="text-lg font-black font-mono text-blue-600">{formatCurrency(mesesFechados.length > 0 ? mesesFechados.reduce((s, m) => s + m.reinvestimento, 0) / mesesFechados.length : 0)}</p>
               </div>
             </div>
 
@@ -186,10 +188,10 @@ export function SociosView({ socios: sociosIniciais, config, meses, ano }: Props
                         {formatCurrency(m.lucro_liquido)}
                       </td>
                       <td className="py-2 text-right font-mono text-emerald-600 font-bold">
-                        {formatCurrency(m.lucro_liquido * dlr)}
+                        {formatCurrency(m.dlr_socio)}
                       </td>
                       <td className="py-2 text-right font-mono text-blue-600">
-                        {formatCurrency(m.lucro_liquido * reinvest)}
+                        {formatCurrency(m.reinvestimento)}
                       </td>
                       <td className="py-2 text-right font-mono text-slate-500">
                         {formatCurrency(m.desp_pro_labore)}
