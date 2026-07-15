@@ -93,12 +93,10 @@ export function SociosView({ socios: sociosIniciais, config, meses, ano }: Props
           <div className="rounded-xl overflow-hidden border border-slate-200">
             <div className="flex">
               <div className="py-3 px-4 text-center" style={{ width: `${dlrPercent}%`, background: '#10B981', minWidth: '80px' }}>
-                <p className="text-white text-[10px] font-bold">DLR Sócio</p>
-                <p className="text-white text-sm font-black">{dlrPercent}%</p>
+                <p className="text-white text-sm font-black">DLR do Sócio</p>
               </div>
               <div className="py-3 px-4 text-center flex-1" style={{ background: '#3B82F6' }}>
-                <p className="text-white text-[10px] font-bold">Reinvestimento</p>
-                <p className="text-white text-sm font-black">{(100 - parseFloat(dlrPercent)).toFixed(0)}%</p>
+                <p className="text-white text-sm font-black">Reinvestimento</p>
               </div>
             </div>
           </div>
