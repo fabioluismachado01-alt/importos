@@ -2,9 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 
-export const dynamic = 'force-dynamic'
-
-export async function GET() {
+export async function POST() {
   const produto = await prisma.produto_catalogo.findFirst({
     where: { sku_interno: 'ATS-2', nome: { contains: 'Azul' } },
   })
