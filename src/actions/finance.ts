@@ -592,6 +592,7 @@ export async function fecharMes(ano: number, mes: number) {
 
   revalidatePath(`/faturamento/${ano}/${mes}`)
   revalidatePath('/faturamento')
+  revalidatePath('/config/tributario')
 }
 
 // =============================================
