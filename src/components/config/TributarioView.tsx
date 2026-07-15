@@ -219,7 +219,9 @@ export function TributarioView({ empresa, aliquotas, mesesFaturamento, ano, esti
               const isExato = !!est && est.tipo === 'exato'
               // Para meses passados: ambas as fontes valem como "confirmado"
               // Para atual/futuro: só aliquota_historico explícito conta (faturamento_mes pode ser default)
-              const temValorSalvoBase = isPast ? (hasAliquotaHistorico || hasFaturamentoSaved) : hasAliquotaHistorico
+              // Meses futuros nunca são "confirmados": estimate sempre prevalece sobre valores salvos
+              // (o usuário pode ter salvo 8,00% como placeholder no passado)
+              const temValorSalvoBase = isPast ? (hasAliquotaHistorico || hasFaturamentoSaved) : (isAtual && hasAliquotaHistorico)
               const isEstimativa = !isExato && !!est && est.tipo === 'estimativa' && !temValorSalvoBase
               const temValorSalvo = temValorSalvoBase && !isExato
 

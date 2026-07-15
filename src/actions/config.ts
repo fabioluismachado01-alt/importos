@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/auth'
 import { calcularSimples } from '@/engines/impostos'
+import { recalcularMes } from '@/actions/finance'
 
 // =============================================
 // EMPRESA / CONFIGURAÇÃO TRIBUTÁRIA
@@ -55,6 +56,8 @@ export async function upsertAliquota(ano: number, mes: number, aliquota: number)
       where: { id: fat.id },
       data: { aliquota_simples: aliquota },
     })
+    // Recalcula KPIs do mês para manter das_valor_calc e lucro_liquido sincronizados
+    await recalcularMes(fat.id, workspaceId, ano, mes)
   }
   revalidatePath('/config')
   revalidatePath('/faturamento')

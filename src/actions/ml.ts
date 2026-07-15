@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { getAuthContext } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getMLAuthUrl, refreshMLToken, getMLOrders, getMLUserItemIds, getMLItemsBatch } from '@/lib/ml-api'
+import { estimarAliquotasFuturas } from '@/actions/config'
 
 // ─── URL de conexão OAuth ─────────────────────────────────────────────────────
 
@@ -833,17 +834,25 @@ export async function getMLCurvaABC(filtros?: {
 export async function getAliquotaSimples(): Promise<number> {
   const { workspaceId } = await getAuthContext()
   const agora = new Date()
+  const anoAtual = agora.getFullYear()
+  const mesAtual = agora.getMonth() + 1
 
-  const historico = await prisma.aliquota_historico.findFirst({
-    where: { workspace_id: workspaceId, ano: agora.getFullYear(), mes: agora.getMonth() + 1 },
-    select: { aliquota: true },
-  })
+  const [historico, empresa, estimativas] = await Promise.all([
+    prisma.aliquota_historico.findFirst({
+      where: { workspace_id: workspaceId, ano: anoAtual, mes: mesAtual },
+      select: { aliquota: true },
+    }),
+    prisma.empresa.findFirst({
+      where: { workspace_id: workspaceId },
+      select: { aliquota_simples: true },
+    }),
+    estimarAliquotasFuturas(anoAtual),
+  ])
+
+  // Exato sobrescreve DB — mesma prioridade do TributarioView
+  const exato = estimativas.find(e => e.mes === mesAtual && e.tipo === 'exato')
+  if (exato) return exato.aliquota
   if (historico) return historico.aliquota
-
-  const empresa = await prisma.empresa.findFirst({
-    where: { workspace_id: workspaceId },
-    select: { aliquota_simples: true },
-  })
   return empresa?.aliquota_simples ?? 6.0
 }
 
@@ -853,8 +862,9 @@ export type AliquotaMes = { ano: number; mes: number; aliquota: number }
 
 export async function getAliquotasHistorico(): Promise<{ historico: AliquotaMes[]; padrao: number }> {
   const { workspaceId } = await getAuthContext()
+  const ano = new Date().getFullYear()
 
-  const [historico, empresa] = await Promise.all([
+  const [historicoDb, empresa, estimativas] = await Promise.all([
     prisma.aliquota_historico.findMany({
       where: { workspace_id: workspaceId },
       select: { ano: true, mes: true, aliquota: true },
@@ -864,12 +874,24 @@ export async function getAliquotasHistorico(): Promise<{ historico: AliquotaMes[
       where: { workspace_id: workspaceId },
       select: { aliquota_simples: true },
     }),
+    estimarAliquotasFuturas(ano),
   ])
 
-  return {
-    historico,
-    padrao: empresa?.aliquota_simples ?? 0.06,
+  // Mesma prioridade do TributarioView:
+  // - exato (RBT12 100% real) sobrescreve qualquer valor salvo no DB
+  // - estimativa preenche meses sem valor salvo
+  const historico: AliquotaMes[] = historicoDb.map(h => ({ ...h }))
+  for (const est of estimativas) {
+    const idx = historico.findIndex(h => h.ano === ano && h.mes === est.mes)
+    if (est.tipo === 'exato') {
+      if (idx >= 0) historico[idx].aliquota = est.aliquota
+      else historico.push({ ano, mes: est.mes, aliquota: est.aliquota })
+    } else if (idx < 0) {
+      historico.push({ ano, mes: est.mes, aliquota: est.aliquota })
+    }
   }
+
+  return { historico, padrao: empresa?.aliquota_simples ?? 0.06 }
 }
 
 // ─── Ads mensais (lançados manualmente na planilha) ──────────────────────────
