@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { updateEmpresa, upsertAliquota } from '@/actions/config'
-import type { EstimativaAliquota } from '@/actions/config'
+import type { EstimativaAliquota } from '@/actions/aliquotas'
 import { getMesNome } from '@/lib/utils'
 
 interface Empresa {

@@ -4,10 +4,6 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/auth'
 import { recalcularMes } from '@/actions/finance'
-import { estimarAliquotasFuturas } from '@/actions/aliquotas'
-
-export type { EstimativaAliquota } from '@/actions/aliquotas'
-export { estimarAliquotasFuturas } from '@/actions/aliquotas'
 
 // =============================================
 // EMPRESA / CONFIGURAÇÃO TRIBUTÁRIA
