@@ -277,6 +277,4 @@ export async function restaurarAliquotasJanAbr2026(): Promise<void> {
       }),
     ])
   }
-  revalidatePath('/config/tributario')
-  revalidatePath('/faturamento')
 }

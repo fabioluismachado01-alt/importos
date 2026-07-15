@@ -538,24 +538,6 @@ export async function registrarPagamentoDAS(ano: number, mes: number, valorPago:
     data: { das_valor_real: valorPago, das_status: 'PAGO' },
   })
 
-  // Back-calcula a alíquota efetiva real a partir do DAS pago.
-  // Isso mantém aliquota_historico sincronizado com o DAS realmente pago,
-  // evitando dessincronia entre o campo de alíquota e o DAS efetivo.
-  if (fat.receita_total > 0) {
-    const aliquotaEfetiva = parseFloat(((valorPago / fat.receita_total) * 100).toFixed(2))
-    await Promise.all([
-      prisma.aliquota_historico.upsert({
-        where: { workspace_id_ano_mes: { workspace_id: workspaceId, ano, mes } },
-        update: { aliquota: aliquotaEfetiva },
-        create: { workspace_id: workspaceId, ano, mes, aliquota: aliquotaEfetiva },
-      }),
-      prisma.faturamento_mes.update({
-        where: { id: fat.id },
-        data: { aliquota_simples: aliquotaEfetiva },
-      }),
-    ])
-  }
-
   // Recalcula o mês usando o DAS real informado — Lucro Bruto/Líquido,
   // DLR do Sócio e Reinvestimento passam a refletir a diferença (pra mais ou pra menos)
   // entre o DAS estimado e o DAS efetivamente pago.
