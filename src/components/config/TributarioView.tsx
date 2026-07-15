@@ -57,7 +57,11 @@ export function TributarioView({ empresa, aliquotas, mesesFaturamento, ano, esti
   // Índice de estimativas por mês
   const estimativaMap = new Map(estimativas.map(e => [e.mes, e]))
 
-  // Monta grade: aliquota_historico → faturamento_mes → estimativa sistema → fallback prev
+  // Monta grade de valores
+  // Prioridade: exato > hist(passado) > fat(passado) > hist(futuro/atual) > estimativa > prev
+  // Exato sobrescreve até valores manuais — é determinístico (RBT12 100% real)
+  // faturamento_mes.aliquota_simples só vale para meses já encerrados (para meses futuros
+  // pode ser o default da empresa, não uma confirmação explícita do usuário)
   const [aliquotasMes, setAliquotasMes] = useState<Record<number, string>>(() => {
     const mesAtualNum = new Date().getMonth() + 1
     let ultimaKnown = normAliquota(empresa?.aliquota_simples ?? 6)
@@ -65,16 +69,20 @@ export function TributarioView({ empresa, aliquotas, mesesFaturamento, ano, esti
       const hist = aliquotas.find(x => x.mes === m)
       const fat = mesesFaturamento.find(x => x.mes === m)
       const est = estimativaMap.get(m)
-      if (hist) {
+      const isPast = m < mesAtualNum
+
+      if (est && est.tipo === 'exato') {
+        acc[m] = est.aliquota.toFixed(2)
+        ultimaKnown = est.aliquota
+      } else if (hist && (isPast || !est)) {
         const v = normAliquota(hist.aliquota)
         acc[m] = v.toFixed(2)
         ultimaKnown = v
-      } else if (fat && fat.aliquota_simples > 0) {
+      } else if (fat && fat.aliquota_simples > 0 && isPast) {
         const v = normAliquota(fat.aliquota_simples)
         acc[m] = v.toFixed(2)
         ultimaKnown = v
       } else if (est) {
-        // Valor calculado pelo sistema (exato ou estimativa)
         acc[m] = est.aliquota.toFixed(2)
         ultimaKnown = est.aliquota
       } else if (m > mesAtualNum) {
@@ -202,11 +210,18 @@ export function TributarioView({ empresa, aliquotas, mesesFaturamento, ano, esti
             {MESES_ANO.map(mes => {
               const isAtual = mes === mesAtual
               const isFuturo = mes > mesAtual
-              const temValorSalvo = !!aliquotas.find(x => x.mes === mes) || !!mesesFaturamento.find(x => x.mes === mes && x.aliquota_simples > 0)
+              const isPast = mes < mesAtual
+              const hasAliquotaHistorico = !!aliquotas.find(x => x.mes === mes)
+              const hasFaturamentoSaved = !!mesesFaturamento.find(x => x.mes === mes && x.aliquota_simples > 0)
               const temValor = aliquotasMes[mes] !== ''
               const est = estimativaMap.get(mes)
-              const isExato = !temValorSalvo && !!est && est.tipo === 'exato'
-              const isEstimativa = !temValorSalvo && !!est && est.tipo === 'estimativa'
+              // Exato = cálculo determinístico (RBT12 100% real) — sobrescreve valores manuais
+              const isExato = !!est && est.tipo === 'exato'
+              // Para meses passados: ambas as fontes valem como "confirmado"
+              // Para atual/futuro: só aliquota_historico explícito conta (faturamento_mes pode ser default)
+              const temValorSalvoBase = isPast ? (hasAliquotaHistorico || hasFaturamentoSaved) : hasAliquotaHistorico
+              const isEstimativa = !isExato && !!est && est.tipo === 'estimativa' && !temValorSalvoBase
+              const temValorSalvo = temValorSalvoBase && !isExato
 
               return (
                 <div key={mes} className={`p-3 rounded-xl border transition-all ${

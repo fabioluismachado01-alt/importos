@@ -101,11 +101,20 @@ export async function salvarAnaliseAmazon(dados: DadosAmazon) {
     lancamentos.push(add('DESPESA_VARIAVEL', 'OUTRAS_TAXAS',
       'Outras Taxas de Serviço Amazon', dados.outras_taxas_servico))
 
-  // ─── Reembolsos ──────────────────────────────────────────
-  const reembolsoLiq = dados.reembolsos_bruto - dados.reembolsos_comissao - dados.reembolsos_fba
-  if (reembolsoLiq > 0)
-    lancamentos.push(add('DESPESA_VARIAVEL', 'OUTRAS_TAXAS',
-      `Reembolsos líquidos (bruto R$${dados.reembolsos_bruto.toFixed(2)})`, reembolsoLiq))
+  // ─── Reembolsos / Devoluções ─────────────────────────────
+  // Devoluções reduzem a receita bruta (LC 123/2006 Art. 3º §1º — RBT12 líquida de cancelamentos)
+  // Tratar como RECEITA negativa garante que receita_total e historico_faturamento_anual
+  // reflitam a base correta para cálculo do Simples Nacional.
+  if (dados.reembolsos_bruto > 0) {
+    lancamentos.push(add('RECEITA', 'AMAZON',
+      `Devoluções Amazon — R$${dados.reembolsos_bruto.toFixed(2)} estornados ao comprador`,
+      -dados.reembolsos_bruto, 'AMAZON'))
+    // Tarifas e FBA devolvidos pela Amazon → reduzem as despesas originais de venda
+    const taxasDevolvidas = (dados.reembolsos_comissao ?? 0) + (dados.reembolsos_fba ?? 0)
+    if (taxasDevolvidas > 0)
+      lancamentos.push(add('DESPESA_VARIAVEL', 'TARIFAS',
+        'Tarifas Amazon devolvidas nas devoluções', -taxasDevolvidas))
+  }
 
   // ─── Publicidade ─────────────────────────────────────────
   if (dados.publicidade > 0)
