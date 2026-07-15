@@ -57,9 +57,10 @@ export async function recalcularMes(faturamentoId: string, workspaceId: string, 
     config.aliquota_simples = toDecimalAliq(fat.aliquota_simples)
     config.meta_mes = fat.meta_mes
     config.dias_no_mes = fat.dias_no_mes
-    // dlr_modo e dlr_valor_fixo vêm do config global (getConfig acima)
-    // NÃO sobrescrever com o valor do mês — seria o modo antigo antes da mudança de config
+    // Override por mês: propaga modo, percentual custom e valor fixo do mês para o engine
+    config.dlr_modo = (fat.dlr_modo as 'PERCENTUAL' | 'FIXO') ?? 'PERCENTUAL'
     config.dlr_percentual_custom = fat.dlr_percentual_custom
+    config.dlr_valor_fixo = fat.dlr_valor_fixo
     // DAS real: só substitui a estimativa no cálculo do lucro depois de pago
     config.das_valor_real = fat.das_status === 'PAGO' ? fat.das_valor_real : null
   }
@@ -756,9 +757,15 @@ export async function getDREAnual(ano: number) {
 
   return meses.map(m => {
     const lucroLiq = m.lucro_liquido ?? 0
-    // Per-month custom percentage takes priority; fall back to global
-    const pct = m.dlr_percentual_custom ?? pctGlobal
-    const dlr = Math.max(0, lucroLiq) * pct
+    let dlr: number
+    if (m.dlr_modo === 'FIXO' && m.dlr_valor_fixo != null) {
+      // Valor fixo configurado para este mês — usa diretamente
+      dlr = m.dlr_valor_fixo
+    } else {
+      // Percentual: custom do mês ou global
+      const pct = m.dlr_percentual_custom ?? pctGlobal
+      dlr = Math.max(0, lucroLiq) * pct
+    }
     return { ...m, dlr_socio: dlr, reinvestimento: lucroLiq - dlr }
   })
 }
