@@ -9,40 +9,43 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { saveCanal, deleteCanal } from '@/actions/config'
+import type { CanalComFaixas, CanalFaixa } from '@/actions/config'
 
-interface Canal {
-  id: string; workspace_id: string | null; nome: string; slug: string
-  comissao_perc: number; taxa_fixa: number; ativo: boolean
-}
-interface Props { canais: Canal[] }
+interface Props { canais: CanalComFaixas[] }
 
 const CANAL_CORES: Record<string, string> = {
   'mercado-livre': '#FFD700', 'shopee': '#EE4D2D', 'amazon': '#FF9900',
-  'tiktok': '#010101', 'magalu': '#0086FF', 'casas-bahia': '#FF6B00',
-  'loja-propria': '#10B981',
+  'tiktok': '#010101', 'tiktok-shop': '#010101', 'magalu': '#0086FF',
+  'casas-bahia': '#FF6B00', 'loja-propria': '#10B981', 'presencial': '#10B981',
+  'presencial-proprio': '#10B981',
+}
+
+type FaixaForm = { preco_min: string; preco_max: string; comissao_perc: string; taxa_fixa: string }
+
+function getFeeForPrice(faixas: CanalFaixa[], preco: number): { comissao: number; taxa: number } {
+  const faixa = faixas.find(f => preco >= f.preco_min && (f.preco_max === null || preco <= f.preco_max))
+  return faixa ? { comissao: faixa.comissao_perc, taxa: faixa.taxa_fixa } : { comissao: 0, taxa: 0 }
+}
+
+function simularMargem(faixas: CanalFaixa[], preco = 150, custo = 50) {
+  const { comissao, taxa } = getFeeForPrice(faixas, preco)
+  return ((preco - custo - (preco * comissao / 100) - taxa) / preco) * 100
 }
 
 export function CanaisView({ canais: inicial }: Props) {
   const router = useRouter()
-  const [editando, setEditando] = useState<Canal | null | 'novo'>(null)
+  const [editando, setEditando] = useState<CanalComFaixas | null | 'novo'>(null)
   const [loading, setLoading] = useState(false)
 
   const ativos = inicial.filter(c => c.ativo)
   const inativos = inicial.filter(c => !c.ativo)
 
-  function simularMargem(comissao: number, taxa: number) {
-    const preco = 150
-    const custo = 50
-    const gastosCanal = (preco * comissao / 100) + taxa
-    const margem = ((preco - custo - gastosCanal) / preco) * 100
-    return margem
-  }
-
-  async function handleSave(data: Omit<Canal, 'id' | 'workspace_id'> & { id?: string }) {
+  async function handleSave(data: { id?: string; nome: string; slug?: string; ativo: boolean; faixas: Array<{ preco_min: number; preco_max?: number | null; comissao_perc: number; taxa_fixa: number; ordem: number }> }) {
     setLoading(true)
     try {
       await saveCanal(data)
       router.refresh()
+      setEditando(null)
     } finally {
       setLoading(false)
     }
@@ -66,8 +69,9 @@ export function CanaisView({ canais: inicial }: Props) {
           <div className="divide-y divide-slate-50">
             {ativos.map(c => {
               const cor = CANAL_CORES[c.slug] ?? '#64748B'
-              const margem = simularMargem(c.comissao_perc, c.taxa_fixa)
+              const margem = simularMargem(c.faixas)
               const isSistema = !c.workspace_id
+              const temFaixas = c.faixas.length > 1
               return (
                 <div key={c.id} className="flex items-center gap-4 px-5 py-3.5 group hover:bg-slate-50 transition-colors">
                   <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${cor}20` }}>
@@ -77,10 +81,20 @@ export function CanaisView({ canais: inicial }: Props) {
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-slate-800">{c.nome}</span>
                       {isSistema && <Badge className="text-[8px] bg-slate-100 text-slate-500 h-4 px-1.5">Sistema</Badge>}
+                      {temFaixas && <Badge className="text-[8px] bg-blue-100 text-blue-600 h-4 px-1.5">{c.faixas.length} faixas</Badge>}
                     </div>
-                    <p className="text-xs text-slate-500 font-mono">
-                      Comissão {c.comissao_perc}% · Taxa fixa R${c.taxa_fixa.toFixed(2)}
-                    </p>
+                    {temFaixas ? (
+                      <p className="text-xs text-slate-500 font-mono">
+                        {c.faixas.map((f, i) => {
+                          const max = f.preco_max != null ? `R$${f.preco_max.toFixed(2)}` : 'sem limite'
+                          return `R$${f.preco_min.toFixed(2)}–${max}: ${f.comissao_perc}% + R$${f.taxa_fixa.toFixed(2)}`
+                        }).join(' · ')}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-500 font-mono">
+                        Comissão {c.faixas[0]?.comissao_perc ?? 0}% · Taxa fixa R${(c.faixas[0]?.taxa_fixa ?? 0).toFixed(2)}
+                      </p>
+                    )}
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-[10px] text-slate-400">Margem est.</p>
@@ -123,54 +137,134 @@ export function CanaisView({ canais: inicial }: Props) {
 }
 
 function CanalModal({ canal, onClose, onSave, loading }: {
-  canal: Canal | null; onClose: () => void
-  onSave: (data: Omit<Canal, 'id' | 'workspace_id'> & { id?: string }) => void; loading: boolean
+  canal: CanalComFaixas | null
+  onClose: () => void
+  onSave: (data: { id?: string; nome: string; slug?: string; ativo: boolean; faixas: Array<{ preco_min: number; preco_max?: number | null; comissao_perc: number; taxa_fixa: number; ordem: number }> }) => void
+  loading: boolean
 }) {
-  const [form, setForm] = useState({
-    nome: canal?.nome ?? '',
-    comissao_perc: canal?.comissao_perc.toFixed(1) ?? '0',
-    taxa_fixa: canal?.taxa_fixa.toFixed(2) ?? '0',
-    ativo: canal?.ativo ?? true,
-  })
+  const [nome, setNome] = useState(canal?.nome ?? '')
+  const [ativo, setAtivo] = useState(canal?.ativo ?? true)
 
-  // Simulação ao vivo
-  const comissao = parseFloat(form.comissao_perc) || 0
-  const taxa = parseFloat(form.taxa_fixa) || 0
-  const preco = 150, custo = 50
-  const gastosCanal = (preco * comissao / 100) + taxa
-  const margem = ((preco - custo - gastosCanal) / preco) * 100
+  const initialFaixas: FaixaForm[] = canal?.faixas.length
+    ? canal.faixas.map(f => ({
+        preco_min: f.preco_min.toFixed(2),
+        preco_max: f.preco_max != null ? f.preco_max.toFixed(2) : '',
+        comissao_perc: f.comissao_perc.toFixed(1),
+        taxa_fixa: f.taxa_fixa.toFixed(2),
+      }))
+    : [{ preco_min: '0.01', preco_max: '', comissao_perc: '0.0', taxa_fixa: '0.00' }]
+
+  const [faixas, setFaixas] = useState<FaixaForm[]>(initialFaixas)
+
+  function addFaixa() {
+    setFaixas(f => [...f, { preco_min: '0.01', preco_max: '', comissao_perc: '0.0', taxa_fixa: '0.00' }])
+  }
+
+  function removeFaixa(i: number) {
+    setFaixas(f => f.filter((_, idx) => idx !== i))
+  }
+
+  function updateFaixa(i: number, field: keyof FaixaForm, val: string) {
+    setFaixas(f => f.map((fx, idx) => idx === i ? { ...fx, [field]: val } : fx))
+  }
+
+  // Simulação ao vivo para R$150
+  const demoPreco = 150
+  const demoCusto = 50
+  const parsedFaixas: CanalFaixa[] = faixas.map((f, i) => ({
+    id: `tmp-${i}`, canal_id: '', ordem: i,
+    preco_min: parseFloat(f.preco_min) || 0,
+    preco_max: f.preco_max.trim() ? parseFloat(f.preco_max) : null,
+    comissao_perc: parseFloat(f.comissao_perc) || 0,
+    taxa_fixa: parseFloat(f.taxa_fixa) || 0,
+  }))
+  const { comissao: demoComissao, taxa: demoTaxa } = getFeeForPrice(parsedFaixas, demoPreco)
+  const margem = ((demoPreco - demoCusto - (demoPreco * demoComissao / 100) - demoTaxa) / demoPreco) * 100
+
+  function handleSave() {
+    if (!nome.trim()) return
+    if (faixas.length === 0) return
+    onSave({
+      id: canal?.id,
+      nome: nome.trim(),
+      slug: canal?.slug,
+      ativo,
+      faixas: parsedFaixas.map((f, i) => ({ preco_min: f.preco_min, preco_max: f.preco_max, comissao_perc: f.comissao_perc, taxa_fixa: f.taxa_fixa, ordem: i })),
+    })
+  }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl my-4">
         <div className="flex items-center justify-between p-5 border-b border-slate-100">
           <h2 className="text-base font-black text-slate-900">{canal ? 'Editar Canal' : 'Novo Canal'}</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
         </div>
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-5">
+          {/* Nome */}
           <div>
             <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome do Canal *</Label>
-            <Input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} className="mt-1.5" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Comissão (%)</Label>
-              <Input type="number" step="0.1" value={form.comissao_perc}
-                onChange={e => setForm(f => ({ ...f, comissao_perc: e.target.value }))} className="mt-1.5 font-mono" />
-            </div>
-            <div>
-              <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Taxa Fixa (R$)</Label>
-              <Input type="number" step="0.01" value={form.taxa_fixa}
-                onChange={e => setForm(f => ({ ...f, taxa_fixa: e.target.value }))} className="mt-1.5 font-mono" />
-            </div>
+            <Input value={nome} onChange={e => setNome(e.target.value)} className="mt-1.5" />
           </div>
 
-          {/* Simulação */}
+          {/* Faixas de preço */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Faixas de Preço</Label>
+              <button onClick={addFaixa} className="text-[10px] text-emerald-600 font-black hover:text-emerald-700 flex items-center gap-1">
+                <Plus className="w-3 h-3" /> Adicionar faixa
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {faixas.map((f, i) => (
+                <div key={i} className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-2 items-end bg-slate-50 rounded-xl p-3">
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Preço Mín (R$)</p>
+                    <Input type="number" step="0.01" value={f.preco_min}
+                      onChange={e => updateFaixa(i, 'preco_min', e.target.value)}
+                      className="h-8 text-xs font-mono" />
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Preço Máx (R$)</p>
+                    <Input type="number" step="0.01" value={f.preco_max}
+                      placeholder="sem limite"
+                      onChange={e => updateFaixa(i, 'preco_max', e.target.value)}
+                      className="h-8 text-xs font-mono placeholder:text-slate-300" />
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Comissão (%)</p>
+                    <Input type="number" step="0.1" value={f.comissao_perc}
+                      onChange={e => updateFaixa(i, 'comissao_perc', e.target.value)}
+                      className="h-8 text-xs font-mono" />
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Taxa Fixa (R$)</p>
+                    <Input type="number" step="0.01" value={f.taxa_fixa}
+                      onChange={e => updateFaixa(i, 'taxa_fixa', e.target.value)}
+                      className="h-8 text-xs font-mono" />
+                  </div>
+                  <button onClick={() => removeFaixa(i)}
+                    disabled={faixas.length === 1}
+                    className="mb-0.5 p-1.5 text-red-400 hover:text-red-600 disabled:opacity-20 disabled:cursor-not-allowed rounded">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-[10px] text-slate-400 mt-2">
+              Deixe "Preço Máx" vazio na última faixa para indicar sem limite superior.
+            </p>
+          </div>
+
+          {/* Simulação ao vivo */}
           <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
             <p className="text-[10px] font-black text-slate-500 uppercase tracking-wide mb-2">Simulação (custo R$50 → venda R$150)</p>
+            <p className="text-[9px] text-slate-400 mb-2">Faixa aplicada: {demoComissao}% + R${demoTaxa.toFixed(2)}</p>
             <div className="space-y-1 text-xs font-mono">
-              <div className="flex justify-between"><span className="text-slate-500">Comissão</span><span className="text-red-500">-R${(preco * comissao / 100).toFixed(2)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Taxa fixa</span><span className="text-red-500">-R${taxa.toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Comissão</span><span className="text-red-500">-R${(demoPreco * demoComissao / 100).toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Taxa fixa</span><span className="text-red-500">-R${demoTaxa.toFixed(2)}</span></div>
               <div className="flex justify-between border-t border-slate-200 pt-1 mt-1">
                 <span className="font-black text-slate-700">Margem</span>
                 <span className={`font-black ${margem >= 30 ? 'text-emerald-600' : margem >= 15 ? 'text-amber-600' : 'text-red-500'}`}>
@@ -182,8 +276,8 @@ function CanalModal({ canal, onClose, onSave, loading }: {
 
           <div className="flex gap-3 pt-1">
             <Button variant="outline" className="flex-1" onClick={onClose} disabled={loading}>Cancelar</Button>
-            <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" disabled={loading}
-              onClick={() => onSave({ id: canal?.id, nome: form.nome, slug: form.nome.toLowerCase().replace(/\s+/g, '-'), comissao_perc: parseFloat(form.comissao_perc) || 0, taxa_fixa: parseFloat(form.taxa_fixa) || 0, ativo: form.ativo })}>
+            <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" disabled={loading || !nome.trim() || faixas.length === 0}
+              onClick={handleSave}>
               {loading ? 'Salvando...' : 'Salvar Canal'}
             </Button>
           </div>

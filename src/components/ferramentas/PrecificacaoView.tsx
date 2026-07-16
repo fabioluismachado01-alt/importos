@@ -54,23 +54,36 @@ function ChannelLogo({ id }: { id: string }) {
 
 // ─── Canais ─────────────────────────────────────────────────────────────────
 
+export interface CanalFaixaPrec {
+  preco_min: number
+  preco_max: number | null
+  comissao_perc: number
+  taxa_fixa: number
+}
+
 interface Channel {
   id: string
   name: string
   accentBg: string
   accentText: string
-  defaultFee: number
+  slug: string        // slug no DB para lookup de faixas
+  defaultFee: number  // fallback se DB não retornar faixas
   defaultFixed: number
-  tiered?: true
 }
 
 const CHANNELS: Channel[] = [
-  { id: 'ml',     name: 'Mercado Livre', accentBg: '#fbbf24', accentText: '#1c1917', defaultFee: 11.5,  defaultFixed: 6.50 },
-  { id: 'shopee', name: 'Shopee',        accentBg: '#ea580c', accentText: '#ffffff', defaultFee: 20.0,  defaultFixed: 4.00 },
-  { id: 'amazon', name: 'Amazon',        accentBg: '#f97316', accentText: '#1c1917', defaultFee: 12.0,  defaultFixed: 6.05 },
-  { id: 'tiktok', name: 'TikTok Shop',   accentBg: '#0f172a', accentText: '#ffffff', defaultFee: 0,     defaultFixed: 0, tiered: true },
-  { id: 'magalu', name: 'Magalu',        accentBg: '#2563eb', accentText: '#ffffff', defaultFee: 14.8,  defaultFixed: 5.00 },
+  { id: 'ml',     name: 'Mercado Livre', accentBg: '#fbbf24', accentText: '#1c1917', slug: 'mercado-livre', defaultFee: 11.5,  defaultFixed: 6.50 },
+  { id: 'shopee', name: 'Shopee',        accentBg: '#ea580c', accentText: '#ffffff', slug: 'shopee',        defaultFee: 20.0,  defaultFixed: 4.00 },
+  { id: 'amazon', name: 'Amazon',        accentBg: '#f97316', accentText: '#1c1917', slug: 'amazon',        defaultFee: 12.0,  defaultFixed: 6.05 },
+  { id: 'tiktok', name: 'TikTok Shop',   accentBg: '#0f172a', accentText: '#ffffff', slug: 'tiktok-shop',   defaultFee: 6,     defaultFixed: 6.00 },
+  { id: 'magalu', name: 'Magalu',        accentBg: '#2563eb', accentText: '#ffffff', slug: 'magalu',        defaultFee: 14.8,  defaultFixed: 5.00 },
 ]
+
+function getFeeForPrice(faixas: CanalFaixaPrec[], preco: number, fallbackFee: number, fallbackFixed: number) {
+  if (!faixas || faixas.length === 0) return { fee: fallbackFee, fixed: fallbackFixed }
+  const faixa = faixas.find(f => preco >= f.preco_min && (f.preco_max === null || preco <= f.preco_max))
+  return faixa ? { fee: faixa.comissao_perc, fixed: faixa.taxa_fixa } : { fee: fallbackFee, fixed: fallbackFixed }
+}
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -106,11 +119,6 @@ interface CalcResult {
 
 // ─── Cálculos ───────────────────────────────────────────────────────────────
 
-function tikTokFees(price: number) {
-  return price < 50
-    ? { fee: 10, fixed: 4.00 }
-    : { fee: 6,  fixed: 6.00 }
-}
 
 function calc(
   price: number, cost: number, taxRate: number,
@@ -224,13 +232,17 @@ function DonutChart({ segs }: { segs: { value: number; color: string }[] }) {
 
 // ─── Componente Principal ────────────────────────────────────────────────────
 
-export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: string }) {
-  const initChannel = (ch: Channel, defPrice = 19): ChannelState => ({
-    price: defPrice,
-    feePercent: ch.tiered ? tikTokFees(defPrice).fee : ch.defaultFee,
-    fixedFee:   ch.tiered ? tikTokFees(defPrice).fixed : ch.defaultFixed,
-    freight: 0,
-  })
+export function PrecificacaoView({
+  workspaceId = 'default',
+  canalFaixas = {},
+}: {
+  workspaceId?: string
+  canalFaixas?: Record<string, CanalFaixaPrec[]>
+}) {
+  const initChannel = (ch: Channel, defPrice = 19): ChannelState => {
+    const { fee, fixed } = getFeeForPrice(canalFaixas[ch.slug] ?? [], defPrice, ch.defaultFee, ch.defaultFixed)
+    return { price: defPrice, feePercent: fee, fixedFee: fixed, freight: 0 }
+  }
 
   const [global, setGlobal] = usePersistedState<GlobalState>(`${workspaceId}_prec_global`, {
     productName: '', costPrice: 4.00, taxRate: 6, packaging: 0, volume: 100,
@@ -252,10 +264,13 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
   function setCh(id: string, field: keyof ChannelState, val: number) {
     setChs(prev => {
       const next = { ...prev, [id]: { ...prev[id], [field]: val } }
-      if (id === 'tiktok' && field === 'price') {
-        const f = tikTokFees(val)
-        next[id].feePercent = f.fee
-        next[id].fixedFee   = f.fixed
+      if (field === 'price') {
+        const ch = CHANNELS.find(c => c.id === id)
+        if (ch) {
+          const { fee, fixed } = getFeeForPrice(canalFaixas[ch.slug] ?? [], val, ch.defaultFee, ch.defaultFixed)
+          next[id].feePercent = fee
+          next[id].fixedFee   = fixed
+        }
       }
       return next
     })
@@ -413,50 +428,57 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
                     className="flex items-center gap-1 text-[8px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 w-full transition-colors"
                   >
                     <span>Taxas do Canal</span>
-                    {ch.tiered && (
+                    {(canalFaixas[ch.slug]?.length ?? 0) > 1 && (
                       <span className="ml-1 bg-slate-100 text-slate-500 px-1 rounded text-[7px] font-black">AUTO</span>
                     )}
                     <ChevronDown className={cn('w-3 h-3 ml-auto transition-transform', fOpen && 'rotate-180')} />
                   </button>
                   {fOpen && (
                     <div className="mt-2 grid grid-cols-2 gap-2" onClick={e => e.stopPropagation()}>
-                      <div>
-                        <Label>Comissão %</Label>
-                        <input
-                          type="number" step="0.1" value={cs.feePercent}
-                          readOnly={!!ch.tiered} disabled={!!ch.tiered}
-                          onChange={e => setCh(ch.id, 'feePercent', +e.target.value || 0)}
-                          className={cn(
-                            'w-full mt-1 px-2 py-1 rounded-lg border text-xs font-mono text-center focus:outline-none',
-                            ch.tiered ? 'bg-slate-100 border-slate-100 text-slate-400' : 'border-slate-200 focus:border-emerald-500'
-                          )}
-                        />
-                      </div>
-                      <div>
-                        <Label>Taxa Fixa R$</Label>
-                        <input
-                          type="number" step="0.01" value={cs.fixedFee}
-                          readOnly={!!ch.tiered} disabled={!!ch.tiered}
-                          onChange={e => setCh(ch.id, 'fixedFee', +e.target.value || 0)}
-                          className={cn(
-                            'w-full mt-1 px-2 py-1 rounded-lg border text-xs font-mono text-center focus:outline-none',
-                            ch.tiered ? 'bg-slate-100 border-slate-100 text-slate-400' : 'border-slate-200 focus:border-emerald-500'
-                          )}
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <Label>Frete Vendedor R$</Label>
-                        <input
-                          type="number" step="0.01" value={cs.freight}
-                          onChange={e => setCh(ch.id, 'freight', +e.target.value || 0)}
-                          className="w-full mt-1 px-2 py-1 rounded-lg border border-slate-200 text-xs font-mono text-center focus:outline-none focus:border-emerald-500"
-                        />
-                      </div>
-                      {ch.tiered && (
-                        <p className="col-span-2 text-[7px] text-slate-400 italic text-center">
-                          Ajuste automático por faixa de preço
-                        </p>
-                      )}
+                      {(() => {
+                        const isTiered = (canalFaixas[ch.slug]?.length ?? 0) > 1
+                        return (
+                          <>
+                            <div>
+                              <Label>Comissão %</Label>
+                              <input
+                                type="number" step="0.1" value={cs.feePercent}
+                                readOnly={isTiered} disabled={isTiered}
+                                onChange={e => setCh(ch.id, 'feePercent', +e.target.value || 0)}
+                                className={cn(
+                                  'w-full mt-1 px-2 py-1 rounded-lg border text-xs font-mono text-center focus:outline-none',
+                                  isTiered ? 'bg-slate-100 border-slate-100 text-slate-400' : 'border-slate-200 focus:border-emerald-500'
+                                )}
+                              />
+                            </div>
+                            <div>
+                              <Label>Taxa Fixa R$</Label>
+                              <input
+                                type="number" step="0.01" value={cs.fixedFee}
+                                readOnly={isTiered} disabled={isTiered}
+                                onChange={e => setCh(ch.id, 'fixedFee', +e.target.value || 0)}
+                                className={cn(
+                                  'w-full mt-1 px-2 py-1 rounded-lg border text-xs font-mono text-center focus:outline-none',
+                                  isTiered ? 'bg-slate-100 border-slate-100 text-slate-400' : 'border-slate-200 focus:border-emerald-500'
+                                )}
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <Label>Frete Vendedor R$</Label>
+                              <input
+                                type="number" step="0.01" value={cs.freight}
+                                onChange={e => setCh(ch.id, 'freight', +e.target.value || 0)}
+                                className="w-full mt-1 px-2 py-1 rounded-lg border border-slate-200 text-xs font-mono text-center focus:outline-none focus:border-emerald-500"
+                              />
+                            </div>
+                            {isTiered && (
+                              <p className="col-span-2 text-[7px] text-slate-400 italic text-center">
+                                Ajuste automático por faixa de preço
+                              </p>
+                            )}
+                          </>
+                        )
+                      })()}
                     </div>
                   )}
                 </div>
@@ -725,8 +747,8 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
               const custo  = safeN(global.costPrice, 0,  0, 99999)
               const taxR   = safeN(global.taxRate,   6,  0, 50)
               const pack   = safeN(global.packaging, 0,  0, 9999)
-              const defFee = ch.tiered ? tikTokFees(safeN(cs?.price, 19, 0, 99999)).fee   : ch.defaultFee
-              const defFix = ch.tiered ? tikTokFees(safeN(cs?.price, 19, 0, 99999)).fixed : ch.defaultFixed
+              const safePrice = safeN(cs?.price, 19, 0, 99999)
+              const { fee: defFee, fixed: defFix } = getFeeForPrice(canalFaixas[ch.slug] ?? [], safePrice, ch.defaultFee, ch.defaultFixed)
               const feeP   = safeN(cs?.feePercent, defFee, 0, 50)
               const fixF   = safeN(cs?.fixedFee,   defFix, 0, 999)
               const frt    = safeN(cs?.freight,     0,      0, 9999)
@@ -763,8 +785,8 @@ export function PrecificacaoView({ workspaceId = 'default' }: { workspaceId?: st
               const custo  = safeN(global.costPrice, 0,  0, 99999)
               const taxR   = safeN(global.taxRate,   6,  0, 50)
               const pack   = safeN(global.packaging, 0,  0, 9999)
-              const defFee = ch.tiered ? tikTokFees(safeN(cs?.price, 19, 0, 99999)).fee   : ch.defaultFee
-              const defFix = ch.tiered ? tikTokFees(safeN(cs?.price, 19, 0, 99999)).fixed : ch.defaultFixed
+              const safePrice2 = safeN(cs?.price, 19, 0, 99999)
+              const { fee: defFee, fixed: defFix } = getFeeForPrice(canalFaixas[ch.slug] ?? [], safePrice2, ch.defaultFee, ch.defaultFixed)
               const feeP   = safeN(cs?.feePercent, defFee, 0, 50)
               const fixF   = safeN(cs?.fixedFee,   defFix, 0, 999)
               const frt    = safeN(cs?.freight,     0,      0, 9999)

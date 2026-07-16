@@ -616,8 +616,21 @@ model canal {
 
   workspace          workspace?          @relation(fields: [workspace_id], references: [id])
   calculadora_canais calculadora_canal[]
+  faixas             canal_faixa[]
 
   @@unique([workspace_id, slug])
+}
+
+model canal_faixa {
+  id            String  @id @default(cuid())
+  canal_id      String
+  preco_min     Float
+  preco_max     Float?
+  comissao_perc Float
+  taxa_fixa     Float
+  ordem         Int     @default(0)
+
+  canal         canal   @relation(fields: [canal_id], references: [id], onDelete: Cascade)
 }
 
 model produto_catalogo {

@@ -153,11 +153,33 @@ export async function reordenarDespesasFixas(ids: string[]) {
 // CANAIS
 // =============================================
 
-export async function getCanais() {
+export type CanalFaixa = {
+  id: string
+  canal_id: string
+  preco_min: number
+  preco_max: number | null
+  comissao_perc: number
+  taxa_fixa: number
+  ordem: number
+}
+
+export type CanalComFaixas = {
+  id: string
+  workspace_id: string | null
+  nome: string
+  slug: string
+  comissao_perc: number
+  taxa_fixa: number
+  ativo: boolean
+  faixas: CanalFaixa[]
+}
+
+const FAIXAS_INCLUDE = { faixas: { orderBy: { ordem: 'asc' as const } } }
+
+export async function getCanais(): Promise<CanalComFaixas[]> {
   const { workspaceId } = await getAuthContext()
-  const custom = await prisma.canal.findMany({ where: { workspace_id: workspaceId } })
-  const sistema = await prisma.canal.findMany({ where: { workspace_id: null } })
-  // Canais customizados sobrescrevem o sistema pelo slug
+  const custom = await prisma.canal.findMany({ where: { workspace_id: workspaceId }, include: FAIXAS_INCLUDE })
+  const sistema = await prisma.canal.findMany({ where: { workspace_id: null }, include: FAIXAS_INCLUDE })
   const slugsCustom = new Set(custom.map(c => c.slug))
   const merged = [...custom, ...sistema.filter(s => !slugsCustom.has(s.slug))]
   return merged.sort((a, b) => a.nome.localeCompare(b.nome))
@@ -167,25 +189,52 @@ export async function saveCanal(data: {
   id?: string
   slug?: string
   nome: string
-  comissao_perc: number
-  taxa_fixa: number
   ativo: boolean
+  faixas: Array<{ preco_min: number; preco_max?: number | null; comissao_perc: number; taxa_fixa: number; ordem: number }>
 }) {
   const { workspaceId } = await getAuthContext()
   const slug = data.slug ?? data.nome.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+  const firstFaixa = data.faixas[0]
+  const comissao_perc = firstFaixa?.comissao_perc ?? 0
+  const taxa_fixa = firstFaixa?.taxa_fixa ?? 0
+
+  let canalId: string
 
   if (data.id) {
-    // Verifica se é do workspace
     const c = await prisma.canal.findFirst({ where: { id: data.id, workspace_id: workspaceId } })
     if (c) {
-      await prisma.canal.update({ where: { id: data.id }, data: { nome: data.nome, comissao_perc: data.comissao_perc, taxa_fixa: data.taxa_fixa, ativo: data.ativo } })
+      await prisma.canal.update({ where: { id: data.id }, data: { nome: data.nome, comissao_perc, taxa_fixa, ativo: data.ativo } })
+      canalId = data.id
     } else {
-      // É canal do sistema — cria cópia personalizada
-      await prisma.canal.create({ data: { workspace_id: workspaceId, slug, nome: data.nome, comissao_perc: data.comissao_perc, taxa_fixa: data.taxa_fixa, ativo: data.ativo } })
+      // Canal do sistema — upsert cópia workspace
+      const existing = await prisma.canal.findFirst({ where: { workspace_id: workspaceId, slug } })
+      if (existing) {
+        await prisma.canal.update({ where: { id: existing.id }, data: { nome: data.nome, comissao_perc, taxa_fixa, ativo: data.ativo } })
+        canalId = existing.id
+      } else {
+        const novo = await prisma.canal.create({ data: { workspace_id: workspaceId, slug, nome: data.nome, comissao_perc, taxa_fixa, ativo: data.ativo } })
+        canalId = novo.id
+      }
     }
   } else {
-    await prisma.canal.create({ data: { workspace_id: workspaceId, slug, nome: data.nome, comissao_perc: data.comissao_perc, taxa_fixa: data.taxa_fixa, ativo: data.ativo } })
+    const novo = await prisma.canal.create({ data: { workspace_id: workspaceId, slug, nome: data.nome, comissao_perc, taxa_fixa, ativo: data.ativo } })
+    canalId = novo.id
   }
+
+  await prisma.canal_faixa.deleteMany({ where: { canal_id: canalId } })
+  if (data.faixas.length > 0) {
+    await prisma.canal_faixa.createMany({
+      data: data.faixas.map((f, i) => ({
+        canal_id: canalId,
+        preco_min: f.preco_min,
+        preco_max: f.preco_max ?? null,
+        comissao_perc: f.comissao_perc,
+        taxa_fixa: f.taxa_fixa,
+        ordem: i,
+      })),
+    })
+  }
+
   revalidatePath('/config')
 }
 
