@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { usePersistedState } from '@/hooks/usePersistedState'
 import { cn } from '@/lib/utils'
 import {
@@ -8,6 +8,7 @@ import {
   TrendingUp, Package2, Zap, Printer,
 } from 'lucide-react'
 import { PrecificacaoReport } from './reports/PrecificacaoReport'
+import { buscarTaxaML, type MLFeeResult } from '@/actions/ml-fee'
 
 // ─── Logos dos canais ────────────────────────────────────────────────────────
 
@@ -259,6 +260,29 @@ export function PrecificacaoView({
   const [openFees, setOpenFees] = useState<string | null>(null)
   const [margemIdeal, setMargemIdeal] = useState(30)
 
+  // ── Part 3: ML Category Fee ──
+  const [mlAnuncioInput, setMlAnuncioInput] = useState('')
+  const [mlFeeOverride, setMlFeeOverride] = useState<MLFeeResult | null>(null)
+  const [mlLoading, setMlLoading] = useState(false)
+
+  const fetchMLFee = useCallback(async (input: string, price: number) => {
+    if (!input.trim()) { setMlFeeOverride(null); return }
+    setMlLoading(true)
+    try {
+      const result = await buscarTaxaML(input.trim(), price)
+      setMlFeeOverride(result)
+    } finally {
+      setMlLoading(false)
+    }
+  }, [])
+
+  // Re-busca quando o preço ML muda (com debounce 600ms)
+  useEffect(() => {
+    if (!mlAnuncioInput.trim()) return
+    const t = setTimeout(() => fetchMLFee(mlAnuncioInput, chs['ml']?.price ?? 0), 600)
+    return () => clearTimeout(t)
+  }, [chs['ml']?.price, mlAnuncioInput, fetchMLFee])
+
   function setG<K extends keyof GlobalState>(k: K, v: GlobalState[K]) {
     setGlobal(p => ({ ...p, [k]: v }))
   }
@@ -282,10 +306,12 @@ export function PrecificacaoView({
     Object.fromEntries(
       CHANNELS.map(ch => {
         const cs = chs[ch.id]
-        return [ch.id, calc(cs.price, global.costPrice, global.taxRate, global.packaging, cs.feePercent, cs.fixedFee, global.volume, cs.freight)]
+        const feePercent = (ch.id === 'ml' && mlFeeOverride) ? mlFeeOverride.comissao_perc : cs.feePercent
+        const fixedFee   = (ch.id === 'ml' && mlFeeOverride) ? mlFeeOverride.taxa_fixa   : cs.fixedFee
+        return [ch.id, calc(cs.price, global.costPrice, global.taxRate, global.packaging, feePercent, fixedFee, global.volume, cs.freight)]
       })
     ),
-  [global, chs])
+  [global, chs, mlFeeOverride])
 
   const selCh  = CHANNELS.find(c => c.id === selected)!
   const selRes = results[selected]
@@ -422,6 +448,40 @@ export function PrecificacaoView({
                     className="w-full mt-1 px-2 py-2 rounded-xl border border-slate-200 text-base font-black font-mono text-center focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 bg-slate-50"
                   />
                 </div>
+
+                {/* Campo MLB ID — só no ML em modo AUTO */}
+                {ch.id === 'ml' && canalModos[ch.slug] === 'AUTO' && (
+                  <div onClick={e => e.stopPropagation()}>
+                    <Label>
+                      Anúncio ML{' '}
+                      <span className="text-violet-400 normal-case font-medium">(opcional)</span>
+                    </Label>
+                    <div className="relative mt-1">
+                      <input
+                        type="text"
+                        placeholder="MLB123456789 ou cole a URL"
+                        value={mlAnuncioInput}
+                        onChange={e => setMlAnuncioInput(e.target.value)}
+                        onBlur={() => fetchMLFee(mlAnuncioInput, cs.price)}
+                        className="w-full px-2 py-1.5 rounded-xl border border-slate-200 text-[10px] font-mono focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400/20 bg-slate-50 pr-7 placeholder:text-slate-300"
+                      />
+                      {mlLoading && (
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-violet-400 animate-pulse">⟳</span>
+                      )}
+                    </div>
+                    {mlFeeOverride && !mlLoading && (
+                      <p className={cn(
+                        'text-[7px] font-black mt-0.5 truncate',
+                        mlFeeOverride.source === 'fallback' ? 'text-orange-400' : 'text-violet-500'
+                      )}>
+                        {mlFeeOverride.source === 'fallback'
+                          ? `Fallback: ${mlFeeOverride.comissao_perc}% + R$${mlFeeOverride.taxa_fixa.toFixed(2)}`
+                          : `Taxa real: ${mlFeeOverride.comissao_perc}% · ${mlFeeOverride.source}`
+                        }
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Taxas expandíveis */}
                 <div>
