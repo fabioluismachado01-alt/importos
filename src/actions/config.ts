@@ -183,7 +183,7 @@ export async function getCanais(): Promise<CanalComFaixas[]> {
   const sistema = await prisma.canal.findMany({ where: { workspace_id: null }, include: FAIXAS_INCLUDE })
   const slugsCustom = new Set(custom.map(c => c.slug))
   const merged = [...custom, ...sistema.filter(s => !slugsCustom.has(s.slug))]
-  return merged.sort((a, b) => a.nome.localeCompare(b.nome))
+  return merged.sort((a, b) => a.nome.localeCompare(b.nome)) as CanalComFaixas[]
 }
 
 export async function saveCanal(data: {
