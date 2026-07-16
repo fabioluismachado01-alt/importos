@@ -171,6 +171,7 @@ export type CanalComFaixas = {
   comissao_perc: number
   taxa_fixa: number
   ativo: boolean
+  modo: string  // AUTO | MANUAL
   faixas: CanalFaixa[]
 }
 
@@ -190,6 +191,7 @@ export async function saveCanal(data: {
   slug?: string
   nome: string
   ativo: boolean
+  modo?: string
   faixas: Array<{ preco_min: number; preco_max?: number | null; comissao_perc: number; taxa_fixa: number; ordem: number }>
 }) {
   const { workspaceId } = await getAuthContext()
@@ -197,27 +199,28 @@ export async function saveCanal(data: {
   const firstFaixa = data.faixas[0]
   const comissao_perc = firstFaixa?.comissao_perc ?? 0
   const taxa_fixa = firstFaixa?.taxa_fixa ?? 0
+  const modo = data.modo ?? 'AUTO'
 
   let canalId: string
 
   if (data.id) {
     const c = await prisma.canal.findFirst({ where: { id: data.id, workspace_id: workspaceId } })
     if (c) {
-      await prisma.canal.update({ where: { id: data.id }, data: { nome: data.nome, comissao_perc, taxa_fixa, ativo: data.ativo } })
+      await prisma.canal.update({ where: { id: data.id }, data: { nome: data.nome, comissao_perc, taxa_fixa, ativo: data.ativo, modo } })
       canalId = data.id
     } else {
       // Canal do sistema — upsert cópia workspace
       const existing = await prisma.canal.findFirst({ where: { workspace_id: workspaceId, slug } })
       if (existing) {
-        await prisma.canal.update({ where: { id: existing.id }, data: { nome: data.nome, comissao_perc, taxa_fixa, ativo: data.ativo } })
+        await prisma.canal.update({ where: { id: existing.id }, data: { nome: data.nome, comissao_perc, taxa_fixa, ativo: data.ativo, modo } })
         canalId = existing.id
       } else {
-        const novo = await prisma.canal.create({ data: { workspace_id: workspaceId, slug, nome: data.nome, comissao_perc, taxa_fixa, ativo: data.ativo } })
+        const novo = await prisma.canal.create({ data: { workspace_id: workspaceId, slug, nome: data.nome, comissao_perc, taxa_fixa, ativo: data.ativo, modo } })
         canalId = novo.id
       }
     }
   } else {
-    const novo = await prisma.canal.create({ data: { workspace_id: workspaceId, slug, nome: data.nome, comissao_perc, taxa_fixa, ativo: data.ativo } })
+    const novo = await prisma.canal.create({ data: { workspace_id: workspaceId, slug, nome: data.nome, comissao_perc, taxa_fixa, ativo: data.ativo, modo } })
     canalId = novo.id
   }
 

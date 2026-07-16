@@ -235,9 +235,11 @@ function DonutChart({ segs }: { segs: { value: number; color: string }[] }) {
 export function PrecificacaoView({
   workspaceId = 'default',
   canalFaixas = {},
+  canalModos = {},
 }: {
   workspaceId?: string
   canalFaixas?: Record<string, CanalFaixaPrec[]>
+  canalModos?: Record<string, string>
 }) {
   const initChannel = (ch: Channel, defPrice = 19): ChannelState => {
     const { fee, fixed } = getFeeForPrice(canalFaixas[ch.slug] ?? [], defPrice, ch.defaultFee, ch.defaultFixed)
@@ -428,15 +430,15 @@ export function PrecificacaoView({
                     className="flex items-center gap-1 text-[8px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 w-full transition-colors"
                   >
                     <span>Taxas do Canal</span>
-                    {(canalFaixas[ch.slug]?.length ?? 0) > 1 && (
-                      <span className="ml-1 bg-slate-100 text-slate-500 px-1 rounded text-[7px] font-black">AUTO</span>
+                    {canalModos[ch.slug] === 'AUTO' && (
+                      <span className="ml-1 bg-violet-100 text-violet-600 px-1 rounded text-[7px] font-black">AUTO</span>
                     )}
                     <ChevronDown className={cn('w-3 h-3 ml-auto transition-transform', fOpen && 'rotate-180')} />
                   </button>
                   {fOpen && (
                     <div className="mt-2 grid grid-cols-2 gap-2" onClick={e => e.stopPropagation()}>
                       {(() => {
-                        const isTiered = (canalFaixas[ch.slug]?.length ?? 0) > 1
+                        const isTiered = canalModos[ch.slug] === 'AUTO'
                         return (
                           <>
                             <div>
@@ -472,8 +474,8 @@ export function PrecificacaoView({
                               />
                             </div>
                             {isTiered && (
-                              <p className="col-span-2 text-[7px] text-slate-400 italic text-center">
-                                Ajuste automático por faixa de preço
+                              <p className="col-span-2 text-[7px] text-violet-500 italic text-center">
+                                Modo AUTO — altere em Config &gt; Canais
                               </p>
                             )}
                           </>

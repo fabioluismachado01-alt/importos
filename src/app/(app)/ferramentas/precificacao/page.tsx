@@ -22,5 +22,8 @@ export default async function PrecificacaoPage() {
   const canalFaixas: Record<string, { preco_min: number; preco_max: number | null; comissao_perc: number; taxa_fixa: number }[]> =
     Object.fromEntries(canais.map(c => [c.slug, c.faixas]))
 
-  return <PrecificacaoView workspaceId={workspaceId} canalFaixas={canalFaixas} />
+  const canalModos: Record<string, string> =
+    Object.fromEntries(canais.map(c => [c.slug, c.modo ?? 'AUTO']))
+
+  return <PrecificacaoView workspaceId={workspaceId} canalFaixas={canalFaixas} canalModos={canalModos} />
 }
