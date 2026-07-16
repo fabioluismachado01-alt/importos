@@ -613,6 +613,7 @@ model canal {
   comissao_perc Float
   taxa_fixa     Float
   ativo         Boolean @default(true)
+  modo          String  @default("AUTO") // AUTO | MANUAL
 
   workspace          workspace?          @relation(fields: [workspace_id], references: [id])
   calculadora_canais calculadora_canal[]
@@ -646,6 +647,10 @@ model produto_catalogo {
   sku_alias       String?  // SKUs alternativos separados por vírgula — para quando ML/canal usa SKU errado
   ean             String?  // código EAN-13 para etiquetas
   preco_venda     Float?   // preço de venda sugerido para etiquetas
+  ml_item_id      String?  // MLB ID do anúncio principal (ex: MLB1234567890)
+  ml_category_id  String?  // ID de categoria ML para lookup de taxas reais
+  ml_fee_perc     Float?   // % comissão ML real para este produto (cache 30 dias)
+  ml_fee_checked  DateTime? // timestamp da última verificação de taxa ML
   peso_medio_kg   Float?
   ativo           Boolean  @default(true)
   created_at      DateTime @default(now())
