@@ -103,11 +103,11 @@ export async function getPainelTributarioData(): Promise<PainelTributarioData> {
   const rawAliq = empresa?.aliquota_simples ?? 6
   const aliquotaSimples = rawAliq > 1 ? rawAliq / 100 : rawAliq
 
-  // RBT12 — soma dos 12 meses anteriores ao mês de referência
-  // Mesma lógica de impostos.ts: filtra < mesRef, pega os últimos 12
+  // RBT12 — soma dos 12 meses anteriores ao mês ATUAL (não ao mês de referência)
+  // Sincronizado com Config/Tributário: jul/25–jun/26 para julho/2026
   const histOrdenado = historico // já vem ASC do banco
   const rbt12 = histOrdenado
-    .filter(h => h.ano < anoRef || (h.ano === anoRef && h.mes < mesRef))
+    .filter(h => h.ano < anoAtual || (h.ano === anoAtual && h.mes < mesAtual))
     .slice(-12)
     .reduce((acc, h) => acc + h.faturamento, 0)
 

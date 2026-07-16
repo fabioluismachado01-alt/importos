@@ -65,6 +65,7 @@ export default async function DashboardPage() {
     .filter(m => (m.fechado || m.mes < mesAtual) && (!m.das_status || m.das_status === 'PENDENTE') && Number(m.receita_total) > 0)
     .sort((a, b) => a.mes - b.mes)
 
+  // Mostra o mais urgente (overdue primeiro, depois os mais próximos)
   let dasAlerta: DasAlerta | null = null
   for (const m of mesesDASPendente) {
     const mesVenc = m.mes === 12 ? 1 : m.mes + 1
@@ -72,20 +73,18 @@ export default async function DashboardPage() {
     const dataVencimento = new Date(anoVenc, mesVenc - 1, 20)
     dataVencimento.setHours(0, 0, 0, 0)
     const diasRestantes = Math.ceil((dataVencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
-    if (diasRestantes <= DAS_DIAS_AVISO) {
-      const valorDas = Number(m.das_valor_calc ?? 0) > 0
-        ? Number(m.das_valor_calc)
-        : Number(m.receita_total) * Number(m.aliquota_simples > 1 ? m.aliquota_simples / 100 : m.aliquota_simples)
-      dasAlerta = {
-        mesFat: m.mes,
-        anoFat: m.ano,
-        valor: valorDas,
-        diasRestantes,
-        urgente: diasRestantes <= DAS_DIAS_URGENTE,
-        vencido: diasRestantes < 0,
-      }
-      break  // mostra apenas o mais urgente
+    const valorDas = Number(m.das_valor_calc ?? 0) > 0
+      ? Number(m.das_valor_calc)
+      : Number(m.receita_total) * Number(m.aliquota_simples > 1 ? m.aliquota_simples / 100 : m.aliquota_simples)
+    dasAlerta = {
+      mesFat: m.mes,
+      anoFat: m.ano,
+      valor: valorDas,
+      diasRestantes,
+      urgente: diasRestantes <= DAS_DIAS_URGENTE,
+      vencido: diasRestantes < 0,
     }
+    break  // mostra apenas o mais urgente (sort já colocou o mais antigo/urgente primeiro)
   }
 
   const dasConfig = {

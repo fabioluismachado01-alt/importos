@@ -95,8 +95,9 @@ export async function getImpostosData(): Promise<ImpostosPageData> {
       + (fatRef.desp_fixas_outras ?? 0)
     : 0
 
-  // RBT12: soma dos 12 meses ANTES do mês de referência (jun/25–mai/26 para ref=jun/26)
-  const dataLimite = new Date(anoRef, mesRef - 1, 1)
+  // RBT12: soma dos 12 meses ANTES do mês ATUAL (jul/25–jun/26 para jul/26)
+  // Usa mesAtual (não mesRef) para estar em sincronia com Config/Tributário
+  const dataLimite = new Date(anoAtual, mesAtual - 1, 1)
   dataLimite.setMonth(dataLimite.getMonth() - 12)
   const anoLimite = dataLimite.getFullYear()
   const mesLimite = dataLimite.getMonth() + 1
@@ -110,13 +111,13 @@ export async function getImpostosData(): Promise<ImpostosPageData> {
       ],
     },
     orderBy: [{ ano: 'asc' }, { mes: 'asc' }],
-    take: 12,
+    take: 13,
   })
 
-  // Filtra apenas os 12 meses antes do mês de referência (não inclui o mês ref)
+  // Filtra os 12 meses antes do mês atual (não inclui o mês atual)
   const rbt12Meses = historico.filter(h => {
-    if (h.ano < anoRef) return true
-    if (h.ano === anoRef && h.mes < mesRef) return true
+    if (h.ano < anoAtual) return true
+    if (h.ano === anoAtual && h.mes < mesAtual) return true
     return false
   }).slice(-12)
 

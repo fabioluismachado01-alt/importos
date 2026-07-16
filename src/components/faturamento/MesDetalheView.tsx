@@ -39,6 +39,7 @@ interface DadosMes {
   desp_custo_produtos: number; desp_tarifas: number; desp_frete: number
   desp_fatura_ml: number; desp_outras_taxas: number; das_valor_calc: number
   das_valor_real: number | null; das_status: string; das_vencimento: Date | null
+  updated_at: Date
   desp_pro_labore: number; desp_inss: number; desp_contabilidade: number
   desp_erp: number; desp_emprestimo: number; desp_aluguel: number
   desp_pagina_ml: number; desp_previdencia_privada: number; desp_fixas_outras: number
@@ -480,7 +481,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
         <KPICard label="Lucro Bruto" value={formatCurrency(d.lucro_bruto)} color={d.lucro_bruto >= 0 ? 'blue' : 'red'} big />
         <KPICard label="Lucro Líquido" value={formatCurrency(d.lucro_liquido)} color={d.lucro_liquido >= 0 ? 'emerald' : 'red'} big />
         <KPICard label={`DAS (${(d.aliquota_simples > 1 ? d.aliquota_simples : d.aliquota_simples * 100).toFixed(2)}%)`} value={formatCurrency(d.das_valor_calc)} color="amber"
-          sub={d.das_status === 'PAGO' ? `Pago: ${formatCurrency(d.das_valor_real ?? 0)}` : undefined} big />
+          sub={d.das_status === 'PAGO' ? `Pago: ${formatCurrency(d.das_valor_real ?? 0)} em ${format(new Date(d.updated_at), 'dd/MM/yyyy', { locale: ptBR })}` : undefined} big />
       </div>
 
       {/* ── KPIs ROW 2: Gerenciais ── */}
