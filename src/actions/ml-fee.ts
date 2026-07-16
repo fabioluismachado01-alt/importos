@@ -15,6 +15,9 @@ const CACHE_MS = 30 * 24 * 60 * 60 * 1000
 function parseMlbId(input: string): string | null {
   const t = input.trim()
   if (/^MLB\d+$/i.test(t)) return t.toUpperCase()
+  // Prefer item_id: param (specific listing) over catalog ID (/p/MLB...)
+  const itemParam = t.match(/item_id:(MLB\d+)/i)
+  if (itemParam) return itemParam[1].toUpperCase()
   const m = t.match(/MLB(\d+)/i)
   return m ? `MLB${m[1]}` : null
 }
