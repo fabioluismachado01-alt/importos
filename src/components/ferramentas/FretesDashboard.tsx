@@ -48,7 +48,8 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
 
   // ── Form state ────────────────────────────────────────────────────────────
   const [form, setForm] = useState({
-    modal: 'MARITIMO', origem: '', data_embarque: new Date().toISOString().slice(0, 10),
+    modal: 'MARITIMO', tipo: 'REALIZADO', tipo_container: '', operador: '',
+    origem: '', data_embarque: new Date().toISOString().slice(0, 10),
     peso_kg: '', cbm: '', frete_usd: '', cambio: '5.80', armazenagem_brl: '', notas: '',
   })
 
@@ -58,6 +59,9 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
     startTransition(async () => {
       await salvarFreteManual({
         modal: form.modal,
+        tipo: form.tipo,
+        tipo_container: form.tipo_container || undefined,
+        operador: form.operador || undefined,
         origem: form.origem || undefined,
         data_embarque: new Date(form.data_embarque),
         peso_kg: parseFloat(form.peso_kg),
@@ -158,7 +162,7 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
           onClick={() => setShowForm(true)}
           className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold px-4 py-2.5 rounded-xl transition-colors"
         >
-          <Plus className="w-4 h-4" /> Registrar Frete Avulso
+          <Plus className="w-4 h-4" /> Registrar Frete / Cotação
         </button>
       </div>
 
@@ -474,9 +478,28 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
             <div>
-            <h2 className="text-base font-black text-slate-800">Registrar Frete Avulso</h2>
-            <p className="text-[11px] text-slate-400 mt-0.5">Para fretes históricos ou que não vieram de um Rateio. Fretes do Rateio entram aqui automaticamente.</p>
+            <h2 className="text-base font-black text-slate-800">Registrar Frete / Cotação</h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">Para fretes históricos ou cotações. Fretes do Rateio entram aqui automaticamente.</p>
           </div>
+
+            {/* Tipo: Frete Realizado ou Cotação */}
+            <div>
+              <label className={labelCls}>Tipo de Registro</label>
+              <div className="flex rounded-xl overflow-hidden border border-slate-200">
+                {([['REALIZADO', 'Frete Realizado'], ['COTACAO', 'Cotação']] as const).map(([v, label]) => (
+                  <button
+                    key={v}
+                    onClick={() => setF('tipo', v)}
+                    className={`flex-1 py-2 text-xs font-bold transition-colors ${form.tipo === v ? (v === 'COTACAO' ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white') : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {form.tipo === 'COTACAO' && (
+                <p className="text-[10px] text-amber-600 mt-1">Cotações ficam marcadas em amarelo no histórico e são usadas nos gráficos de orçamento — não afetam a média de custo real.</p>
+              )}
+            </div>
 
             <div>
               <label className={labelCls}>Modal</label>
@@ -493,14 +516,36 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
               </div>
             </div>
 
+            {/* Container (marítimo) */}
+            {form.modal === 'MARITIMO' && (
+              <div>
+                <label className={labelCls}>Tipo de Container</label>
+                <div className="flex rounded-xl overflow-hidden border border-slate-200">
+                  {([['', 'LCL'], ['FCL_20', "20'"], ['FCL_40NOR', '40NOR'], ['FCL_40HC', '40HC']] as const).map(([v, label]) => (
+                    <button
+                      key={v}
+                      onClick={() => setF('tipo_container', v)}
+                      className={`flex-1 py-2 text-xs font-bold transition-colors ${form.tipo_container === v ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={labelCls}>Data Embarque</label>
+                <label className={labelCls}>Data {form.tipo === 'COTACAO' ? 'da Cotação' : 'Embarque'}</label>
                 <input type="date" className={inputCls} value={form.data_embarque} onChange={e => setF('data_embarque', e.target.value)} />
               </div>
               <div>
                 <label className={labelCls}>Origem</label>
-                <input type="text" className={inputCls} placeholder="Ex: Guangzhou" value={form.origem} onChange={e => setF('origem', e.target.value)} />
+                <input type="text" className={inputCls} placeholder="Ex: Shanghai" value={form.origem} onChange={e => setF('origem', e.target.value)} />
+              </div>
+              <div>
+                <label className={labelCls}>Operador / Armador</label>
+                <input type="text" className={inputCls} placeholder="Ex: MSC, CMA CGM" value={form.operador} onChange={e => setF('operador', e.target.value)} />
               </div>
               <div>
                 <label className={labelCls}>Peso Bruto (kg)</label>
@@ -546,7 +591,7 @@ export function FretesDashboard({ fretes: initial }: { fretes: FreteHistoricoRow
                 disabled={isPending || !form.peso_kg || !form.frete_usd}
                 className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-black disabled:opacity-50 transition-colors"
               >
-                {isPending ? 'Salvando…' : 'Salvar'}
+                {isPending ? 'Salvando…' : form.tipo === 'COTACAO' ? 'Salvar Cotação' : 'Salvar Frete'}
               </button>
             </div>
           </div>

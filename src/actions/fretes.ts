@@ -50,6 +50,9 @@ export async function getFreteHistorico(): Promise<FreteHistoricoRow[]> {
 
 export async function salvarFreteManual(data: {
   modal: string
+  tipo?: string
+  tipo_container?: string
+  operador?: string
   origem?: string
   data_embarque: Date
   peso_kg: number
@@ -66,6 +69,9 @@ export async function salvarFreteManual(data: {
     data: {
       workspace_id: workspaceId,
       modal: data.modal,
+      tipo: data.tipo ?? 'REALIZADO',
+      tipo_container: data.tipo_container ?? null,
+      operador: data.operador ?? null,
       origem: data.origem ?? null,
       data_embarque: data.data_embarque,
       peso_kg: data.peso_kg,
