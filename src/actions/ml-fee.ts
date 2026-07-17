@@ -24,10 +24,10 @@ function parseMlbId(input: string): string | null {
 
 export async function buscarTaxaML(input: string, price: number): Promise<MLFeeResult> {
   const mlbId = parseMlbId(input)
+  console.log('[ml-fee] input:', input, '→ mlbId:', mlbId, 'price:', price)
   if (!mlbId || price <= 0) return FALLBACK
 
   try {
-    // Check cache em produto_catalogo (30 dias)
     const cutoff = new Date(Date.now() - CACHE_MS)
     const cached = await prisma.produto_catalogo.findFirst({
       where: {
@@ -38,6 +38,7 @@ export async function buscarTaxaML(input: string, price: number): Promise<MLFeeR
       select: { ml_fee_perc: true, ml_category_id: true },
     })
     if (cached?.ml_fee_perc != null) {
+      console.log('[ml-fee] cache hit:', cached)
       return {
         comissao_perc: Number(cached.ml_fee_perc),
         taxa_fixa: 0,
@@ -46,36 +47,46 @@ export async function buscarTaxaML(input: string, price: number): Promise<MLFeeR
       }
     }
 
-    // Busca categoria do anúncio
     const itemRes = await fetch(
       `https://api.mercadolibre.com/items/${mlbId}?attributes=category_id`,
       { cache: 'no-store' }
     )
-    if (!itemRes.ok) return FALLBACK
+    console.log('[ml-fee] itemRes status:', itemRes.status)
+    if (!itemRes.ok) {
+      const body = await itemRes.text()
+      console.log('[ml-fee] itemRes error body:', body)
+      return FALLBACK
+    }
     const item: { category_id?: string } = await itemRes.json()
+    console.log('[ml-fee] item:', item)
     const categoryId = item.category_id
     if (!categoryId) return FALLBACK
 
-    // Busca tabela de comissões por categoria e preço
     const pricesRes = await fetch(
       `https://api.mercadolibre.com/sites/MLB/listing_prices?price=${price}&category_id=${categoryId}`,
       { cache: 'no-store' }
     )
-    if (!pricesRes.ok) return FALLBACK
-    const prices: Array<{ listing_type_id: string; amount?: number; sale_fee_amount?: number }> =
-      await pricesRes.json()
+    console.log('[ml-fee] pricesRes status:', pricesRes.status)
+    if (!pricesRes.ok) {
+      const body = await pricesRes.text()
+      console.log('[ml-fee] pricesRes error body:', body)
+      return FALLBACK
+    }
+    const prices: Array<Record<string, unknown>> = await pricesRes.json()
+    console.log('[ml-fee] prices raw:', JSON.stringify(prices))
 
-    // Prefere Clássico (gold_special), depois Premium (gold_pro)
     const entry =
       prices.find(p => p.listing_type_id === 'gold_special') ??
       prices.find(p => p.listing_type_id === 'gold_pro') ??
       prices[0]
-    const feeAmount = entry?.amount ?? entry?.sale_fee_amount
+    console.log('[ml-fee] entry:', JSON.stringify(entry))
+
+    const feeAmount = (entry?.amount ?? entry?.sale_fee_amount) as number | undefined
+    console.log('[ml-fee] feeAmount:', feeAmount)
     if (!feeAmount) return FALLBACK
 
-    const comissao_perc = Math.round((feeAmount / price) * 1000) / 10  // 1 casa decimal
+    const comissao_perc = Math.round((feeAmount / price) * 1000) / 10
 
-    // Persiste cache no produto_catalogo se o produto existir com esse ml_item_id
     await prisma.produto_catalogo.updateMany({
       where: { ml_item_id: mlbId },
       data: {
@@ -86,7 +97,8 @@ export async function buscarTaxaML(input: string, price: number): Promise<MLFeeR
     })
 
     return { comissao_perc, taxa_fixa: 0, category_id: categoryId, source: 'api' }
-  } catch {
+  } catch (err) {
+    console.log('[ml-fee] caught error:', err)
     return FALLBACK
   }
 }
