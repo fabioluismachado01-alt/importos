@@ -650,6 +650,7 @@ model produto_catalogo {
   ml_item_id      String?  // MLB ID do anúncio principal (ex: MLB1234567890)
   ml_category_id  String?  // ID de categoria ML para lookup de taxas reais
   ml_fee_perc     Float?   // % comissão ML real para este produto (cache 30 dias)
+  ml_taxa_fixa    Float?   // taxa fixa por unidade cobrada pelo ML (ex: R$5,00)
   ml_fee_checked  DateTime? // timestamp da última verificação de taxa ML
   peso_medio_kg   Float?
   ativo           Boolean  @default(true)
