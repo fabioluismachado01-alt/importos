@@ -926,10 +926,12 @@ function PLTable({ items, totals }: { items: DocItem[]; totals: A4Props['totals'
       </thead>
       <tbody>
         {items.map(it => {
+          const netW    = Number(it.netWeightUnit) || 0
+          const grossW  = Number(it.grossWeightCtn) || 0
           const qty     = totalQty(it)
           const cbm     = itemCbm(it)
-          const netTot  = it.netWeightUnit * qty
-          const grossTot = it.grossWeightCtn * it.qtyCtns
+          const netTot  = netW * qty
+          const grossTot = grossW * Number(it.qtyCtns)
           return (
             <tr key={it.id}>
               <td style={{ ...td, textAlign: 'center', fontWeight: 700, background: '#f8fafc' }}>{it.ctnRange || '-'}</td>
@@ -946,9 +948,9 @@ function PLTable({ items, totals }: { items: DocItem[]; totals: A4Props['totals'
               <td style={{ ...td, textAlign: 'center', textTransform: 'uppercase' }}>{it.unit}</td>
               <td style={{ ...td, textAlign: 'center', fontFamily: 'monospace', fontSize: '7px' }}>{it.h}×{it.w}×{it.l}</td>
               <td style={{ ...td, textAlign: 'center', fontFamily: 'monospace' }}>{cbm.toFixed(3)}</td>
-              <td style={{ ...td, textAlign: 'center', fontFamily: 'monospace', background: '#eff6ff50' }}>{it.netWeightUnit.toFixed(3)}</td>
+              <td style={{ ...td, textAlign: 'center', fontFamily: 'monospace', background: '#eff6ff50' }}>{netW.toFixed(3)}</td>
               <td style={{ ...td, textAlign: 'center', fontFamily: 'monospace', fontWeight: 700 }}>{netTot.toFixed(2)}</td>
-              <td style={{ ...td, textAlign: 'center', fontFamily: 'monospace' }}>{it.grossWeightCtn.toFixed(2)}</td>
+              <td style={{ ...td, textAlign: 'center', fontFamily: 'monospace' }}>{grossW.toFixed(2)}</td>
               <td style={{ ...td, textAlign: 'center', fontFamily: 'monospace', fontWeight: 700 }}>{grossTot.toFixed(2)}</td>
             </tr>
           )
