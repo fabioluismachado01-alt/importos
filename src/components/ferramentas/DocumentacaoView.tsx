@@ -96,11 +96,11 @@ function fmtUsd(v: number, decimals?: number) {
 }
 
 function totalQty(item: DocItem) {
-  return item.qtyCtns * item.unitPerCtn
+  return Number(item.qtyCtns) * Number(item.unitPerCtn)
 }
 
 function itemCbm(item: DocItem) {
-  return ((item.h * item.w * item.l) / 1_000_000) * item.qtyCtns
+  return ((Number(item.h) * Number(item.w) * Number(item.l)) / 1_000_000) * Number(item.qtyCtns)
 }
 
 // ─── Componentes de Formulário ───────────────────────────────────────────────
@@ -268,11 +268,11 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
       const qty = totalQty(it)
       totalAmount  += qty * it.price
       totalQtyPcs  += qty
-      totalCtns    += it.qtyCtns
+      totalCtns    += Number(it.qtyCtns)
       totalCbm     += itemCbm(it)
       if (mode === 'formal') {
-        totalNetW   += it.netWeightUnit * qty
-        totalGrossW += it.grossWeightCtn * it.qtyCtns
+        totalNetW   += (Number(it.netWeightUnit) || 0) * qty
+        totalGrossW += (Number(it.grossWeightCtn) || 0) * Number(it.qtyCtns)
       }
     })
     if (mode === 'simplified') {
@@ -806,10 +806,10 @@ function ShippingMarkDoc({ importer, items, docInfo, supplier, mode, logistics }
   const labels: { item: DocItem; cartonNo: number; totalCtns: number }[] = []
 
   if (mode === 'formal') {
-    const totalCtns = items.reduce((s, i) => s + i.qtyCtns, 0)
+    const totalCtns = items.reduce((s, i) => s + Number(i.qtyCtns), 0)
     let counter = 0
     for (const item of items) {
-      for (let c = 0; c < item.qtyCtns; c++) {
+      for (let c = 0; c < Number(item.qtyCtns); c++) {
         counter++
         labels.push({ item, cartonNo: counter, totalCtns })
       }
@@ -830,13 +830,24 @@ function ShippingMarkDoc({ importer, items, docInfo, supplier, mode, logistics }
   }
 
   // Pesos por caixa: formal usa item, simplificada usa média de logistics
-  const netPerCtnMap  = (item: DocItem) => mode === 'formal'
-    ? item.netWeightUnit > 0 ? (item.netWeightUnit * item.unitPerCtn).toFixed(1) : '—'
-    : logistics.totalNetW > 0 ? (logistics.totalNetW / Math.max(logistics.totalVolumes, 1)).toFixed(1) : '—'
+  const netPerCtnMap  = (item: DocItem) => {
+    const nw = Number(item.netWeightUnit) || 0
+    const upc = Number(item.unitPerCtn) || 0
+    const tNW = Number(logistics.totalNetW) || 0
+    const tV  = Math.max(Number(logistics.totalVolumes) || 1, 1)
+    return mode === 'formal'
+      ? nw > 0 ? (nw * upc).toFixed(1) : '—'
+      : tNW > 0 ? (tNW / tV).toFixed(1) : '—'
+  }
 
-  const grossPerCtnMap = (item: DocItem) => mode === 'formal'
-    ? item.grossWeightCtn > 0 ? item.grossWeightCtn.toFixed(1) : '—'
-    : logistics.totalGrossW > 0 ? (logistics.totalGrossW / Math.max(logistics.totalVolumes, 1)).toFixed(1) : '—'
+  const grossPerCtnMap = (item: DocItem) => {
+    const gw = Number(item.grossWeightCtn) || 0
+    const tGW = Number(logistics.totalGrossW) || 0
+    const tV  = Math.max(Number(logistics.totalVolumes) || 1, 1)
+    return mode === 'formal'
+      ? gw > 0 ? gw.toFixed(1) : '—'
+      : tGW > 0 ? (tGW / tV).toFixed(1) : '—'
+  }
 
   const card: React.CSSProperties = {
     border: '2px solid #000',
