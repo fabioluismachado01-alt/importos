@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { usePersistedState } from '@/hooks/usePersistedState'
 import { cn } from '@/lib/utils'
 import {
@@ -8,7 +8,6 @@ import {
   TrendingUp, Package2, Zap, Printer,
 } from 'lucide-react'
 import { PrecificacaoReport } from './reports/PrecificacaoReport'
-import { buscarTaxaML, type MLFeeResult } from '@/actions/ml-fee'
 
 // ─── Logos dos canais ────────────────────────────────────────────────────────
 
@@ -67,18 +66,38 @@ interface Channel {
   name: string
   accentBg: string
   accentText: string
-  slug: string        // slug no DB para lookup de faixas
-  defaultFee: number  // fallback se DB não retornar faixas
+  slug: string              // slug no DB para lookup de faixas
+  defaultFee: number        // fallback se DB não retornar faixas
   defaultFixed: number
 }
 
 const CHANNELS: Channel[] = [
-  { id: 'ml',     name: 'Mercado Livre', accentBg: '#fbbf24', accentText: '#1c1917', slug: 'mercado-livre', defaultFee: 11.5,  defaultFixed: 6.50 },
-  { id: 'shopee', name: 'Shopee',        accentBg: '#ea580c', accentText: '#ffffff', slug: 'shopee',        defaultFee: 20.0,  defaultFixed: 4.00 },
-  { id: 'amazon', name: 'Amazon',        accentBg: '#f97316', accentText: '#1c1917', slug: 'amazon',        defaultFee: 12.0,  defaultFixed: 6.05 },
-  { id: 'tiktok', name: 'TikTok Shop',   accentBg: '#0f172a', accentText: '#ffffff', slug: 'tiktok-shop',   defaultFee: 6,     defaultFixed: 6.00 },
-  { id: 'magalu', name: 'Magalu',        accentBg: '#2563eb', accentText: '#ffffff', slug: 'magalu',        defaultFee: 14.8,  defaultFixed: 5.00 },
+  { id: 'ml',     name: 'Mercado Livre', accentBg: '#fbbf24', accentText: '#1c1917', slug: 'mercado-livre', defaultFee: 11.5, defaultFixed: 6.50 },
+  { id: 'shopee', name: 'Shopee',        accentBg: '#ea580c', accentText: '#ffffff', slug: 'shopee',        defaultFee: 14.0, defaultFixed: 4.00 },
+  { id: 'amazon', name: 'Amazon',        accentBg: '#f97316', accentText: '#1c1917', slug: 'amazon',        defaultFee: 12.0, defaultFixed: 2.00 },
+  { id: 'tiktok', name: 'TikTok Shop',   accentBg: '#0f172a', accentText: '#ffffff', slug: 'tiktok-shop',   defaultFee: 6,    defaultFixed: 6.00 },
+  { id: 'magalu', name: 'Magalu',        accentBg: '#2563eb', accentText: '#ffffff', slug: 'magalu',        defaultFee: 16.0, defaultFixed: 5.00 },
 ]
+
+// Faixas hardcoded por canal quando o DB não tem configuração (sobrescritas pelo DB se existirem)
+const FALLBACK_FAIXAS: Record<string, CanalFaixaPrec[]> = {
+  'tiktok-shop': [
+    { preco_min: 0,  preco_max: 49.99, comissao_perc: 10, taxa_fixa: 4 },
+    { preco_min: 50, preco_max: null,  comissao_perc: 6,  taxa_fixa: 6 },
+  ],
+  'shopee': [
+    { preco_min: 0,   preco_max: 24.99,  comissao_perc: 14, taxa_fixa: 4 },
+    { preco_min: 25,  preco_max: 49.99,  comissao_perc: 14, taxa_fixa: 4 },
+    { preco_min: 50,  preco_max: 149.99, comissao_perc: 14, taxa_fixa: 4 },
+    { preco_min: 150, preco_max: 299.99, comissao_perc: 14, taxa_fixa: 4 },
+    { preco_min: 300, preco_max: null,   comissao_perc: 14, taxa_fixa: 4 },
+  ],
+}
+
+// Retorna faixas do DB se existirem, senão usa fallback hardcoded
+function getFaixas(slug: string, dbFaixas: Record<string, CanalFaixaPrec[]>): CanalFaixaPrec[] {
+  return (dbFaixas[slug]?.length ? dbFaixas[slug] : null) ?? FALLBACK_FAIXAS[slug] ?? []
+}
 
 function getFeeForPrice(faixas: CanalFaixaPrec[], preco: number, fallbackFee: number, fallbackFixed: number) {
   if (!faixas || faixas.length === 0) return { fee: fallbackFee, fixed: fallbackFixed }
@@ -90,6 +109,7 @@ function getFeeForPrice(faixas: CanalFaixaPrec[], preco: number, fallbackFee: nu
 
 interface GlobalState {
   productName: string
+  price: number
   costPrice: number
   taxRate: number
   packaging: number
@@ -97,7 +117,6 @@ interface GlobalState {
 }
 
 interface ChannelState {
-  price: number
   feePercent: number
   fixedFee: number
   freight: number
@@ -243,16 +262,24 @@ export function PrecificacaoView({
   canalModos?: Record<string, string>
 }) {
   const initChannel = (ch: Channel, defPrice = 19): ChannelState => {
-    const { fee, fixed } = getFeeForPrice(canalFaixas[ch.slug] ?? [], defPrice, ch.defaultFee, ch.defaultFixed)
-    return { price: defPrice, feePercent: fee, fixedFee: fixed, freight: 0 }
+    const { fee, fixed } = getFeeForPrice(getFaixas(ch.slug, canalFaixas), defPrice, ch.defaultFee, ch.defaultFixed)
+    return { feePercent: fee, fixedFee: fixed, freight: 0 }
   }
 
+  // AUTO/MANUAL local por card — começa AUTO para canais com faixas (DB ou hardcoded)
+  const [localAuto, setLocalAuto] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(CHANNELS.map(ch => [
+      ch.id,
+      canalModos[ch.slug] === 'AUTO' || !!FALLBACK_FAIXAS[ch.slug],
+    ]))
+  )
+
   const [global, setGlobal] = usePersistedState<GlobalState>(`${workspaceId}_prec_global`, {
-    productName: '', costPrice: 4.00, taxRate: 6, packaging: 0, volume: 100,
+    productName: '', price: 19, costPrice: 4.00, taxRate: 6, packaging: 0, volume: 100,
   })
 
   const [chs, setChs] = usePersistedState<Record<string, ChannelState>>(
-    `${workspaceId}_prec_chs_v3`,
+    `${workspaceId}_prec_chs_v4`,
     () => Object.fromEntries(CHANNELS.map(ch => [ch.id, initChannel(ch)]))
   )
 
@@ -260,58 +287,53 @@ export function PrecificacaoView({
   const [openFees, setOpenFees] = useState<string | null>(null)
   const [margemIdeal, setMargemIdeal] = useState(30)
 
-  // ── Part 3: ML Category Fee ──
-  const [mlAnuncioInput, setMlAnuncioInput] = useState('')
-  const [mlFeeOverride, setMlFeeOverride] = useState<MLFeeResult | null>(null)
-  const [mlLoading, setMlLoading] = useState(false)
-
-  const fetchMLFee = useCallback(async (input: string, price: number) => {
-    if (!input.trim()) { setMlFeeOverride(null); return }
-    setMlLoading(true)
-    try {
-      const result = await buscarTaxaML(input.trim(), price)
-      setMlFeeOverride(result)
-    } finally {
-      setMlLoading(false)
-    }
-  }, [])
-
-  // Re-busca quando o preço ML muda (com debounce 600ms)
-  useEffect(() => {
-    if (!mlAnuncioInput.trim()) return
-    const t = setTimeout(() => fetchMLFee(mlAnuncioInput, chs['ml']?.price ?? 0), 600)
-    return () => clearTimeout(t)
-  }, [chs['ml']?.price, mlAnuncioInput, fetchMLFee])
+  // Plano Amazon: Individual (R$2/item) ou Profissional (R$0/item, mensalidade fixa)
+  const [amazonPlan, setAmazonPlan] = useState<'individual' | 'pro'>('individual')
 
   function setG<K extends keyof GlobalState>(k: K, v: GlobalState[K]) {
     setGlobal(p => ({ ...p, [k]: v }))
   }
 
   function setCh(id: string, field: keyof ChannelState, val: number) {
+    setChs(prev => ({ ...prev, [id]: { ...prev[id], [field]: val } }))
+  }
+
+  // Quando o preço global muda, atualiza as taxas AUTO de todos os canais
+  useEffect(() => {
     setChs(prev => {
-      const next = { ...prev, [id]: { ...prev[id], [field]: val } }
-      if (field === 'price') {
-        const ch = CHANNELS.find(c => c.id === id)
-        if (ch) {
-          const { fee, fixed } = getFeeForPrice(canalFaixas[ch.slug] ?? [], val, ch.defaultFee, ch.defaultFixed)
-          next[id].feePercent = fee
-          next[id].fixedFee   = fixed
+      const next = { ...prev }
+      for (const ch of CHANNELS) {
+        if (localAuto[ch.id]) {
+          const { fee, fixed } = getFeeForPrice(getFaixas(ch.slug, canalFaixas), global.price, ch.defaultFee, ch.defaultFixed)
+          next[ch.id] = { ...next[ch.id], feePercent: fee, fixedFee: fixed }
         }
       }
       return next
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [global.price])
+
+  function toggleAuto(ch: Channel) {
+    const nowAuto = !localAuto[ch.id]
+    setLocalAuto(prev => ({ ...prev, [ch.id]: nowAuto }))
+    if (nowAuto) {
+      const { fee, fixed } = getFeeForPrice(getFaixas(ch.slug, canalFaixas), global.price, ch.defaultFee, ch.defaultFixed)
+      setChs(prev => ({ ...prev, [ch.id]: { ...prev[ch.id], feePercent: fee, fixedFee: fixed } }))
+    }
   }
 
   const results = useMemo<Record<string, CalcResult>>(() =>
     Object.fromEntries(
       CHANNELS.map(ch => {
         const cs = chs[ch.id]
-        const feePercent = (ch.id === 'ml' && mlFeeOverride) ? mlFeeOverride.comissao_perc : cs.feePercent
-        const fixedFee   = (ch.id === 'ml' && mlFeeOverride) ? mlFeeOverride.taxa_fixa   : cs.fixedFee
-        return [ch.id, calc(cs.price, global.costPrice, global.taxRate, global.packaging, feePercent, fixedFee, global.volume, cs.freight)]
+        const feePercent = cs.feePercent
+        const fixedFee   = ch.id === 'amazon'
+          ? (amazonPlan === 'individual' ? 2.00 : 0)
+          : cs.fixedFee
+        return [ch.id, calc(global.price, global.costPrice, global.taxRate, global.packaging, feePercent, fixedFee, global.volume, cs.freight)]
       })
     ),
-  [global, chs, mlFeeOverride])
+  [global, chs, amazonPlan])
 
   const selCh  = CHANNELS.find(c => c.id === selected)!
   const selRes = results[selected]
@@ -369,7 +391,7 @@ export function PrecificacaoView({
       {/* ── PARÂMETROS GLOBAIS ── */}
       <div className="no-print bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4">Parâmetros Globais</p>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
           <div className="md:col-span-2">
             <Label>Nome do Produto</Label>
             <Input
@@ -378,6 +400,12 @@ export function PrecificacaoView({
               onChange={e => setG('productName', e.target.value)}
               placeholder="Ex: Mini Processador 500W"
             />
+          </div>
+          <div>
+            <Label>Preço de Venda (R$)</Label>
+            <Input type="number" step="0.01" value={global.price}
+              onChange={e => setG('price', +e.target.value || 0)}
+              className="border-emerald-300 focus:border-emerald-500 focus:ring-emerald-500/10 font-black text-emerald-700" />
           </div>
           <div>
             <Label>Custo Unitário (R$)</Label>
@@ -436,53 +464,6 @@ export function PrecificacaoView({
               </div>
 
               <div className="bg-white p-3 flex flex-col gap-3 flex-1">
-                {/* Preço de venda */}
-                <div>
-                  <Label>Preço de Venda (R$)</Label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={cs.price}
-                    onChange={e => { e.stopPropagation(); setCh(ch.id, 'price', +e.target.value || 0) }}
-                    onClick={e => e.stopPropagation()}
-                    className="w-full mt-1 px-2 py-2 rounded-xl border border-slate-200 text-base font-black font-mono text-center focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 bg-slate-50"
-                  />
-                </div>
-
-                {/* Campo MLB ID — só no ML em modo AUTO */}
-                {ch.id === 'ml' && canalModos[ch.slug] === 'AUTO' && (
-                  <div onClick={e => e.stopPropagation()}>
-                    <Label>
-                      Anúncio ML{' '}
-                      <span className="text-violet-400 normal-case font-medium">(opcional)</span>
-                    </Label>
-                    <div className="relative mt-1">
-                      <input
-                        type="text"
-                        placeholder="MLB123456789 ou cole a URL"
-                        value={mlAnuncioInput}
-                        onChange={e => setMlAnuncioInput(e.target.value)}
-                        onBlur={() => fetchMLFee(mlAnuncioInput, cs.price)}
-                        className="w-full px-2 py-1.5 rounded-xl border border-slate-200 text-[10px] font-mono focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400/20 bg-slate-50 pr-7 placeholder:text-slate-300"
-                      />
-                      {mlLoading && (
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-violet-400 animate-pulse">⟳</span>
-                      )}
-                    </div>
-                    {mlFeeOverride && !mlLoading && (
-                      <p className={cn(
-                        'text-[7px] font-black mt-0.5 truncate',
-                        mlFeeOverride.source === 'fallback' ? 'text-orange-400' : 'text-violet-500'
-                      )}>
-                        {mlFeeOverride.source === 'fallback'
-                          ? `Fallback: ${mlFeeOverride.comissao_perc}% + R$${mlFeeOverride.taxa_fixa.toFixed(2)}`
-                          : `Taxa real: ${mlFeeOverride.comissao_perc}% · ${mlFeeOverride.source}`
-                        }
-                      </p>
-                    )}
-                  </div>
-                )}
-
                 {/* Taxas expandíveis */}
                 <div>
                   <button
@@ -490,15 +471,27 @@ export function PrecificacaoView({
                     className="flex items-center gap-1 text-[8px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 w-full transition-colors"
                   >
                     <span>Taxas do Canal</span>
-                    {canalModos[ch.slug] === 'AUTO' && (
-                      <span className="ml-1 bg-violet-100 text-violet-600 px-1 rounded text-[7px] font-black">AUTO</span>
+                    {/* Badge + toggle AUTO/MANUAL — clique no badge troca o modo local */}
+                    {(canalModos[ch.slug] === 'AUTO' || !!FALLBACK_FAIXAS[ch.slug]) && (
+                      <span
+                        onClick={e => { e.stopPropagation(); toggleAuto(ch) }}
+                        title={localAuto[ch.id] ? 'Clique para editar manualmente' : 'Clique para voltar ao AUTO'}
+                        className={cn(
+                          'ml-1 px-1.5 py-0.5 rounded text-[7px] font-black cursor-pointer transition-colors select-none',
+                          localAuto[ch.id]
+                            ? 'bg-violet-100 text-violet-600 hover:bg-violet-200'
+                            : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
+                        )}
+                      >
+                        {localAuto[ch.id] ? 'AUTO' : 'MAN'}
+                      </span>
                     )}
                     <ChevronDown className={cn('w-3 h-3 ml-auto transition-transform', fOpen && 'rotate-180')} />
                   </button>
                   {fOpen && (
                     <div className="mt-2 grid grid-cols-2 gap-2" onClick={e => e.stopPropagation()}>
                       {(() => {
-                        const isTiered = canalModos[ch.slug] === 'AUTO'
+                        const isTiered = localAuto[ch.id]
                         return (
                           <>
                             <div>
@@ -514,7 +507,7 @@ export function PrecificacaoView({
                               />
                             </div>
                             <div>
-                              <Label>Taxa Fixa R$</Label>
+                              <Label>{ch.id === 'ml' ? 'Custo fixo (estimado) R$' : 'Taxa Fixa R$'}</Label>
                               <input
                                 type="number" step="0.01" value={cs.fixedFee}
                                 readOnly={isTiered} disabled={isTiered}
@@ -533,9 +526,35 @@ export function PrecificacaoView({
                                 className="w-full mt-1 px-2 py-1 rounded-lg border border-slate-200 text-xs font-mono text-center focus:outline-none focus:border-emerald-500"
                               />
                             </div>
-                            {isTiered && (
+                            {ch.id === 'amazon' && (
+                              <div className="col-span-2">
+                                <Label>Plano Amazon</Label>
+                                <div className="flex gap-1 mt-1">
+                                  {(['individual', 'pro'] as const).map(p => (
+                                    <button
+                                      key={p}
+                                      onClick={e => { e.stopPropagation(); setAmazonPlan(p) }}
+                                      className={cn(
+                                        'flex-1 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-colors',
+                                        amazonPlan === p
+                                          ? 'bg-orange-500 text-white border-orange-500'
+                                          : 'bg-white text-slate-400 border-slate-200 hover:border-orange-300'
+                                      )}
+                                    >
+                                      {p === 'individual' ? 'Individual R$2' : 'Profissional R$0'}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {isTiered && !['ml','amazon'].includes(ch.id) && (
                               <p className="col-span-2 text-[7px] text-violet-500 italic text-center">
-                                Modo AUTO — altere em Config &gt; Canais
+                                Modo AUTO — toque em AUTO para editar
+                              </p>
+                            )}
+                            {!isTiered && (
+                              <p className="col-span-2 text-[7px] text-slate-400 italic text-center">
+                                Modo manual — toque em MAN para voltar ao AUTO
                               </p>
                             )}
                           </>
@@ -624,7 +643,7 @@ export function PrecificacaoView({
               ))}
               <div className="border-t border-slate-100 pt-1.5 flex justify-between">
                 <span className="text-[9px] text-slate-400">Preço de Venda</span>
-                <span className="text-[10px] font-black font-mono">{brl(selCs.price)}</span>
+                <span className="text-[10px] font-black font-mono">{brl(global.price)}</span>
               </div>
             </div>
           </div>
@@ -666,14 +685,14 @@ export function PrecificacaoView({
               <div className="grid grid-cols-2 gap-2 text-[10px]">
                 <div className={cn(
                   'rounded-lg p-2 border transition-all',
-                  selCs.price < 50 ? 'border-emerald-500 bg-emerald-500/10' : 'border-slate-700 bg-slate-800'
+                  global.price < 50 ? 'border-emerald-500 bg-emerald-500/10' : 'border-slate-700 bg-slate-800'
                 )}>
                   <p className="text-slate-400 font-bold">Abaixo de R$ 50</p>
                   <p className="text-white font-black mt-0.5">10% + R$ 4,00</p>
                 </div>
                 <div className={cn(
                   'rounded-lg p-2 border transition-all',
-                  selCs.price >= 50 ? 'border-emerald-500 bg-emerald-500/10' : 'border-slate-700 bg-slate-800'
+                  global.price >= 50 ? 'border-emerald-500 bg-emerald-500/10' : 'border-slate-700 bg-slate-800'
                 )}>
                   <p className="text-slate-400 font-bold">R$ 50 ou mais</p>
                   <p className="text-white font-black mt-0.5">6% + R$ 6,00</p>
@@ -722,7 +741,7 @@ export function PrecificacaoView({
                         <span className="font-bold text-slate-700 whitespace-nowrap">{name}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-600 whitespace-nowrap">{brl(cs.price)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-slate-600 whitespace-nowrap">{brl(global.price)}</td>
                     <td className="px-4 py-3 text-right font-mono font-black whitespace-nowrap">
                       <span className={res.sobra >= 0 ? 'text-emerald-600' : 'text-red-600'}>{brl(res.sobra)}</span>
                     </td>
@@ -806,15 +825,16 @@ export function PrecificacaoView({
               // safeN: rejeita NaN/Infinity E valores fora do intervalo esperado
               const safeN = (v: unknown, fb: number, min = -Infinity, max = Infinity) =>
                 typeof v === 'number' && isFinite(v) && v >= min && v <= max ? v : fb
-              const custo  = safeN(global.costPrice, 0,  0, 99999)
-              const taxR   = safeN(global.taxRate,   6,  0, 50)
-              const pack   = safeN(global.packaging, 0,  0, 9999)
-              const safePrice = safeN(cs?.price, 19, 0, 99999)
-              const { fee: defFee, fixed: defFix } = getFeeForPrice(canalFaixas[ch.slug] ?? [], safePrice, ch.defaultFee, ch.defaultFixed)
+              const custo     = safeN(global.costPrice, 0,  0, 99999)
+              const taxR      = safeN(global.taxRate,   6,  0, 50)
+              const pack      = safeN(global.packaging, 0,  0, 9999)
+              const safePrice = safeN(global.price,     19, 0, 99999)
+              const { fee: defFee, fixed: defFix } = getFeeForPrice(getFaixas(ch.slug, canalFaixas), safePrice, ch.defaultFee, ch.defaultFixed)
               const feeP   = safeN(cs?.feePercent, defFee, 0, 50)
               const fixF   = safeN(cs?.fixedFee,   defFix, 0, 999)
               const frt    = safeN(cs?.freight,     0,      0, 9999)
-              const preco = calcPrecoIdeal(custo, taxR, pack, frt, feeP, fixF, margemIdeal)
+              const totalFeeP = feeP
+              const preco = calcPrecoIdeal(custo, taxR, pack, frt, totalFeeP, fixF, margemIdeal)
               const inviavel = !isFinite(preco) || preco <= 0
               return (
                 <div key={ch.id} className="flex items-center justify-between rounded-xl px-3 py-2" style={{ backgroundColor: ch.accentBg + '18' }}>
@@ -844,16 +864,17 @@ export function PrecificacaoView({
               const cs = chs[ch.id]
               const safeN = (v: unknown, fb: number, min = -Infinity, max = Infinity) =>
                 typeof v === 'number' && isFinite(v) && v >= min && v <= max ? v : fb
-              const custo  = safeN(global.costPrice, 0,  0, 99999)
-              const taxR   = safeN(global.taxRate,   6,  0, 50)
-              const pack   = safeN(global.packaging, 0,  0, 9999)
-              const safePrice2 = safeN(cs?.price, 19, 0, 99999)
-              const { fee: defFee, fixed: defFix } = getFeeForPrice(canalFaixas[ch.slug] ?? [], safePrice2, ch.defaultFee, ch.defaultFixed)
-              const feeP   = safeN(cs?.feePercent, defFee, 0, 50)
-              const fixF   = safeN(cs?.fixedFee,   defFix, 0, 999)
-              const frt    = safeN(cs?.freight,     0,      0, 9999)
-              const preco = calcPrecoMinimo(custo, taxR, pack, frt, feeP, fixF)
-              const atual = safeN(cs?.price, 0)
+              const custo      = safeN(global.costPrice, 0,  0, 99999)
+              const taxR       = safeN(global.taxRate,   6,  0, 50)
+              const pack       = safeN(global.packaging, 0,  0, 9999)
+              const safePrice2 = safeN(global.price,     19, 0, 99999)
+              const { fee: defFee, fixed: defFix } = getFeeForPrice(getFaixas(ch.slug, canalFaixas), safePrice2, ch.defaultFee, ch.defaultFixed)
+              const feeP      = safeN(cs?.feePercent, defFee, 0, 50)
+              const fixF      = safeN(cs?.fixedFee,   defFix, 0, 999)
+              const frt       = safeN(cs?.freight,     0,      0, 9999)
+              const totalFeeP2 = feeP
+              const preco = calcPrecoMinimo(custo, taxR, pack, frt, totalFeeP2, fixF)
+              const atual  = safeN(global.price, 0)
               const precoValido = isFinite(preco) && preco > 0
               const folga = atual - preco
               return (
@@ -888,7 +909,7 @@ export function PrecificacaoView({
           global={global}
           channels={CHANNELS.map(c => ({ id: c.id, name: c.name, accentBg: c.accentBg }))}
           results={results}
-          prices={Object.fromEntries(CHANNELS.map(c => [c.id, chs[c.id].price]))}
+          prices={Object.fromEntries(CHANNELS.map(c => [c.id, global.price]))}
           date={reportDate}
         />
       )}
