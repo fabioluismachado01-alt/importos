@@ -216,6 +216,7 @@ const STATUS = {
 // ─── Utilitários ─────────────────────────────────────────────────────────────
 
 function brl(v: number) {
+  if (typeof v !== 'number' || isNaN(v)) return 'R$ —'
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
