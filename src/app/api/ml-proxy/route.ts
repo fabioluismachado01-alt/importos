@@ -7,7 +7,7 @@ const ALLOWED = /^\/(items|users|sites\/MLB\/(search|listing_prices)|products)/
 
 async function getToken(): Promise<string | null> {
   const conn = await prisma.ml_conexao.findFirst({
-    where: { ativo: true, access_token: { startsWith: 'APP-' } },
+    where: { ativo: true, NOT: { access_token: { startsWith: 'demo' } } },
     orderBy: { expires_at: 'desc' },
   })
   if (!conn) return null
