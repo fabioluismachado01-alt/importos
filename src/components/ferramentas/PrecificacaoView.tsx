@@ -341,9 +341,11 @@ export function PrecificacaoView({
       CHANNELS.map(ch => {
         const cs = chs[ch.id]
         const feePercent = cs.feePercent
-        const fixedFee   = ch.id === 'amazon'
-          ? (amazonPlan === 'individual' ? 2.00 : 0)
-          : cs.fixedFee
+        const fixedFee   = ch.id === 'ml'
+          ? 0
+          : ch.id === 'amazon'
+            ? (amazonPlan === 'individual' ? 2.00 : 0)
+            : cs.fixedFee
         // TikTok: frete AUTO = 6% do preço; afiliado entra no cálculo
         const freight    = ch.id === 'tiktok' && localAuto[ch.id]
           ? global.price * 0.06
@@ -525,19 +527,21 @@ export function PrecificacaoView({
                                 )}
                               />
                             </div>
-                            <div>
-                              <Label>Taxa Fixa R$</Label>
-                              <input
-                                type="number" step="0.01" value={cs.fixedFee}
-                                readOnly={isTiered} disabled={isTiered}
-                                onChange={e => setCh(ch.id, 'fixedFee', +e.target.value || 0)}
-                                className={cn(
-                                  'w-full mt-1 px-2 py-1 rounded-lg border text-xs font-mono text-center focus:outline-none',
-                                  isTiered ? 'bg-slate-100 border-slate-100 text-slate-400' : 'border-slate-200 focus:border-emerald-500'
-                                )}
-                              />
-                            </div>
-                            <div className="col-span-2">
+                            {ch.id !== 'ml' && (
+                              <div>
+                                <Label>Taxa Fixa R$</Label>
+                                <input
+                                  type="number" step="0.01" value={cs.fixedFee}
+                                  readOnly={isTiered} disabled={isTiered}
+                                  onChange={e => setCh(ch.id, 'fixedFee', +e.target.value || 0)}
+                                  className={cn(
+                                    'w-full mt-1 px-2 py-1 rounded-lg border text-xs font-mono text-center focus:outline-none',
+                                    isTiered ? 'bg-slate-100 border-slate-100 text-slate-400' : 'border-slate-200 focus:border-emerald-500'
+                                  )}
+                                />
+                              </div>
+                            )}
+                            <div className={ch.id === 'ml' ? undefined : 'col-span-2'}>
                               <Label>{ch.id === 'tiktok' ? 'Custo Frete R$' : 'Frete Vendedor R$'}</Label>
                               <input
                                 type="number" step="0.01"
@@ -880,7 +884,7 @@ export function PrecificacaoView({
               const safePrice = safeN(global.price,     19, 0, 99999)
               const { fee: defFee, fixed: defFix } = getFeeForPrice(getFaixas(ch.slug, canalFaixas), safePrice, ch.defaultFee, ch.defaultFixed)
               const feeP   = safeN(cs?.feePercent, defFee, 0, 50)
-              const fixF   = safeN(cs?.fixedFee,   defFix, 0, 999)
+              const fixF   = ch.id === 'ml' ? 0 : safeN(cs?.fixedFee, defFix, 0, 999)
               const frtRaw = ch.id === 'tiktok' && localAuto[ch.id] ? safePrice * 0.06 : safeN(cs?.freight, 0, 0, 9999)
               const frt    = safeN(frtRaw, 0, 0, 9999)
               const affPct = ch.id === 'tiktok' ? tiktokAffiliate : 0
@@ -920,7 +924,7 @@ export function PrecificacaoView({
               const safePrice2 = safeN(global.price,     19, 0, 99999)
               const { fee: defFee, fixed: defFix } = getFeeForPrice(getFaixas(ch.slug, canalFaixas), safePrice2, ch.defaultFee, ch.defaultFixed)
               const feeP      = safeN(cs?.feePercent, defFee, 0, 50)
-              const fixF      = safeN(cs?.fixedFee,   defFix, 0, 999)
+              const fixF      = ch.id === 'ml' ? 0 : safeN(cs?.fixedFee, defFix, 0, 999)
               const frtRaw2   = ch.id === 'tiktok' && localAuto[ch.id] ? safePrice2 * 0.06 : safeN(cs?.freight, 0, 0, 9999)
               const frt       = safeN(frtRaw2, 0, 0, 9999)
               const affPct2   = ch.id === 'tiktok' ? tiktokAffiliate : 0
