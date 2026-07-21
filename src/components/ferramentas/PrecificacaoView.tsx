@@ -134,6 +134,7 @@ interface CalcResult {
   valMkt: number
   valPack: number
   valFrete: number
+  valAfiliado: number
   status: 'excelente' | 'saudavel' | 'critico' | 'prejuizo'
 }
 
@@ -143,18 +144,19 @@ interface CalcResult {
 function calc(
   price: number, cost: number, taxRate: number,
   packaging: number, feePercent: number, fixedFee: number, volume: number,
-  freight = 0,
+  freight = 0, affiliatePct = 0,
 ): CalcResult {
-  const valProd  = cost
-  const valTax   = price * (taxRate / 100)
-  const valMkt   = price * (feePercent / 100) + fixedFee
-  const valPack  = packaging
-  const valFrete = freight
-  const sobra    = price - valProd - valTax - valMkt - valPack - valFrete
-  const roi      = cost > 0  ? (sobra / cost)  * 100 : 0
-  const margem   = price > 0 ? (sobra / price) * 100 : 0
-  const roas     = sobra > 0 ? price / sobra : 0
-  const acos     = margem
+  const valProd     = cost
+  const valTax      = price * (taxRate / 100)
+  const valMkt      = price * (feePercent / 100) + fixedFee
+  const valPack     = packaging
+  const valFrete    = freight
+  const valAfiliado = price * (affiliatePct / 100)
+  const sobra       = price - valProd - valTax - valMkt - valPack - valFrete - valAfiliado
+  const roi         = cost > 0  ? (sobra / cost)  * 100 : 0
+  const margem      = price > 0 ? (sobra / price) * 100 : 0
+  const roas        = sobra > 0 ? price / sobra : 0
+  const acos        = margem
 
   let status: CalcResult['status']
   if (sobra <= 0)       status = 'prejuizo'
@@ -162,20 +164,20 @@ function calc(
   else if (roas >= 3.4) status = 'saudavel'
   else                  status = 'excelente'
 
-  return { sobra, sobraVolume: sobra * volume, roi, margem, roas, acos, valProd, valTax, valMkt, valPack, valFrete, status }
+  return { sobra, sobraVolume: sobra * volume, roi, margem, roas, acos, valProd, valTax, valMkt, valPack, valFrete, valAfiliado, status }
 }
 
 // Preço Ideal: dado margem desejada (%), calcula o preço de venda necessário
-function calcPrecoIdeal(cost: number, taxRate: number, packaging: number, freight: number, feePercent: number, fixedFee: number, margemTarget: number): number {
-  // price * (1 - tax% - fee% - margem%) = cost + fixedFee + packaging + freight
-  const divisor = 1 - (taxRate / 100) - (feePercent / 100) - (margemTarget / 100)
+function calcPrecoIdeal(cost: number, taxRate: number, packaging: number, freight: number, feePercent: number, fixedFee: number, margemTarget: number, affiliatePct = 0): number {
+  // price * (1 - tax% - fee% - afiliado% - margem%) = cost + fixedFee + packaging + freight
+  const divisor = 1 - (taxRate / 100) - (feePercent / 100) - (affiliatePct / 100) - (margemTarget / 100)
   if (divisor <= 0) return 0
   return (cost + fixedFee + packaging + freight) / divisor
 }
 
 // Preço Mínimo: margem = 0 (break-even)
-function calcPrecoMinimo(cost: number, taxRate: number, packaging: number, freight: number, feePercent: number, fixedFee: number): number {
-  return calcPrecoIdeal(cost, taxRate, packaging, freight, feePercent, fixedFee, 0)
+function calcPrecoMinimo(cost: number, taxRate: number, packaging: number, freight: number, feePercent: number, fixedFee: number, affiliatePct = 0): number {
+  return calcPrecoIdeal(cost, taxRate, packaging, freight, feePercent, fixedFee, 0, affiliatePct)
 }
 
 // ─── Configuração de Status ──────────────────────────────────────────────────
@@ -290,6 +292,9 @@ export function PrecificacaoView({
   // Plano Amazon: Individual (R$2/item) ou Profissional (R$0/item, mensalidade fixa)
   const [amazonPlan, setAmazonPlan] = useState<'individual' | 'pro'>('individual')
 
+  // TikTok: % de comissão do afiliado (opcional, default 0)
+  const [tiktokAffiliate, setTiktokAffiliate] = useState(0)
+
   function setG<K extends keyof GlobalState>(k: K, v: GlobalState[K]) {
     setGlobal(p => ({ ...p, [k]: v }))
   }
@@ -338,10 +343,15 @@ export function PrecificacaoView({
         const fixedFee   = ch.id === 'amazon'
           ? (amazonPlan === 'individual' ? 2.00 : 0)
           : cs.fixedFee
-        return [ch.id, calc(global.price, global.costPrice, global.taxRate, global.packaging, feePercent, fixedFee, global.volume, cs.freight)]
+        // TikTok: frete AUTO = 6% do preço; afiliado entra no cálculo
+        const freight    = ch.id === 'tiktok' && localAuto[ch.id]
+          ? global.price * 0.06
+          : cs.freight
+        const affiliatePct = ch.id === 'tiktok' ? tiktokAffiliate : 0
+        return [ch.id, calc(global.price, global.costPrice, global.taxRate, global.packaging, feePercent, fixedFee, global.volume, freight, affiliatePct)]
       })
     ),
-  [global, chs, amazonPlan])
+  [global, chs, amazonPlan, tiktokAffiliate, localAuto])
 
   const selCh  = CHANNELS.find(c => c.id === selected)!
   const selRes = results[selected]
@@ -527,11 +537,17 @@ export function PrecificacaoView({
                               />
                             </div>
                             <div className="col-span-2">
-                              <Label>Frete Vendedor R$</Label>
+                              <Label>{ch.id === 'tiktok' ? 'Custo Frete R$' : 'Frete Vendedor R$'}</Label>
                               <input
-                                type="number" step="0.01" value={cs.freight}
+                                type="number" step="0.01"
+                                value={ch.id === 'tiktok' && isTiered ? +(global.price * 0.06).toFixed(2) : cs.freight}
+                                readOnly={ch.id === 'tiktok' && isTiered}
+                                disabled={ch.id === 'tiktok' && isTiered}
                                 onChange={e => setCh(ch.id, 'freight', +e.target.value || 0)}
-                                className="w-full mt-1 px-2 py-1 rounded-lg border border-slate-200 text-xs font-mono text-center focus:outline-none focus:border-emerald-500"
+                                className={cn(
+                                  'w-full mt-1 px-2 py-1 rounded-lg border text-xs font-mono text-center focus:outline-none',
+                                  ch.id === 'tiktok' && isTiered ? 'bg-slate-100 border-slate-100 text-slate-400' : 'border-slate-200 focus:border-emerald-500'
+                                )}
                               />
                             </div>
                             {ch.id === 'amazon' && (
@@ -555,7 +571,30 @@ export function PrecificacaoView({
                                 </div>
                               </div>
                             )}
-                            {isTiered && !['ml','amazon'].includes(ch.id) && (
+                            {ch.id === 'tiktok' && (() => {
+                              const faixasTiktok = getFaixas(ch.slug, canalFaixas)
+                              const faixa = faixasTiktok.find(f => global.price >= f.preco_min && (f.preco_max === null || global.price <= f.preco_max))
+                              const faixaLabel = faixa
+                                ? (faixa.preco_max === null ? `≥ R$${faixa.preco_min}` : `R$${faixa.preco_min}–${faixa.preco_max}`)
+                                : '—'
+                              return (
+                                <>
+                                  <p className="col-span-2 text-[7px] text-slate-400 leading-relaxed">
+                                    Faixa aplicada: {faixaLabel} → {faixa?.comissao_perc ?? '?'}% + R$ {faixa?.taxa_fixa?.toFixed(2) ?? '?'}. Comissão e taxa fixa variam pela faixa de preço · frete sempre 6% do preço de venda.
+                                  </p>
+                                  <div className="col-span-2">
+                                    <Label>% Comissão do Afiliado</Label>
+                                    <input
+                                      type="number" step="0.1" min="0" value={tiktokAffiliate}
+                                      onChange={e => setTiktokAffiliate(+e.target.value || 0)}
+                                      className="w-full mt-1 px-2 py-1 rounded-lg border border-slate-200 text-xs font-mono text-center focus:outline-none focus:border-emerald-500"
+                                    />
+                                    <p className="text-[7px] text-slate-400 mt-0.5 text-center">% que você paga ao afiliado por venda</p>
+                                  </div>
+                                </>
+                              )
+                            })()}
+                            {isTiered && !['ml','amazon','tiktok'].includes(ch.id) && (
                               <p className="col-span-2 text-[7px] text-violet-500 italic text-center">
                                 Modo AUTO — toque em AUTO para editar
                               </p>
@@ -635,8 +674,9 @@ export function PrecificacaoView({
                 { label: 'Produto',       value: selRes.valProd,  color: '#1e293b' },
                 { label: 'Taxas Mkt.',    value: selRes.valMkt,   color: selCh.accentBg },
                 { label: 'Imposto (DAS)', value: selRes.valTax,   color: '#94a3b8' },
-                { label: 'Embalagem',     value: selRes.valPack,  color: '#60a5fa' },
-                ...(selRes.valFrete > 0 ? [{ label: 'Frete',     value: selRes.valFrete, color: '#f97316' }] : []),
+                { label: 'Embalagem',     value: selRes.valPack,      color: '#60a5fa' },
+                ...(selRes.valFrete > 0    ? [{ label: selCh.id === 'tiktok' ? 'Frete (6%)' : 'Frete', value: selRes.valFrete,    color: '#f97316' }] : []),
+                ...(selRes.valAfiliado > 0 ? [{ label: 'Afiliado',                                       value: selRes.valAfiliado, color: '#a855f7' }] : []),
                 { label: 'Sobra',         value: selRes.sobra,    color: '#10b981', bold: true },
               ].map(row => (
                 <div key={row.label} className="flex justify-between items-center">
@@ -840,9 +880,10 @@ export function PrecificacaoView({
               const { fee: defFee, fixed: defFix } = getFeeForPrice(getFaixas(ch.slug, canalFaixas), safePrice, ch.defaultFee, ch.defaultFixed)
               const feeP   = safeN(cs?.feePercent, defFee, 0, 50)
               const fixF   = safeN(cs?.fixedFee,   defFix, 0, 999)
-              const frt    = safeN(cs?.freight,     0,      0, 9999)
-              const totalFeeP = feeP
-              const preco = calcPrecoIdeal(custo, taxR, pack, frt, totalFeeP, fixF, margemIdeal)
+              const frtRaw = ch.id === 'tiktok' && localAuto[ch.id] ? safePrice * 0.06 : safeN(cs?.freight, 0, 0, 9999)
+              const frt    = safeN(frtRaw, 0, 0, 9999)
+              const affPct = ch.id === 'tiktok' ? tiktokAffiliate : 0
+              const preco = calcPrecoIdeal(custo, taxR, pack, frt, feeP, fixF, margemIdeal, affPct)
               const inviavel = !isFinite(preco) || preco <= 0
               return (
                 <div key={ch.id} className="flex items-center justify-between rounded-xl px-3 py-2" style={{ backgroundColor: ch.accentBg + '18' }}>
@@ -879,9 +920,10 @@ export function PrecificacaoView({
               const { fee: defFee, fixed: defFix } = getFeeForPrice(getFaixas(ch.slug, canalFaixas), safePrice2, ch.defaultFee, ch.defaultFixed)
               const feeP      = safeN(cs?.feePercent, defFee, 0, 50)
               const fixF      = safeN(cs?.fixedFee,   defFix, 0, 999)
-              const frt       = safeN(cs?.freight,     0,      0, 9999)
-              const totalFeeP2 = feeP
-              const preco = calcPrecoMinimo(custo, taxR, pack, frt, totalFeeP2, fixF)
+              const frtRaw2   = ch.id === 'tiktok' && localAuto[ch.id] ? safePrice2 * 0.06 : safeN(cs?.freight, 0, 0, 9999)
+              const frt       = safeN(frtRaw2, 0, 0, 9999)
+              const affPct2   = ch.id === 'tiktok' ? tiktokAffiliate : 0
+              const preco = calcPrecoMinimo(custo, taxR, pack, frt, feeP, fixF, affPct2)
               const atual  = safeN(global.price, 0)
               const precoValido = isFinite(preco) && preco > 0
               const folga = atual - preco
