@@ -42,9 +42,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'ML não conectado no ImportOS' }, { status: 503 })
   }
 
-  // Diagnóstico: confirma que o token existe antes de sair
-  console.log('[ml-proxy] token presente:', !!token, '| primeiros 8 chars:', token.slice(0, 8))
-
   try {
     const res = await fetch(`${ML_BASE}${path}`, {
       headers: {
@@ -53,7 +50,6 @@ export async function GET(req: NextRequest) {
       },
       cache: 'no-store',
     })
-    console.log('[ml-proxy] ML respondeu:', res.status, 'para', path)
     const data = await res.json()
     return NextResponse.json(data, {
       status: res.status,
