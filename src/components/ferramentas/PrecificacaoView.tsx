@@ -276,12 +276,12 @@ export function PrecificacaoView({
     ]))
   )
 
-  const [global, setGlobal] = usePersistedState<GlobalState>(`${workspaceId}_prec_global`, {
+  const [global, setGlobal] = usePersistedState<GlobalState>(`${workspaceId}_prec_global_v2`, {
     productName: '', price: 19, costPrice: 4.00, taxRate: 6, packaging: 0, volume: 100,
   })
 
   const [chs, setChs] = usePersistedState<Record<string, ChannelState>>(
-    `${workspaceId}_prec_chs_v4`,
+    `${workspaceId}_prec_chs_v5`,
     () => Object.fromEntries(CHANNELS.map(ch => [ch.id, initChannel(ch)]))
   )
 
