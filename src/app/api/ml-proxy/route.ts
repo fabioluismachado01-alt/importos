@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { refreshMLToken } from '@/lib/ml-api'
 
 const ML_BASE = 'https://api.mercadolibre.com'
-const ALLOWED = /^\/(items|users|sites\/MLB\/search|products)/
+const ALLOWED = /^\/(items|users|sites\/MLB\/(search|listing_prices)|products)/
 
 async function getToken(): Promise<string | null> {
   const conn = await prisma.ml_conexao.findFirst({
