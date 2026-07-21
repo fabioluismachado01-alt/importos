@@ -42,18 +42,25 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'ML não conectado no ImportOS' }, { status: 503 })
   }
 
+  // Diagnóstico: confirma que o token existe antes de sair
+  console.log('[ml-proxy] token presente:', !!token, '| primeiros 8 chars:', token.slice(0, 8))
+
   try {
     const res = await fetch(`${ML_BASE}${path}`, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: 'application/json',
       },
+      cache: 'no-store',
     })
+    console.log('[ml-proxy] ML respondeu:', res.status, 'para', path)
     const data = await res.json()
     return NextResponse.json(data, {
+      status: res.status,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'public, max-age=300',
+        'Cache-Control': 'no-store',
+        'X-ML-Status': String(res.status),
       },
     })
   } catch (e: any) {
