@@ -72,7 +72,7 @@ interface Channel {
 }
 
 const CHANNELS: Channel[] = [
-  { id: 'ml',     name: 'Mercado Livre', accentBg: '#fbbf24', accentText: '#1c1917', slug: 'mercado-livre', defaultFee: 11.5, defaultFixed: 6.50 },
+  { id: 'ml',     name: 'Mercado Livre', accentBg: '#fbbf24', accentText: '#1c1917', slug: 'mercado-livre', defaultFee: 11.5, defaultFixed: 0 },
   { id: 'shopee', name: 'Shopee',        accentBg: '#ea580c', accentText: '#ffffff', slug: 'shopee',        defaultFee: 14.0, defaultFixed: 4.00 },
   { id: 'amazon', name: 'Amazon',        accentBg: '#f97316', accentText: '#1c1917', slug: 'amazon',        defaultFee: 12.0, defaultFixed: 2.00 },
   { id: 'tiktok', name: 'TikTok Shop',   accentBg: '#0f172a', accentText: '#ffffff', slug: 'tiktok-shop',   defaultFee: 6,    defaultFixed: 6.00 },
@@ -263,7 +263,7 @@ export function PrecificacaoView({
 }) {
   const initChannel = (ch: Channel, defPrice = 19): ChannelState => {
     const { fee, fixed } = getFeeForPrice(getFaixas(ch.slug, canalFaixas), defPrice, ch.defaultFee, ch.defaultFixed)
-    return { feePercent: fee, fixedFee: fixed, freight: 0 }
+    return { feePercent: fee, fixedFee: fixed, freight: ch.id === 'ml' ? 6.50 : 0 }
   }
 
   // AUTO/MANUAL local por card — começa AUTO para canais com faixas (DB ou hardcoded)
@@ -318,7 +318,15 @@ export function PrecificacaoView({
     setLocalAuto(prev => ({ ...prev, [ch.id]: nowAuto }))
     if (nowAuto) {
       const { fee, fixed } = getFeeForPrice(getFaixas(ch.slug, canalFaixas), global.price, ch.defaultFee, ch.defaultFixed)
-      setChs(prev => ({ ...prev, [ch.id]: { ...prev[ch.id], feePercent: fee, fixedFee: fixed } }))
+      setChs(prev => ({
+        ...prev,
+        [ch.id]: {
+          ...prev[ch.id],
+          feePercent: fee,
+          fixedFee: fixed,
+          ...(ch.id === 'ml' ? { freight: 6.50 } : {}),
+        },
+      }))
     }
   }
 
@@ -507,7 +515,7 @@ export function PrecificacaoView({
                               />
                             </div>
                             <div>
-                              <Label>{ch.id === 'ml' ? 'Custo fixo (estimado) R$' : 'Taxa Fixa R$'}</Label>
+                              <Label>Taxa Fixa R$</Label>
                               <input
                                 type="number" step="0.01" value={cs.fixedFee}
                                 readOnly={isTiered} disabled={isTiered}
