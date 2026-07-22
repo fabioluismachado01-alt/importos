@@ -249,8 +249,10 @@ export async function POST(req: NextRequest) {
       const fre = Math.abs(Number(r[COL.TAR_ENVIO]) || 0)
 
       // Receita bruta = C17 (líquido ML) + tarifa + frete (reconstrói o bruto)
-      const c17Total = Number(r[COL.TOTAL]) || 0
-      const rec = c17Total + tar + fre
+      // Fallback para preço × unidades quando Total estiver vazio (alguns pedidos entregues sem Total preenchido)
+      const totalRaw = r[COL.TOTAL]
+      const c17 = (totalRaw !== '' && totalRaw != null) ? Number(totalRaw) : null
+      const rec = c17 !== null ? c17 + tar + fre : (Number(r[COL.PRECO_UNIT]) || 0) * uni
 
       const titulo = limparTitulo(String(r[COL.TITULO] ?? ''))
       // Preço unitário do anúncio (col 27) — para breakdown por faixa de preço
