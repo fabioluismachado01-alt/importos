@@ -1,23 +1,47 @@
 /**
  * Parser do Relatório de Vendas Amazon
  *
- * Suporta 2 formatos:
+ * Suporta 2 formatos do relatório "Visualizar Transações" (Payments → View Transactions):
  *
- * Formato A — "Visualizar Transações" (novo, 10 colunas):
- *   Header linha 0, valores em BRL
+ * Formato A — 10 colunas (sem coluna Status):
  *   0: Data  1: Grupo de Pagamento  2: Tipo de transação  3: ID pedido
  *   4: Detalhes do produto  5: Custo total do produto  6: Descontos
  *   7: Tarifas da Amazon  8: Outros  9: (total) (BRL)
  *
- * Formato B — Relatório de Vendas antigo (11 colunas):
- *   Header linha 0, valores em BRL
- *   0: Data  1: Status  2: Grupo de Pagamento  3: Tipo de transação  4: ID pedido
+ * Formato B — 11 colunas (com coluna Status da transação):
+ *   0: Data  1: Status da transação  2: Grupo de Pagamento  3: Tipo de transação  4: ID pedido
  *   5: Detalhes do produto  6: Custo total  7: Descontos  8: Tarifas  9: Outros  10: (total)
+ *
+ * Regras de filtragem por "Tipo de transação":
+ *   ✅ INCLUIR  — "Pagamento do pedido"  (venda real)
+ *   ❌ EXCLUIR  — "Reembolso"            (devolvido ao comprador)
+ *   ❌ EXCLUIR  — "Reembolso de inventário" (ressarcimento de estoque FBA — não é venda)
+ *   ❌ EXCLUIR  — "Tarifas de serviço"   (FBA, armazenagem, mensalidade, publicidade)
+ *   ❌ EXCLUIR  — "Saldo indisponível"   (reserva de saldo — movimento contábil, não venda)
+ *   ❌ EXCLUIR  — "Saldo do extrato anterior indisponível" (idem)
+ *   ❌ EXCLUIR  — "Ajuste"              (outros ajustes Amazon)
  */
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/auth'
+
+// ─── Regras de filtragem por tipo de transação ────────────────────────────────
+
+// Tipos excluídos: substrings que identificam transações que NÃO são vendas
+const TIPOS_EXCLUIDOS: Array<{ pattern: string; categoria: 'reembolso' | 'tarifa' | 'ajuste' | 'saldo' }> = [
+  { pattern: 'reembolso de invent',  categoria: 'ajuste'     }, // FBA stock reimbursement — não é venda
+  { pattern: 'reembolso',            categoria: 'reembolso'  }, // devolução ao comprador
+  { pattern: 'tarifas de servi',     categoria: 'tarifa'     }, // FBA, armazenagem, mensalidade, Ads
+  { pattern: 'taxa de servi',        categoria: 'tarifa'     }, // variação do nome anterior
+  { pattern: 'saldo indispon',       categoria: 'saldo'      }, // reserva de saldo (movimento contábil)
+  { pattern: 'ajuste',               categoria: 'ajuste'     }, // outros ajustes Amazon
+]
+
+// Único tipo de transação que representa uma venda real
+const TIPO_VENDA = 'pagamento do pedido'
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function parseBRL(v: unknown): number {
   const n = parseFloat(String(v ?? '').replace(/[^0-9.\-]/g, ''))
@@ -34,15 +58,15 @@ function normalizarNomeProduto(nome: string): string {
   return String(nome ?? '').trim().slice(0, 80)
 }
 
-// Detecta qual formato é baseado no cabeçalho
-function detectarFormato(header: string[]): 'VISUALIZAR_TRANSACOES' | 'RELATORIO_VENDAS' | null {
+// Detecta formato pelo cabeçalho
+function detectarFormato(header: string[]): 'SEM_STATUS' | 'COM_STATUS' | null {
   const h = header.map(c => String(c).toLowerCase().trim())
-  // Formato novo: col 1 = "grupo de pagamento", col 2 = "tipo de transação"
-  if (h[1]?.includes('grupo') && h[2]?.includes('tipo')) return 'VISUALIZAR_TRANSACOES'
-  // Formato antigo: col 1 = "status", col 3 = "tipo de transação"
-  if (h[1]?.includes('status') && h[3]?.includes('tipo')) return 'RELATORIO_VENDAS'
-  // Fallback: se tiver "tipo de transação" em qualquer posição, tenta novo formato
-  if (h.some(c => c.includes('tipo de transa'))) return 'VISUALIZAR_TRANSACOES'
+  // Formato COM coluna "Status da transação": col 1 = "status", col 3 = "tipo"
+  if (h[1]?.includes('status') && h[3]?.includes('tipo')) return 'COM_STATUS'
+  // Formato SEM status: col 1 = "grupo de pagamento", col 2 = "tipo"
+  if (h[1]?.includes('grupo') && h[2]?.includes('tipo')) return 'SEM_STATUS'
+  // Fallback: se tiver "tipo de transação" em qualquer posição
+  if (h.some(c => c.includes('tipo de transa'))) return 'COM_STATUS'
   return null
 }
 
@@ -72,10 +96,10 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    // Mapeamento de colunas por formato
-    const COL = formato === 'VISUALIZAR_TRANSACOES'
-      ? { DATA: 0, TIPO: 2, PRODUTO: 4, RECEITA: 5, DESCONTO: 6, COMISSAO: 7, OUTROS: 8, TOTAL: 9 }
-      : { DATA: 0, TIPO: 3, PRODUTO: 5, RECEITA: 6, DESCONTO: 7, COMISSAO: 8, OUTROS: 9, TOTAL: 10 }
+    // Mapeamento de colunas: COM_STATUS tem uma coluna a mais no início
+    const COL = formato === 'COM_STATUS'
+      ? { DATA: 0, TIPO: 3, PRODUTO: 5, RECEITA: 6, DESCONTO: 7, COMISSAO: 8, OUTROS: 9, TOTAL: 10 }
+      : { DATA: 0, TIPO: 2, PRODUTO: 4, RECEITA: 5, DESCONTO: 6, COMISSAO: 7, OUTROS: 8, TOTAL: 9 }
 
     // Busca custos do catálogo por nome do produto
     const produtos = await prisma.produto_catalogo.findMany({
@@ -99,12 +123,12 @@ export async function POST(req: NextRequest) {
     let pedidos = 0
     let unidades = 0
 
-    // Acumuladores extras (presentes no formato "Visualizar Transações")
-    let tarifas_servico = 0      // "Tarifas de serviço" = FBA + outras tarifas Amazon
-    let reembolsos_bruto = 0     // "Reembolso" col RECEITA (valor devolvido ao cliente)
-    let reembolsos_comissao = 0  // "Reembolso" col COMISSAO (tarifa devolvida pela Amazon)
+    // Acumuladores de transações excluídas (para informação)
+    let tarifas_servico = 0
+    let reembolsos_bruto = 0
+    let reembolsos_comissao = 0
     let reembolsos_count = 0
-    let ajustes = 0              // "Reembolso de inventário"
+    let ajustes = 0
 
     const diasComVenda = new Set<string>()
     const porProduto: Record<string, {
@@ -119,42 +143,35 @@ export async function POST(req: NextRequest) {
       const tipo = String(r[COL.TIPO]).trim().toLowerCase()
       const total = parseBRL(r[COL.TOTAL])
 
-      // Tarifas de serviço (FBA, armazenagem, etc.)
-      if (tipo.includes('tarifas de servi') || tipo === 'taxa de serviço') {
-        tarifas_servico += Math.abs(total)
+      // ─── Aplicar regras de exclusão ────────────────────────────────────────
+      const exclusao = TIPOS_EXCLUIDOS.find(e => tipo.includes(e.pattern))
+      if (exclusao) {
+        if (exclusao.categoria === 'reembolso') {
+          reembolsos_bruto    += Math.abs(parseBRL(r[COL.RECEITA]))
+          reembolsos_comissao += Math.abs(parseBRL(r[COL.COMISSAO]))
+          reembolsos_count++
+        } else if (exclusao.categoria === 'tarifa') {
+          tarifas_servico += Math.abs(total)
+        } else {
+          ajustes += Math.abs(total)
+        }
         continue
       }
 
-      // Reembolsos
-      if (tipo === 'reembolso') {
-        const rec  = parseBRL(r[COL.RECEITA])
-        const com  = parseBRL(r[COL.COMISSAO])
-        reembolsos_bruto    += Math.abs(rec)
-        reembolsos_comissao += Math.abs(com)
-        reembolsos_count++
-        continue
-      }
+      // ─── Apenas "Pagamento do pedido" conta como venda ─────────────────────
+      if (!tipo.includes(TIPO_VENDA)) continue
 
-      // Reembolso de inventário (ajuste de estoque)
-      if (tipo.includes('reembolso de invent') || tipo === 'ajuste') {
-        ajustes += Math.abs(total)
-        continue
-      }
-
-      // Apenas "pagamento do pedido"
-      if (!tipo.includes('pagamento')) continue
-
-      const rec  = parseBRL(r[COL.RECEITA])
-      const desc = parseBRL(r[COL.DESCONTO])  // negativo = cupom
-      const com  = parseBRL(r[COL.COMISSAO])  // negativo = comissão
-      const out  = parseBRL(r[COL.OUTROS])
+      const rec  = parseBRL(r[COL.RECEITA])   // Custo total do produto (preço bruto)
+      const desc = parseBRL(r[COL.DESCONTO])   // Total de descontos promocionais (negativo = cupom)
+      const com  = parseBRL(r[COL.COMISSAO])   // Tarifas da Amazon (negativo = comissão)
+      const out  = parseBRL(r[COL.OUTROS])     // Outros (ressarcimento de promoção, geralmente = |desc|)
 
       receita_bruta   += rec
       comissao_amazon += Math.abs(com)
       descontos       += Math.abs(desc)
       outros          += out
       pedidos++
-      unidades++
+      unidades++ // 1 por linha de transação (CSV não informa qty — use o Relatório de Pedidos para qty exata)
 
       const d = parseDateBR(String(r[COL.DATA] ?? ''))
       if (d) diasComVenda.add(d.toISOString().split('T')[0])
@@ -197,7 +214,25 @@ export async function POST(req: NextRequest) {
       }))
       .sort((a, b) => b.receita - a.receita)
 
-    const resultado: Record<string, unknown> = {
+    // Dados "geral" embutidos no relatório de transações (tarifas e reembolsos)
+    const geral_embutido = {
+      fba_fulfillment:      0,
+      fba_armazenagem:      0,
+      mensalidade:          0,
+      outras_taxas_servico: tarifas_servico,
+      reembolsos_count,
+      reembolsos_bruto,
+      reembolsos_comissao,
+      reembolsos_fba:       0,
+      reembolsos_liquido:   reembolsos_bruto - reembolsos_comissao,
+      ajustes,
+      publicidade_interno:  0,
+      skus:                 [],
+      arquivo:              file.name,
+      fonte:                'TRANSACOES_EMBUTIDO',
+    }
+
+    return NextResponse.json({
       arquivo: file.name,
       fonte:   formato,
       periodo: { inicio: diasArr[0] ?? '', fim: dataFim, ano, mes },
@@ -210,29 +245,8 @@ export async function POST(req: NextRequest) {
       dias_com_venda: diasComVenda.size,
       ticket_medio:   unidades > 0 ? receita_bruta / unidades : 0,
       produtos:       produtosArray,
-    }
-
-    // Formato "Visualizar Transações" inclui dados do relatório geral embutidos
-    if (formato === 'VISUALIZAR_TRANSACOES') {
-      resultado.geral_embutido = {
-        fba_fulfillment:      0,
-        fba_armazenagem:      0,
-        mensalidade:          0,
-        outras_taxas_servico: tarifas_servico,
-        reembolsos_count,
-        reembolsos_bruto,
-        reembolsos_comissao,
-        reembolsos_fba:       0,
-        reembolsos_liquido:   reembolsos_bruto - reembolsos_comissao,
-        ajustes,
-        publicidade_interno:  0,
-        skus:                 [],
-        arquivo:              file.name,
-        fonte:                'VISUALIZAR_TRANSACOES_EMBUTIDO',
-      }
-    }
-
-    return NextResponse.json(resultado)
+      geral_embutido,
+    })
   } catch (err) {
     console.error('[analisar-relatorio-vendas]', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

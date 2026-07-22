@@ -9,6 +9,12 @@
  *   16: item-price       18: shipping-price
  *   22: item-promotion-discount
  *
+ * Regras de filtragem por order-status:
+ *   ✅ INCLUIR — "Shipped"    (entregue ou em trânsito)
+ *   ❌ EXCLUIR — "Cancelled"  (cancelado pelo comprador ou Amazon)
+ *   ❌ EXCLUIR — "Pending"    (aguardando pagamento — ainda não confirmado)
+ *   ❌ EXCLUIR — "Unshipped"  (pago mas ainda não enviado — inclui quando importar)
+ *
  * Extrai: SKUs, quantidades, receita por produto → margem via catálogo
  */
 import { NextRequest, NextResponse } from 'next/server'
@@ -28,7 +34,14 @@ const COL = {
   DESCONTO:   22,
 }
 
+// Pedidos entregues/em trânsito — conta como venda
 const STATUS_VALIDOS = new Set(['shipped'])
+
+// Pedidos cancelados — exclui definitivamente
+const STATUS_CANCELADOS = new Set(['cancelled', 'canceled'])
+
+// Pedidos pendentes/não enviados — exclui por agora (podem aparecer no mês seguinte)
+const STATUS_PENDENTES = new Set(['pending', 'unshipped', 'partiallyshipped'])
 
 function normalizarSku(sku: string): string {
   return sku.replace(/_fba/gi, '').replace(/\s/g, '').trim().toUpperCase()
@@ -128,8 +141,9 @@ export async function POST(req: NextRequest) {
       if (anoExplicito && data.getFullYear() !== anoExplicito) continue
 
       // Contadores de status
-      if (status === 'cancelled' || status === 'canceled') { cancelados++; continue }
-      if (!STATUS_VALIDOS.has(status)) { pendentes++; continue }
+      if (STATUS_CANCELADOS.has(status)) { cancelados++; continue }
+      if (STATUS_PENDENTES.has(status))  { pendentes++; continue }
+      if (!STATUS_VALIDOS.has(status))   { pendentes++; continue }   // qualquer outro status desconhecido → pendente
 
       const sku    = normalizarSku(skuRaw)
       const titulo = String(r[COL.PRODUTO] ?? '').slice(0, 80)
