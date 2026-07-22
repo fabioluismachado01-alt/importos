@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useTransition } from 'react'
 import { usePersistedState } from '@/hooks/usePersistedState'
 import { cn } from '@/lib/utils'
-import { Plus, Trash2, Printer, ChevronDown, ChevronUp, Building2, Search, Save, X, Package } from 'lucide-react'
+import { Plus, Trash2, Printer, ChevronDown, ChevronUp, Building2, Search, Save, X, Package, RotateCcw } from 'lucide-react'
 import { getFornecedores, saveFornecedor, deleteFornecedor, getProdutoPorSku } from '@/actions/fornecedores'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -156,7 +156,7 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
   const [importer,  setImporter]  = usePersistedState<Importer>(`${workspaceId}_doc_importer`, DEFAULT_IMPORTER)
   const [docInfo,   setDocInfo]   = usePersistedState<DocInfo>(`${workspaceId}_doc_info`, DEFAULT_DOC_INFO)
   const [bank,      setBank]      = usePersistedState<BankDetails>(`${workspaceId}_doc_bank`, DEFAULT_BANK)
-  const [items,     setItems]     = usePersistedState<DocItem[]>(`${workspaceId}_doc_items`, [{ ...DEFAULT_ITEM(), id: 1, qtyCtns: 100, unitPerCtn: 1, productName: 'SMARTWATCH ULTRA', description: 'DIGITAL SMART WATCH BRACELET', price: 12.50, hsCode: '9102.12.00', ncmCode: '9102.12.00' }])
+  const [items,     setItems]     = usePersistedState<DocItem[]>(`${workspaceId}_doc_items`, [DEFAULT_ITEM()])
   const [logistics, setLogistics] = usePersistedState<SimplifiedLogistics>(`${workspaceId}_doc_logistics`, { totalNetW: 0, totalGrossW: 0, totalVolumes: 0 })
 
   // ── Fornecedores ──────────────────────────────────────────────────────────
@@ -245,6 +245,19 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
     }
   }
 
+  function novoDocumento() {
+    if (!confirm('Limpar todos os campos e começar do zero?')) return
+    _nextId = 2
+    setDocType('PI')
+    setMode('simplified')
+    setSupplier(DEFAULT_SUPPLIER)
+    setImporter(DEFAULT_IMPORTER)
+    setDocInfo(DEFAULT_DOC_INFO)
+    setBank(DEFAULT_BANK)
+    setItems([DEFAULT_ITEM()])
+    setLogistics({ totalNetW: 0, totalGrossW: 0, totalVolumes: 0 })
+  }
+
   function setSup<K extends keyof Supplier>(k: K, v: string) { setSupplier(p => ({ ...p, [k]: v })) }
   function setImp<K extends keyof Importer>(k: K, v: string) { setImporter(p => ({ ...p, [k]: v })) }
   function setDoc<K extends keyof DocInfo>(k: K, v: string | number) { setDocInfo(p => ({ ...p, [k]: v })) }
@@ -310,13 +323,22 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
             <h1 className="text-2xl font-black text-slate-900 tracking-tight">Documentação Comex</h1>
             <p className="text-sm text-slate-500 mt-0.5">Gere PI, CI e Packing List prontos para impressão em A4 paisagem</p>
           </div>
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-600/20 transition-all"
-          >
-            <Printer className="w-4 h-4" />
-            Gerar Documento
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={novoDocumento}
+              className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Novo Documento
+            </button>
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-600/20 transition-all"
+            >
+              <Printer className="w-4 h-4" />
+              Gerar Documento
+            </button>
+          </div>
         </div>
 
         {/* SELETORES DE TIPO E MODO */}

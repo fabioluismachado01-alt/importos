@@ -811,8 +811,8 @@ export async function getProvisionalMesAtual(): Promise<ProvisionalMes | null> {
   const frete          = pedidos.reduce((s, p) => s + p.frete_vendedor, 0)
   const custo_produtos = pedidos.reduce((s, p) => s + (p.custo_produto ?? 0), 0)
   const das_valor_calc = receita_total * aliquota
-  const lucro_bruto    = receita_total - tarifas - frete - custo_produtos - das_valor_calc
-  const lucro_liquido  = lucro_bruto
+  const lucro_bruto    = receita_total - tarifas - frete - custo_produtos
+  const lucro_liquido  = lucro_bruto - das_valor_calc
 
   return { receita_total, lucro_bruto, lucro_liquido, das_valor_calc, pedidos: pedidos.length, fonte: 'ML_API' }
 }

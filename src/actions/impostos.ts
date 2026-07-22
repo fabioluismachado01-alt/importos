@@ -95,10 +95,10 @@ export async function getImpostosData(): Promise<ImpostosPageData> {
       + (fatRef.desp_fixas_outras ?? 0)
     : 0
 
-  // RBT12: soma dos 12 meses estritamente anteriores ao mês de APURAÇÃO (mesRef/anoRef),
-  // conforme regra RFB — não inclui o próprio mês de apuração.
-  // Ex: PA Jun/26 → RBT12 = Jun/25 a Mai/26.
-  const dataLimite = new Date(anoRef, mesRef - 1, 1)
+  // RBT12: soma dos 12 meses estritamente anteriores ao mês ATUAL (hoje),
+  // conforme regra RFB — sincronizado com painel-tributario.ts e /config/tributario.
+  // Ex: hoje = Jul/26 → RBT12 = Jul/25 a Jun/26.
+  const dataLimite = new Date(anoAtual, mesAtual - 1, 1)
   dataLimite.setMonth(dataLimite.getMonth() - 12)
   const anoLimite = dataLimite.getFullYear()
   const mesLimite = dataLimite.getMonth() + 1
@@ -115,10 +115,10 @@ export async function getImpostosData(): Promise<ImpostosPageData> {
     take: 13,
   })
 
-  // Filtra 12 meses antes do mês de apuração (não inclui o mês de apuração)
+  // Filtra 12 meses antes do mês ATUAL (não do mês de apuração)
   const rbt12Meses = historico.filter(h => {
-    if (h.ano < anoRef) return true
-    if (h.ano === anoRef && h.mes < mesRef) return true
+    if (h.ano < anoAtual) return true
+    if (h.ano === anoAtual && h.mes < mesAtual) return true
     return false
   }).slice(-12)
 
