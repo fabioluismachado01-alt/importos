@@ -160,6 +160,7 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
   const [logistics, setLogistics] = usePersistedState<SimplifiedLogistics>(`${workspaceId}_doc_logistics`, { totalNetW: 0, totalGrossW: 0, totalVolumes: 0 })
 
   // ── Fornecedores ──────────────────────────────────────────────────────────
+  const [novoDocConfirm, setNovoDocConfirm] = useState(false)
   const [fornecedores, setFornecedores] = useState<FornDB[]>([])
   const [showFornModal, setShowFornModal] = useState(false)
   const [editingForn, setEditingForn] = useState<Partial<FornDB> | null>(null)
@@ -246,6 +247,8 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
   }
 
   function novoDocumento() {
+    if (!novoDocConfirm) { setNovoDocConfirm(true); setTimeout(() => setNovoDocConfirm(false), 3000); return }
+    setNovoDocConfirm(false)
     _nextId = 2
     setDocType('PI')
     setMode('simplified')
@@ -325,10 +328,14 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
           <div className="flex items-center gap-2">
             <button
               onClick={novoDocumento}
-              className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all"
+              className={cn('flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all',
+                novoDocConfirm
+                  ? 'bg-red-100 hover:bg-red-200 text-red-700 border border-red-300'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+              )}
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              Novo Documento
+              {novoDocConfirm ? 'Confirmar Limpeza?' : 'Novo Documento'}
             </button>
             <button
               onClick={() => window.print()}
