@@ -188,6 +188,8 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const [estG, setEstG] = useState<UploadEstado>('idle')
   const [dadosG, setDadosG] = useState<GeralData | null>(null)
   const [erroG, setErroG]   = useState('')
+  // dados embutidos no CSV — usados apenas como fallback quando o TXT não foi enviado
+  const [geralEmbutido, setGeralEmbutido] = useState<GeralData | null>(null)
 
   const [estP, setEstP] = useState<UploadEstado>('idle')
   const [dadosP, setDadosP] = useState<PubData | null>(null)
@@ -223,10 +225,10 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setDadosV(data); setEstV('ok')
-      // "Visualizar Transações" embute dados do geral — auto-preenche o box 2
-      if (data.geral_embutido && estG === 'idle') {
-        setDadosG(data.geral_embutido)
-        setEstG('ok')
+      // "Visualizar Transações" embute dados do geral — guarda como fallback
+      // sem preencher box 2, para não bloquear o upload do TXT real
+      if (data.geral_embutido) {
+        setGeralEmbutido(data.geral_embutido)
       }
     } catch (e) { setErroV(String(e)); setEstV('erro') }
   }
@@ -275,20 +277,20 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
         pedidos:           dadosV.pedidos,
         unidades:          dadosV.unidades,
         dias_com_venda:    dadosV.dias_com_venda,
-        // Relatório Geral
-        fba_fulfillment:       dadosG?.fba_fulfillment       ?? 0,
-        fba_armazenagem:       dadosG?.fba_armazenagem       ?? 0,
-        mensalidade:           dadosG?.mensalidade            ?? 0,
-        reembolsos_bruto:      dadosG?.reembolsos_bruto       ?? 0,
-        reembolsos_comissao:   dadosG?.reembolsos_comissao    ?? 0,
-        reembolsos_fba:        dadosG?.reembolsos_fba         ?? 0,
-        ajustes:               dadosG?.ajustes                ?? 0,
-        outras_taxas_servico:  dadosG?.outras_taxas_servico   ?? 0,
+        // Relatório Geral (TXT real ou fallback embutido do CSV)
+        fba_fulfillment:       geralEfetivo?.fba_fulfillment       ?? 0,
+        fba_armazenagem:       geralEfetivo?.fba_armazenagem       ?? 0,
+        mensalidade:           geralEfetivo?.mensalidade            ?? 0,
+        reembolsos_bruto:      geralEfetivo?.reembolsos_bruto       ?? 0,
+        reembolsos_comissao:   geralEfetivo?.reembolsos_comissao    ?? 0,
+        reembolsos_fba:        geralEfetivo?.reembolsos_fba         ?? 0,
+        ajustes:               geralEfetivo?.ajustes                ?? 0,
+        outras_taxas_servico:  geralEfetivo?.outras_taxas_servico   ?? 0,
         // Fatura PDF
         publicidade: pub,
         // CMV — usa SKUs do Relatorio Geral (tem custo real por SKU) ou fallback p/ Vendas
-        custo_produtos: dadosG
-          ? dadosG.skus.reduce((s, sk) => s + (sk.custo_total ?? 0), 0)
+        custo_produtos: geralEfetivo
+          ? geralEfetivo.skus.reduce((s, sk) => s + (sk.custo_total ?? 0), 0)
           : dadosV.produtos.reduce((s, p) => s + (p.custo_total ?? 0), 0),
       })
       setSalvo(true)
@@ -303,14 +305,16 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const pub        = parseFloat(pubManual.replace(',', '.')) || 0
   const rec        = dadosV?.receita_bruta ?? 0
   const comissao   = dadosV?.comissao_amazon ?? 0
-  const fbaFull    = dadosG?.fba_fulfillment ?? 0
-  const fbaArm     = dadosG?.fba_armazenagem ?? 0
-  const mensal     = dadosG?.mensalidade ?? 0
-  const reembolso  = dadosG?.reembolsos_liquido ?? 0
-  const ajuste     = dadosG?.ajustes ?? 0
-  const outrasTax  = dadosG?.outras_taxas_servico ?? 0
-  const custoProd  = dadosG
-    ? dadosG.skus.reduce((s, sk) => s + (sk.custo_total ?? 0), 0)
+  // usa dados do TXT real; cai no embutido do CSV como fallback
+  const geralEfetivo = dadosG ?? geralEmbutido
+  const fbaFull    = geralEfetivo?.fba_fulfillment ?? 0
+  const fbaArm     = geralEfetivo?.fba_armazenagem ?? 0
+  const mensal     = geralEfetivo?.mensalidade ?? 0
+  const reembolso  = geralEfetivo?.reembolsos_liquido ?? 0
+  const ajuste     = geralEfetivo?.ajustes ?? 0
+  const outrasTax  = geralEfetivo?.outras_taxas_servico ?? 0
+  const custoProd  = geralEfetivo
+    ? geralEfetivo.skus.reduce((s, sk) => s + (sk.custo_total ?? 0), 0)
     : (dadosV?.produtos.reduce((s, p) => s + (p.custo_total ?? 0), 0) ?? 0)
   const das        = rec * aliq
 
@@ -318,7 +322,7 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const lucro_liq   = lucro_bruto - custoProd - das
 
   const podeSalvar  = estV === 'ok'   // pelo menos o relatório de vendas é obrigatório
-  const dre_completa = estV === 'ok' && estG === 'ok' && estP === 'ok'
+  const dre_completa = estV === 'ok' && (estG === 'ok' || !!geralEmbutido) && estP === 'ok'
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -426,7 +430,7 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
               caminho={['Menu', 'Pagamentos', 'Visualizar transações', 'Selecionar mês', 'Download CSV']}
               link="https://sellercentral.amazon.com.br/payments/event/view?resultsPerPage=10&pageNumber=1"
               onFile={handleVendas}
-              onRemover={() => { setEstV('idle'); setDadosV(null); setErroV('') }}
+              onRemover={() => { setEstV('idle'); setDadosV(null); setErroV(''); setGeralEmbutido(null) }}
               criancas={estV === 'ok' && dadosV ? (
                 <div className="space-y-1 text-xs">
                   <div className="flex justify-between"><span className="text-slate-400">Arquivo</span><span className="font-semibold truncate max-w-[120px]">{dadosV.arquivo}</span></div>
@@ -511,8 +515,8 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
                   <p className="text-xs font-black text-white uppercase tracking-widest">DRE — {MESES[mes-1]} {ano}</p>
                   {!dre_completa && (
                     <span className="text-[9px] text-slate-400 font-medium">
-                      {!dadosG && !dadosP ? '⬛ Aguardando Relatório de Pedidos + Fatura'
-                        : !dadosG ? '⬛ Aguardando Relatório de Pedidos'
+                      {!geralEfetivo && !dadosP ? '⬛ Aguardando Relatório de Pedidos + Fatura'
+                        : !geralEfetivo ? '⬛ Aguardando Relatório de Pedidos'
                         : '⬛ Aguardando Fatura de Publicidade'}
                     </span>
                   )}
@@ -521,12 +525,12 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
                   <DRELinha label="Receita Bruta" valor={rec} cor="text-emerald-600"
                     sub={`${dadosV.unidades} un · ${dadosV.pedidos} pedidos`} />
                   <DRELinha label="(−) Comissão Amazon" valor={-comissao} cor="text-red-500" indent />
-                  {dadosG && <DRELinha label="(−) FBA Fulfillment" valor={-fbaFull} cor="text-red-500" indent />}
-                  {dadosG && <DRELinha label="(−) Armazenagem FBA" valor={-fbaArm} cor="text-red-500" indent />}
-                  {dadosG && mensal > 0 && <DRELinha label="(−) Mensalidade Amazon" valor={-mensal} cor="text-red-500" indent />}
-                  {dadosG && outrasTax > 0 && <DRELinha label="(−) Outras Taxas Amazon" valor={-outrasTax} cor="text-red-500" indent />}
-                  {dadosG && reembolso > 0 && <DRELinha label={`(−) Reembolsos (${dadosG.reembolsos_count}x)`} valor={-reembolso} cor="text-red-500" sub="fonte: Relatório Geral" indent />}
-                  {dadosG && ajuste > 0 && <DRELinha label="(+) Ajustes Financeiros" valor={ajuste} cor="text-blue-500" indent />}
+                  {geralEfetivo && <DRELinha label="(−) FBA Fulfillment" valor={-fbaFull} cor="text-red-500" indent />}
+                  {geralEfetivo && <DRELinha label="(−) Armazenagem FBA" valor={-fbaArm} cor="text-red-500" indent />}
+                  {geralEfetivo && mensal > 0 && <DRELinha label="(−) Mensalidade Amazon" valor={-mensal} cor="text-red-500" indent />}
+                  {geralEfetivo && outrasTax > 0 && <DRELinha label="(−) Outras Taxas Amazon" valor={-outrasTax} cor="text-red-500" indent />}
+                  {geralEfetivo && reembolso > 0 && <DRELinha label={`(−) Reembolsos (${geralEfetivo.reembolsos_count}x)`} valor={-reembolso} cor="text-red-500" sub="fonte: Relatório Geral" indent />}
+                  {geralEfetivo && ajuste > 0 && <DRELinha label="(+) Ajustes Financeiros" valor={ajuste} cor="text-blue-500" indent />}
                   {pub > 0 && <DRELinha label="(−) Publicidade Amazon Ads" valor={-pub} cor="text-red-500"
                     sub={dadosP?.success ? 'Fatura oficial' : 'Manual'} indent />}
                   <div className="flex items-center justify-between py-2">
@@ -550,7 +554,7 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
               </div>
 
               {/* Tabela por SKU — usa Relatório Geral (tem SKU real + custo do catálogo) */}
-              {dadosG && dadosG.skus.length > 0 && (
+              {geralEfetivo && geralEfetivo.skus.length > 0 && (
                 <Card className="border-0 shadow-sm overflow-hidden">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-xs font-black text-slate-500 uppercase tracking-wide flex items-center gap-2">
@@ -569,7 +573,7 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                          {dadosG.skus.map((s, i) => (
+                          {geralEfetivo!.skus.map((s, i) => (
                             <tr key={s.sku} className={cn('hover:bg-slate-50', i%2===1 && 'bg-slate-50/30')}>
                               <td className="px-3 py-2.5">
                                 <p className="font-black font-mono text-slate-800 text-[11px]">{s.sku}</p>
@@ -606,7 +610,7 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
                         </tbody>
                       </table>
                     </div>
-                    {dadosG.skus.some(s => s.sem_custo) && (
+                    {geralEfetivo!.skus.some(s => s.sem_custo) && (
                       <div className="px-4 py-2.5 bg-amber-50 border-t border-amber-100">
                         <p className="text-[10px] text-amber-700">
                           ⚠ Produtos sem custo cadastrado: a margem não pode ser calculada.
@@ -619,7 +623,7 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
               )}
 
               {/* Cancelamentos e Reembolsos — fonte oficial: Relatório Geral */}
-              {dadosG && dadosG.reembolsos_count > 0 && (
+              {geralEfetivo && geralEfetivo.reembolsos_count > 0 && (
                 <Card className="border-0 shadow-sm overflow-hidden">
                   <div className="bg-rose-900 px-5 py-3 flex items-center justify-between">
                     <p className="text-xs font-black text-white uppercase tracking-widest">
@@ -635,29 +639,29 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
                       <div className="flex items-center justify-between py-2.5">
                         <span className="text-xs text-slate-600 font-medium">Quantidade de reembolsos</span>
                         <span className="text-xs font-black font-mono text-rose-700">
-                          {dadosG.reembolsos_count} {dadosG.reembolsos_count === 1 ? 'transação' : 'transações'}
+                          {geralEfetivo!.reembolsos_count} {geralEfetivo!.reembolsos_count === 1 ? 'transação' : 'transações'}
                         </span>
                       </div>
                       {/* Linha: valor produtos */}
                       <div className="flex items-center justify-between py-2.5 pl-4">
                         <span className="text-xs text-slate-400">Valor reembolsado (produtos)</span>
                         <span className="text-xs font-black font-mono text-red-500">
-                          -{formatCurrency(dadosG.reembolsos_bruto)}
+                          -{formatCurrency(geralEfetivo!.reembolsos_bruto)}
                         </span>
                       </div>
                       {/* Linha: tarifas devolvidas */}
                       <div className="flex items-center justify-between py-2.5 pl-4">
                         <span className="text-xs text-slate-400">(+) Tarifas devolvidas pela Amazon</span>
                         <span className="text-xs font-bold font-mono text-emerald-600">
-                          +{formatCurrency(dadosG.reembolsos_comissao)}
+                          +{formatCurrency(geralEfetivo!.reembolsos_comissao)}
                         </span>
                       </div>
                       {/* Linha: FBA devolvido */}
-                      {dadosG.reembolsos_fba > 0 && (
+                      {geralEfetivo!.reembolsos_fba > 0 && (
                         <div className="flex items-center justify-between py-2.5 pl-4">
                           <span className="text-xs text-slate-400">(+) Taxas FBA devolvidas</span>
                           <span className="text-xs font-bold font-mono text-emerald-600">
-                            +{formatCurrency(dadosG.reembolsos_fba)}
+                            +{formatCurrency(geralEfetivo!.reembolsos_fba)}
                           </span>
                         </div>
                       )}
@@ -666,11 +670,11 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
                         <span className="text-xs font-black text-slate-700">Impacto líquido na DRE</span>
                         <div className="text-right">
                           <span className="text-sm font-black font-mono text-red-600">
-                            -{formatCurrency(dadosG.reembolsos_liquido)}
+                            -{formatCurrency(geralEfetivo!.reembolsos_liquido)}
                           </span>
                           {rec > 0 && (
                             <p className="text-[9px] text-slate-400">
-                              {((dadosG.reembolsos_liquido / rec) * 100).toFixed(1)}% da receita bruta
+                              {((geralEfetivo!.reembolsos_liquido / rec) * 100).toFixed(1)}% da receita bruta
                             </p>
                           )}
                         </div>
@@ -681,7 +685,7 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
               )}
 
               {/* Fallback: Relatório de Vendas sem o Geral */}
-              {!dadosG && dadosV.produtos.length > 0 && (
+              {!geralEfetivo && dadosV.produtos.length > 0 && (
                 <Card className="border-0 shadow-sm overflow-hidden">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-xs font-black text-slate-500 uppercase tracking-wide flex items-center gap-2">
@@ -730,7 +734,7 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
               )}
               {!dre_completa && !salvando && (
                 <p className="text-center text-[10px] text-slate-400">
-                  {estG !== 'ok' ? '⚠ Sem Relatório de Pedidos: análise por SKU e CMV não incluídos.' : ''}
+                  {estG !== 'ok' && !geralEmbutido ? '⚠ Sem Relatório de Pedidos: análise por SKU e CMV não incluídos.' : ''}
                   {estP !== 'ok' && pub === 0 ? ' ⚠ Sem Fatura Ads: publicidade não incluída.' : ''}
                 </p>
               )}
