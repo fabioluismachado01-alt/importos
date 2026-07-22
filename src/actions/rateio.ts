@@ -177,36 +177,63 @@ export async function getRateioCompleto(id: string) {
 }
 
 // ─── Propagação retroativa de custo nos pedidos e DRE ───────────────────────
+//
+// Regra de vigência por janela:
+//   Cada rateio é dono do custo de um SKU apenas no intervalo
+//   [sua vigência → próxima vigência POSTERIOR do mesmo SKU em outro rateio aplicado).
+//   Isso garante que o rateio mais novo prevalece para o seu período sem sobrescrever
+//   períodos de rateios ainda mais novos que já tenham sido aplicados antes.
 
 async function propagarCustoRetroativo(
   workspaceId: string,
+  rateioId: string,
   itens: Array<{ produto_id: string; custo_unit_brl: number }>,
   vigenciaData: Date,
 ) {
-  // 1. Atualiza custo_produto nos pedidos ML de cada SKU a partir da vigência
+  const hoje = new Date()
+
   for (const item of itens) {
+    // Descobre a próxima vigência posterior desse SKU em outro rateio já aplicado.
+    // Se existir, este rateio só é dono até essa data (exclusive).
+    const proximoRateio = await prisma.rateio.findFirst({
+      where: {
+        workspace_id: workspaceId,
+        id: { not: rateioId },
+        custos_aplicados: true,
+        custo_vigencia_data: { gt: vigenciaData },
+        itens: { some: { produto_id: item.produto_id } },
+      },
+      orderBy: { custo_vigencia_data: 'asc' },
+      select: { custo_vigencia_data: true },
+    })
+    const fimJanela = proximoRateio?.custo_vigencia_data ?? undefined
+
+    // Atualiza ml_pedido apenas na janela [vigência, próxima vigência)
     await prisma.ml_pedido.updateMany({
       where: {
         workspace_id: workspaceId,
         produto_id: item.produto_id,
-        data_compra: { gte: vigenciaData },
+        data_compra: { gte: vigenciaData, ...(fimJanela ? { lt: fimJanela } : {}) },
         status: { not: 'cancelled' },
       },
       data: { custo_produto: item.custo_unit_brl },
     })
   }
 
-  // 2. Determina os meses afetados (vigência → mês atual)
-  const hoje = new Date()
+  // Determina meses afetados respeitando a menor janela entre todos os SKUs
+  // (usa o fim de janela mais cedo para não recalcular meses fora do escopo)
+  const fimGlobal = (() => {
+    const fim = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+    return fim
+  })()
+
   const meses: { ano: number; mes: number }[] = []
   const cur = new Date(vigenciaData.getFullYear(), vigenciaData.getMonth(), 1)
-  const fim = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
-  while (cur <= fim) {
+  while (cur <= fimGlobal) {
     meses.push({ ano: cur.getFullYear(), mes: cur.getMonth() + 1 })
     cur.setMonth(cur.getMonth() + 1)
   }
 
-  // 3. Para cada mês: recalcula soma total e atualiza o lançamento CUSTO_PRODUTOS
   for (const { ano, mes } of meses) {
     const fat = await prisma.faturamento_mes.findUnique({
       where: { workspace_id_ano_mes: { workspace_id: workspaceId, ano, mes } },
@@ -217,7 +244,6 @@ async function propagarCustoRetroativo(
     const inicioMes = new Date(ano, mes - 1, 1)
     const fimMes = new Date(ano, mes, 1)
 
-    // Soma total de custo_produto de TODOS os pedidos ML do mês (não apenas os SKUs do rateio)
     const { _sum } = await prisma.ml_pedido.aggregate({
       where: {
         workspace_id: workspaceId,
@@ -229,7 +255,6 @@ async function propagarCustoRetroativo(
     })
     const totalCustoMes = _sum.custo_produto ?? 0
 
-    // Atualiza o lançamento existente (criado pela importação da análise ML)
     const lancExistente = await prisma.lancamento.findFirst({
       where: {
         faturamento_id: fat.id,
@@ -245,7 +270,6 @@ async function propagarCustoRetroativo(
         where: { id: lancExistente.id },
         data: { valor: totalCustoMes },
       })
-      // Recalcula KPIs do mês (lucro bruto/líquido, etc.)
       await recalcularMes(fat.id, workspaceId, ano, mes)
     }
   }
@@ -287,7 +311,7 @@ export async function aplicarCustosRateio(id: string, vigenciaData?: Date) {
     .filter(i => i.produto_id && i.custo_unit_brl)
     .map(i => ({ produto_id: i.produto_id!, custo_unit_brl: i.custo_unit_brl! }))
 
-  await propagarCustoRetroativo(workspaceId, itensParaPropagar, vigencia)
+  await propagarCustoRetroativo(workspaceId, id, itensParaPropagar, vigencia)
 
   revalidatePath('/ferramentas/rateio')
   revalidatePath('/produtos')
