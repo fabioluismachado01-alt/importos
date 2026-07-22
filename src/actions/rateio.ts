@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/auth'
 import { upsertFreteDoRateio } from './fretes'
+import { recalcularMes } from './finance'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -175,6 +176,81 @@ export async function getRateioCompleto(id: string) {
   })
 }
 
+// ─── Propagação retroativa de custo nos pedidos e DRE ───────────────────────
+
+async function propagarCustoRetroativo(
+  workspaceId: string,
+  itens: Array<{ produto_id: string; custo_unit_brl: number }>,
+  vigenciaData: Date,
+) {
+  // 1. Atualiza custo_produto nos pedidos ML de cada SKU a partir da vigência
+  for (const item of itens) {
+    await prisma.ml_pedido.updateMany({
+      where: {
+        workspace_id: workspaceId,
+        produto_id: item.produto_id,
+        data_compra: { gte: vigenciaData },
+        status: { not: 'cancelled' },
+      },
+      data: { custo_produto: item.custo_unit_brl },
+    })
+  }
+
+  // 2. Determina os meses afetados (vigência → mês atual)
+  const hoje = new Date()
+  const meses: { ano: number; mes: number }[] = []
+  const cur = new Date(vigenciaData.getFullYear(), vigenciaData.getMonth(), 1)
+  const fim = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+  while (cur <= fim) {
+    meses.push({ ano: cur.getFullYear(), mes: cur.getMonth() + 1 })
+    cur.setMonth(cur.getMonth() + 1)
+  }
+
+  // 3. Para cada mês: recalcula soma total e atualiza o lançamento CUSTO_PRODUTOS
+  for (const { ano, mes } of meses) {
+    const fat = await prisma.faturamento_mes.findUnique({
+      where: { workspace_id_ano_mes: { workspace_id: workspaceId, ano, mes } },
+      select: { id: true },
+    })
+    if (!fat) continue
+
+    const inicioMes = new Date(ano, mes - 1, 1)
+    const fimMes = new Date(ano, mes, 1)
+
+    // Soma total de custo_produto de TODOS os pedidos ML do mês (não apenas os SKUs do rateio)
+    const { _sum } = await prisma.ml_pedido.aggregate({
+      where: {
+        workspace_id: workspaceId,
+        data_compra: { gte: inicioMes, lt: fimMes },
+        status: { not: 'cancelled' },
+        custo_produto: { not: null },
+      },
+      _sum: { custo_produto: true },
+    })
+    const totalCustoMes = _sum.custo_produto ?? 0
+
+    // Atualiza o lançamento existente (criado pela importação da análise ML)
+    const lancExistente = await prisma.lancamento.findFirst({
+      where: {
+        faturamento_id: fat.id,
+        categoria: 'CUSTO_PRODUTOS',
+        descricao: { contains: 'ML Import' },
+        status: 'CONFIRMADO',
+      },
+      select: { id: true },
+    })
+
+    if (lancExistente) {
+      await prisma.lancamento.update({
+        where: { id: lancExistente.id },
+        data: { valor: totalCustoMes },
+      })
+      // Recalcula KPIs do mês (lucro bruto/líquido, etc.)
+      await recalcularMes(fat.id, workspaceId, ano, mes)
+    }
+  }
+}
+
 // ─── Aplicar custos ao catálogo ──────────────────────────────────────────────
 
 export async function aplicarCustosRateio(id: string, vigenciaData?: Date) {
@@ -188,6 +264,8 @@ export async function aplicarCustosRateio(id: string, vigenciaData?: Date) {
   const itensComProduto = rateio.itens.filter(i => i.produto_id && i.custo_unit_brl)
   if (itensComProduto.length === 0) throw new Error('Nenhum item com produto vinculado e custo calculado')
 
+  const vigencia = vigenciaData ?? rateio.custo_vigencia_data ?? new Date()
+
   for (const item of itensComProduto) {
     await prisma.produto_catalogo.update({
       where: { id: item.produto_id! },
@@ -200,12 +278,21 @@ export async function aplicarCustosRateio(id: string, vigenciaData?: Date) {
     data: {
       custos_aplicados: true,
       custos_aplicados_em: new Date(),
-      custo_vigencia_data: vigenciaData ?? rateio.custo_vigencia_data ?? new Date(),
+      custo_vigencia_data: vigencia,
     },
   })
 
+  // Propaga retroativamente nos pedidos e DRE de cada mês afetado
+  const itensParaPropagar = itensComProduto
+    .filter(i => i.produto_id && i.custo_unit_brl)
+    .map(i => ({ produto_id: i.produto_id!, custo_unit_brl: i.custo_unit_brl! }))
+
+  await propagarCustoRetroativo(workspaceId, itensParaPropagar, vigencia)
+
   revalidatePath('/ferramentas/rateio')
   revalidatePath('/produtos')
+  revalidatePath('/faturamento/dre')
+  revalidatePath('/faturamento')
   return { ok: true, count: itensComProduto.length }
 }
 
