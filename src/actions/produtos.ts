@@ -47,6 +47,7 @@ export async function saveProduto(data: {
   id?: string
   nome: string
   sku_interno?: string
+  sku_alias?: string
   custo_brl?: number
   descricao?: string
   ncm?: string
@@ -60,6 +61,7 @@ export async function saveProduto(data: {
   const payload = {
     nome: data.nome,
     sku_interno: data.sku_interno ?? null,
+    sku_alias: data.sku_alias ?? null,
     custo_brl: data.custo_brl ?? null,
     descricao: data.descricao ?? null,
     ncm: data.ncm ?? null,
