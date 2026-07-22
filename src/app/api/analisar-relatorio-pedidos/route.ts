@@ -5,8 +5,8 @@
  * Formato: TSV (tab-separated), header linha 0, valores em BRL
  * Colunas relevantes:
  *   0: amazon-order-id   2: purchase-date   4: order-status
- *   10: product-name     11: sku            14: quantity
- *   16: item-price       18: shipping-price
+ *   6: sales-channel     10: product-name   11: sku
+ *   14: quantity         16: item-price     18: shipping-price
  *   22: item-promotion-discount
  *
  * Regras de filtragem por order-status:
@@ -14,6 +14,10 @@
  *   ❌ EXCLUIR — "Cancelled"  (cancelado pelo comprador ou Amazon)
  *   ❌ EXCLUIR — "Pending"    (aguardando pagamento — ainda não confirmado)
  *   ❌ EXCLUIR — "Unshipped"  (pago mas ainda não enviado — inclui quando importar)
+ *
+ * Regras de filtragem por sales-channel:
+ *   ✅ INCLUIR — "Amazon.com.br"  (venda direta ao consumidor)
+ *   ❌ EXCLUIR — "Non-Amazon"     (remoção FBA, MCF, atacado B2B — sem receita real)
  *
  * Extrai: SKUs, quantidades, receita por produto → margem via catálogo
  */
@@ -26,6 +30,7 @@ const COL = {
   ORDER_ID:    0,
   DATA:        2,
   STATUS:      4,
+  CANAL:       6,   // sales-channel: "Amazon.com.br" = venda real; "Non-Amazon" = remoção FBA / MCF / B2B
   PRODUTO:    10,
   SKU:        11,
   QTD:        14,
@@ -33,6 +38,9 @@ const COL = {
   FRETE:      18,
   DESCONTO:   22,
 }
+
+// Canal de vendas aceito — exclui remoções FBA, MCF e pedidos B2B que têm item-price = 0
+const CANAL_VALIDO = 'amazon.com.br'
 
 // Pedidos entregues/em trânsito — conta como venda
 const STATUS_VALIDOS = new Set(['shipped'])
@@ -128,10 +136,14 @@ export async function POST(req: NextRequest) {
       if (!r?.[COL.ORDER_ID]) continue
 
       const status   = String(r[COL.STATUS] ?? '').trim().toLowerCase()
+      const canal    = String(r[COL.CANAL]  ?? '').trim().toLowerCase()
       const skuRaw   = String(r[COL.SKU]    ?? '').trim()
       const dataStr  = String(r[COL.DATA]   ?? '').trim()
 
       if (!skuRaw) continue
+
+      // Remoções FBA, MCF e pedidos B2B — sales-channel = "Non-Amazon" — não são vendas ao consumidor
+      if (canal && canal !== CANAL_VALIDO) continue
 
       const data = parseDataISO(dataStr)
       if (!data) continue
