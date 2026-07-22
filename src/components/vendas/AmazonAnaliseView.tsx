@@ -23,6 +23,7 @@ interface VendasData {
   periodo: { inicio: string; fim: string; ano: number; mes: number }
   receita_bruta: number; descontos: number; comissao_amazon: number
   pedidos: number; unidades: number; dias_com_venda: number; ticket_medio: number
+  pedidos_ids?: string[]
   produtos: Array<{
     nome: string; unidades: number; receita: number; comissao: number
     custo_unit: number; custo_total: number; margem_perc: number
@@ -239,6 +240,10 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
     form.append('file', file)
     form.append('mes', String(mes))
     form.append('ano', String(ano))
+    // Passa os order IDs do CSV para que o TXT cubra exatamente os mesmos pedidos
+    if (dadosV?.pedidos_ids?.length) {
+      form.append('order_ids', JSON.stringify(dadosV.pedidos_ids))
+    }
     try {
       const res = await fetch('/api/analisar-relatorio-pedidos', { method: 'POST', body: form })
       const data = await res.json()

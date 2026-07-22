@@ -97,9 +97,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Mapeamento de colunas: COM_STATUS tem uma coluna a mais no início
+    // ID do pedido fica sempre em PRODUTO-1 (col 4 para COM_STATUS, col 3 para SEM_STATUS)
     const COL = formato === 'COM_STATUS'
-      ? { DATA: 0, TIPO: 3, PRODUTO: 5, RECEITA: 6, DESCONTO: 7, COMISSAO: 8, OUTROS: 9, TOTAL: 10 }
-      : { DATA: 0, TIPO: 2, PRODUTO: 4, RECEITA: 5, DESCONTO: 6, COMISSAO: 7, OUTROS: 8, TOTAL: 9 }
+      ? { DATA: 0, TIPO: 3, ORDER_ID: 4, PRODUTO: 5, RECEITA: 6, DESCONTO: 7, COMISSAO: 8, OUTROS: 9, TOTAL: 10 }
+      : { DATA: 0, TIPO: 2, ORDER_ID: 3, PRODUTO: 4, RECEITA: 5, DESCONTO: 6, COMISSAO: 7, OUTROS: 8, TOTAL: 9 }
 
     // Busca custos do catálogo por nome do produto
     const produtos = await prisma.produto_catalogo.findMany({
@@ -122,6 +123,7 @@ export async function POST(req: NextRequest) {
     let outros = 0
     let pedidos = 0
     let unidades = 0
+    const pedidos_ids = new Set<string>()
 
     // Acumuladores de transações excluídas (para informação)
     let tarifas_servico = 0
@@ -172,6 +174,9 @@ export async function POST(req: NextRequest) {
       outros          += out
       pedidos++
       unidades++ // 1 por linha de transação (CSV não informa qty — use o Relatório de Pedidos para qty exata)
+
+      const orderId = String(r[COL.ORDER_ID] ?? '').trim()
+      if (orderId && orderId !== '---') pedidos_ids.add(orderId)
 
       const d = parseDateBR(String(r[COL.DATA] ?? ''))
       if (d) diasComVenda.add(d.toISOString().split('T')[0])
@@ -245,6 +250,7 @@ export async function POST(req: NextRequest) {
       dias_com_venda: diasComVenda.size,
       ticket_medio:   unidades > 0 ? receita_bruta / unidades : 0,
       produtos:       produtosArray,
+      pedidos_ids:    [...pedidos_ids],   // IDs dos pedidos liberados no período — usados para filtrar o TXT
       geral_embutido,
     })
   } catch (err) {
