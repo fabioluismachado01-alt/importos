@@ -16,6 +16,7 @@ interface Produto {
   nome: string
   sku_interno: string | null
   sku_alias: string | null
+  ean: string | null
   custo_brl: number | null
   descricao: string | null
   foto_url: string | null
@@ -70,8 +71,21 @@ export function ProdutosView({ produtos: inicial }: Props) {
     setProdutos(p => p.filter(x => x.id !== id))
   }
 
+  const semEAN = produtos.filter(p => !p.ean)
+
   return (
     <div className="space-y-5">
+
+      {/* Aviso EAN */}
+      {semEAN.length > 0 && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+          <span>
+            <strong>{semEAN.length} produto{semEAN.length > 1 ? 's' : ''} sem código EAN.</strong>{' '}
+            O EAN é obrigatório para emitir etiquetas de código de barras. Edite cada produto e preencha o campo EAN-13.
+          </span>
+        </div>
+      )}
 
       {/* Barra de busca e botão */}
       <div className="flex gap-3 items-center">

@@ -487,28 +487,30 @@ export function PrecificacaoView({
               <div className="bg-white p-3 flex flex-col gap-3 flex-1">
                 {/* Taxas expandíveis */}
                 <div>
-                  <button
-                    onClick={e => { e.stopPropagation(); setOpenFees(fOpen ? null : ch.id) }}
-                    className="flex items-center gap-1 text-[8px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 w-full transition-colors"
-                  >
-                    <span>Taxas do Canal</span>
-                    {/* Badge + toggle AUTO/MANUAL — clique no badge troca o modo local */}
+                  <div className="flex items-center gap-1">
+                    {/* Toggle AUTO/MANUAL — elemento independente, clicável sem abrir taxas */}
                     {(canalModos[ch.slug] === 'AUTO' || !!FALLBACK_FAIXAS[ch.slug]) && (
-                      <span
+                      <button
                         onClick={e => { e.stopPropagation(); toggleAuto(ch) }}
                         title={localAuto[ch.id] ? 'Clique para editar manualmente' : 'Clique para voltar ao AUTO'}
                         className={cn(
-                          'ml-1 px-1.5 py-0.5 rounded text-[7px] font-black cursor-pointer transition-colors select-none',
+                          'px-2 py-0.5 rounded-md text-[9px] font-black transition-colors shrink-0',
                           localAuto[ch.id]
-                            ? 'bg-violet-100 text-violet-600 hover:bg-violet-200'
-                            : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
+                            ? 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+                            : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
                         )}
                       >
-                        {localAuto[ch.id] ? 'AUTO' : 'MAN'}
-                      </span>
+                        {localAuto[ch.id] ? 'AUTO' : 'MANUAL'}
+                      </button>
                     )}
-                    <ChevronDown className={cn('w-3 h-3 ml-auto transition-transform', fOpen && 'rotate-180')} />
-                  </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); setOpenFees(fOpen ? null : ch.id) }}
+                      className="flex items-center gap-1 text-[8px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 flex-1 transition-colors"
+                    >
+                      <span>Taxas</span>
+                      <ChevronDown className={cn('w-3 h-3 ml-auto transition-transform', fOpen && 'rotate-180')} />
+                    </button>
+                  </div>
                   {fOpen && (
                     <div className="mt-2 grid grid-cols-2 gap-2" onClick={e => e.stopPropagation()}>
                       {(() => {

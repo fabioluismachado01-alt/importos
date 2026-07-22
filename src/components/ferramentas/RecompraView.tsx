@@ -193,6 +193,10 @@ export function RecompraView({ workspaceId = 'default' }: { workspaceId?: string
   const urgentes  = calcs.filter(c => c.urgencia === 'urgente' || c.urgencia === 'atrasado')
   const atencao   = calcs.filter(c => c.urgencia === 'atencao')
 
+  // Detecta dados demo: todos os produtos têm nomes idênticos ao template inicial
+  const isDemoData = produtos.length > 0 &&
+    INITIAL_PRODUTOS.every(ip => produtos.some(p => p.nome === ip.nome))
+
   return (
     <div className="space-y-6 pb-10">
 
@@ -207,6 +211,18 @@ export function RecompraView({ workspaceId = 'default' }: { workspaceId?: string
           <Plus className="w-3.5 h-3.5" /> Adicionar Produto
         </button>
       </div>
+
+      {/* ── BANNER DEMO ── */}
+      {isDemoData && (
+        <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-800">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-blue-500" />
+          <span>
+            <strong>Você está vendo dados de exemplo.</strong>{' '}
+            Substitua os produtos abaixo pelos seus SKUs reais — edite o nome, estoque atual, estoque de segurança e velocidade de vendas de cada card.
+            Clique em <strong>+ Adicionar Produto</strong> para incluir novos itens.
+          </span>
+        </div>
+      )}
 
       {/* ── ALERTAS ── */}
       {(urgentes.length > 0 || atencao.length > 0) && (

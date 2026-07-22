@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useTransition } from 'react'
 import { usePersistedState } from '@/hooks/usePersistedState'
 import { cn } from '@/lib/utils'
-import { Plus, Trash2, Printer, ChevronDown, ChevronUp, Building2, Search, Save, X } from 'lucide-react'
+import { Plus, Trash2, Printer, ChevronDown, ChevronUp, Building2, Search, Save, X, Package } from 'lucide-react'
 import { getFornecedores, saveFornecedor, deleteFornecedor, getProdutoPorSku } from '@/actions/fornecedores'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -527,7 +527,13 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
           {/* ── PREVIEW A4 ── */}
           <div className="col-span-12 lg:col-span-9 overflow-x-auto">
             <div className="doc-print-root">
-              {docType === 'SM' ? (
+              {docType === 'SM' && items.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-24 text-center gap-3">
+                  <Package className="w-10 h-10 text-slate-300" />
+                  <p className="text-sm font-semibold text-slate-400">Nenhum item adicionado</p>
+                  <p className="text-xs text-slate-400 max-w-xs">Adicione pelo menos um produto na coluna à esquerda para gerar as etiquetas de Shipping Mark.</p>
+                </div>
+              ) : docType === 'SM' ? (
                 <ShippingMarkDoc
                   importer={importer} items={items} docInfo={docInfo}
                   supplier={supplier} mode={mode} logistics={logistics}
