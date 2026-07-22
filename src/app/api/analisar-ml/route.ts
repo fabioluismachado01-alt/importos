@@ -26,19 +26,30 @@ function nomeParaUF(nome: string): UF | null {
   return ESTADO_PARA_UF[String(nome ?? '').toLowerCase().trim()] ?? null
 }
 
-// Índices das colunas do relatório ML (versão BR)
-const COL = {
-  N_VENDA:       0,  DATA:          1,  STATUS:         2,
-  UNIDADES:      6,  REC_PRODUTO:   7,
-  ESTADO_COMPRADOR: 40,
-  REC_ACRESCIMO:  8,  // Receita por acréscimo pago pelo comprador (parcelamento etc.)
-  TARIFA_IMP:    10,
-  REC_ENVIO:     11,  // Receita por envio — comprador pagou frete separado (POSITIVO para o vendedor)
-  TAR_ENVIO:     12,  // Custo de envio cobrado do vendedor (NEGATIVO)
-  DESCONTOS:    15,  // Descontos e bônus — ML paga de volta ao vendedor em promoções compartilhadas (POSITIVO)
-  CANCELAMENTOS:16,  // Cancelamentos e reembolsos — ML desconta do vendedor (NEGATIVO)
-  TOTAL:        17,  // Total BRL — valor líquido depositado (validação)
-  SKU:          21,  TITULO:       25,  VARIACAO:      26,  PRECO_UNIT: 27,
+// Índices das colunas resolvidos dinamicamente a partir do header (linha 5 do xlsx)
+// O relatório ML pode ter formatos diferentes dependendo da data de exportação.
+// A detecção por nome de coluna é robusta a colunas extras inseridas pelo ML.
+function resolverColunas(headerRow: unknown[]) {
+  const idx: Record<string, number[]> = {}
+  headerRow.forEach((h, i) => {
+    const k = String(h ?? '').trim()
+    if (k) { if (!idx[k]) idx[k] = []; idx[k].push(i) }
+  })
+  const get = (name: string, occ = 0) => idx[name]?.[occ] ?? -1
+  return {
+    N_VENDA:          get('N.º de venda'),
+    DATA:             get('Data da venda'),
+    STATUS:           get('Estado'),                                        // 1ª ocorrência = status do pedido
+    UNIDADES:         get('Unidades'),
+    REC_PRODUTO:      get('Receita por produtos (BRL)'),
+    TARIFA_IMP:       get('Tarifa de venda e impostos (BRL)'),
+    TAR_ENVIO:        get('Tarifas de envio (BRL)'),
+    TOTAL:            get('Total (BRL)'),
+    SKU:              get('SKU'),
+    TITULO:           get('Título do anúncio'),
+    PRECO_UNIT:       get('Preço unitário de venda do anúncio (BRL)'),
+    ESTADO_COMPRADOR: idx['Estado']?.[1] ?? -1,                            // 2ª ocorrência = estado do comprador
+  }
 }
 
 const STATUS_VALIDOS = new Set([
@@ -81,7 +92,7 @@ function diasNoMes(ano: number, mes: number): number {
  * Detecta o mês de competência (mês civil, dia 01 ao último dia) a partir
  * da maioria das datas de venda do relatório.
  */
-function detectarPeriodo(rows: unknown[][]): { inicio: Date; fim: Date; ano: number; mes: number } {
+function detectarPeriodo(rows: unknown[][], COL: ReturnType<typeof resolverColunas>): { inicio: Date; fim: Date; ano: number; mes: number } {
   const datas: Date[] = []
   const contagem: Record<string, number> = {}
   for (let i = 6; i < rows.length; i++) {
@@ -124,6 +135,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Arquivo inválido ou sem dados' }, { status: 400 })
     }
 
+    // Header real do ML está na linha 5 (índice 5); dados a partir da linha 6
+    const COL = resolverColunas(rows[5] as unknown[])
+
     // Busca custos do catálogo de produtos e UF da empresa
     const [produtosRaw, empresa] = await Promise.all([
       prisma.produto_catalogo.findMany({
@@ -148,7 +162,7 @@ export async function POST(req: NextRequest) {
     // O Relatório de Vendas do ML deve ser exportado pelo mês civil (não pelo
     // ciclo de faturamento 30→29 usado pelos outros relatórios — Faturamento,
     // Tarifas Full, Pagamentos —, que continuam no ciclo padrão).
-    const periodoDetectado0 = detectarPeriodo(rows)
+    const periodoDetectado0 = detectarPeriodo(rows, COL)
     const competenciaAno = anoExplicito ?? periodoDetectado0.ano
     const competenciaMes = mesExplicito ?? periodoDetectado0.mes
     const ultimoDia = diasNoMes(competenciaAno, competenciaMes)
