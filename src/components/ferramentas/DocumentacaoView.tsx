@@ -246,7 +246,6 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
   }
 
   function novoDocumento() {
-    if (!confirm('Limpar todos os campos e começar do zero?')) return
     _nextId = 2
     setDocType('PI')
     setMode('simplified')
