@@ -15,6 +15,7 @@ interface Produto {
   id: string
   nome: string
   sku_interno: string | null
+  sku_alias: string | null
   custo_brl: number | null
   descricao: string | null
   foto_url: string | null
@@ -44,13 +45,14 @@ export function ProdutosView({ produtos: inicial }: Props) {
     )
   })
 
-  async function handleSave(data: { id?: string; nome: string; sku_interno: string; custo_brl: number; descricao?: string; ncm?: string }) {
+  async function handleSave(data: { id?: string; nome: string; sku_interno: string; sku_alias?: string; custo_brl: number; descricao?: string; ncm?: string }) {
     setLoading(true)
     try {
       await saveProduto({
         id: data.id,
         nome: data.nome,
         sku_interno: data.sku_interno,
+        sku_alias: data.sku_alias,
         custo_brl: data.custo_brl,
         descricao: data.descricao,
         ncm: data.ncm,
@@ -198,11 +200,12 @@ export function ProdutosView({ produtos: inicial }: Props) {
 function ProdutoModal({ produto, onClose, onSave, loading }: {
   produto: Produto | null
   onClose: () => void
-  onSave: (data: { id?: string; nome: string; sku_interno: string; custo_brl: number; descricao?: string; ncm?: string }) => void
+  onSave: (data: { id?: string; nome: string; sku_interno: string; sku_alias?: string; custo_brl: number; descricao?: string; ncm?: string }) => void
   loading: boolean
 }) {
   const [nome, setNome] = useState(produto?.nome ?? '')
   const [sku, setSku] = useState(produto?.sku_interno ?? '')
+  const [skuAlias, setSkuAlias] = useState(produto?.sku_alias ?? '')
   const [custo, setCusto] = useState(produto?.custo_brl?.toFixed(2) ?? '')
   const [obs, setObs] = useState(produto?.descricao ?? '')
   const [ncm, setNcm] = useState((produto as { ncm?: string | null })?.ncm ?? '')
@@ -218,6 +221,7 @@ function ProdutoModal({ produto, onClose, onSave, loading }: {
       id: produto?.id,
       nome: nome.trim(),
       sku_interno: sku.trim().toUpperCase(),
+      sku_alias: skuAlias.trim() || undefined,
       custo_brl: custoNum,
       descricao: obs.trim() || undefined,
       ncm: ncm.trim() || undefined,
@@ -263,6 +267,22 @@ function ProdutoModal({ produto, onClose, onSave, loading }: {
             />
             <p className="text-[10px] text-slate-400 mt-1">
               Mesmo código usado no relatório do Mercado Livre
+            </p>
+          </div>
+
+          {/* SKU Alias */}
+          <div>
+            <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              SKUs Alternativos (opcional)
+            </Label>
+            <Input
+              value={skuAlias}
+              onChange={e => setSkuAlias(e.target.value)}
+              placeholder="Ex: ATS-6, OLD-SKU"
+              className="mt-1.5 font-mono"
+            />
+            <p className="text-[10px] text-slate-400 mt-1">
+              Separe por vírgula. Use quando o canal cadastrou um SKU errado no anúncio.
             </p>
           </div>
 

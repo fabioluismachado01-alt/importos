@@ -45,7 +45,7 @@ function CalculadoraManual({ ufOrigem }: { ufOrigem: UF }) {
   const [origem, setOrigem] = useState<UF>(ufOrigem)
   const [destino, setDestino] = useState<UF>('RJ')
   const [valor, setValor] = useState(500)
-  const [importado, setImportado] = useState(false)
+  const [importado, setImportado] = useState(true)
   const [showDetalhes, setShowDetalhes] = useState(false)
 
   const resultado = useMemo(

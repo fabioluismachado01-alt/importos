@@ -80,13 +80,14 @@ export async function POST(req: NextRequest) {
     // Busca custos do catálogo por nome do produto
     const produtos = await prisma.produto_catalogo.findMany({
       where: { workspace_id: workspaceId },
-      select: { nome: true, custo_brl: true, sku_interno: true },
+      select: { nome: true, custo_brl: true, sku_interno: true, sku_alias: true },
     })
     const custoPorNome: Record<string, number> = {}
     produtos.forEach(p => {
       if (p.custo_brl) {
         custoPorNome[p.nome.toLowerCase()] = p.custo_brl
         if (p.sku_interno) custoPorNome[p.sku_interno.toUpperCase()] = p.custo_brl
+        if (p.sku_alias) p.sku_alias.split(',').forEach(a => { const s = a.trim().toUpperCase(); if (s) custoPorNome[s] = p.custo_brl! })
       }
     })
 

@@ -44,7 +44,7 @@ export function FaturamentoAnualView({ ano, mesesIniciais, config }: Props) {
       {/* KPIs Anuais */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPIAnual label={`Receita ${ano}`} value={formatCurrency(totalReceita)}
-          sub={`${meses.length} meses`} color="emerald" />
+          sub={`${meses.filter(m => m.fechado).length} meses fechados`} color="emerald" />
         <KPIAnual label="Lucro Bruto" value={formatCurrency(totalLucroBruto)}
           sub={totalReceita > 0 ? `${((totalLucroBruto / totalReceita) * 100).toFixed(1)}% da receita` : '—'} color="blue" />
         <KPIAnual label="Lucro Líquido" value={formatCurrency(totalLucroLiq)}

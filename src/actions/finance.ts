@@ -760,15 +760,9 @@ export async function getDREAnual(ano: number) {
 
   return meses.map(m => {
     const lucroLiq = m.lucro_liquido ?? 0
-    let dlr: number
-    if (m.dlr_modo === 'FIXO' && m.dlr_valor_fixo != null) {
-      // Valor fixo configurado para este mês — usa diretamente
-      dlr = m.dlr_valor_fixo
-    } else {
-      // Percentual: custom do mês ou global
-      const pct = m.dlr_percentual_custom ?? pctGlobal
-      dlr = Math.max(0, lucroLiq) * pct
-    }
+    // Sempre aplica o percentual global — ignora FIXO legado no banco.
+    // Meses com dlr_modo='FIXO' e dlr_valor_fixo antigo causavam valores travados (bug Maio/Jun 2026).
+    const dlr = Math.max(0, lucroLiq) * pctGlobal
     return { ...m, dlr_socio: dlr, reinvestimento: lucroLiq - dlr }
   })
 }

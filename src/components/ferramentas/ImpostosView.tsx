@@ -644,6 +644,16 @@ function AbaComparador({ data }: { data: ImpostosPageData }) {
             })}
           </div>
 
+          {/* Aviso ICMS normal — não incluído no comparativo */}
+          <div className="bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 flex gap-2 text-xs text-amber-800">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+            <span>
+              <strong>ICMS não incluso neste comparativo.</strong> Os valores acima refletem apenas tributos federais.
+              No Lucro Presumido e no Lucro Real, some o ICMS estadual (intraestadual + ST) à carga calculada — no Simples o ICMS já está embutido no DAS.
+              Consulte seu contador para o ICMS efetivo por NCM/estado.
+            </span>
+          </div>
+
           {/* Painel DIFAL integrado */}
           {vendasInter > 0 && r && (
             <PainelDIFAL

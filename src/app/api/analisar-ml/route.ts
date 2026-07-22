@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
     const [produtosRaw, empresa] = await Promise.all([
       prisma.produto_catalogo.findMany({
         where: { workspace_id: workspaceId },
-        select: { sku_interno: true, nome: true, custo_brl: true },
+        select: { sku_interno: true, nome: true, custo_brl: true, sku_alias: true },
       }),
       prisma.empresa.findUnique({
         where: { workspace_id: workspaceId },
@@ -138,7 +138,11 @@ export async function POST(req: NextRequest) {
     const produtos = produtosRaw
     const ufOrigem = (empresa?.estado_uf ?? 'SP') as UF
     const custoPorSku: Record<string, number> = {}
-    produtos.forEach(p => { if (p.sku_interno && p.custo_brl) custoPorSku[p.sku_interno] = p.custo_brl })
+    produtos.forEach(p => {
+      if (!p.custo_brl) return
+      if (p.sku_interno) custoPorSku[p.sku_interno] = p.custo_brl
+      if (p.sku_alias) p.sku_alias.split(',').forEach(a => { const s = a.trim(); if (s) custoPorSku[s] = p.custo_brl! })
+    })
 
     // ─── PERÍODO DE COMPETÊNCIA (mês civil: dia 01 ao último dia) ──────────
     // O Relatório de Vendas do ML deve ser exportado pelo mês civil (não pelo

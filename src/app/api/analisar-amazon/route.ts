@@ -70,10 +70,14 @@ export async function POST(req: NextRequest) {
     // Busca custos do catálogo por SKU
     const produtos = await prisma.produto_catalogo.findMany({
       where: { workspace_id: workspaceId },
-      select: { sku_interno: true, custo_brl: true },
+      select: { sku_interno: true, custo_brl: true, sku_alias: true },
     })
     const custoPorSku: Record<string, number> = {}
-    produtos.forEach(p => { if (p.sku_interno && p.custo_brl) custoPorSku[p.sku_interno.toUpperCase()] = p.custo_brl })
+    produtos.forEach(p => {
+      if (!p.custo_brl) return
+      if (p.sku_interno) custoPorSku[p.sku_interno.toUpperCase()] = p.custo_brl
+      if (p.sku_alias) p.sku_alias.split(',').forEach(a => { const s = a.trim().toUpperCase(); if (s) custoPorSku[s] = p.custo_brl! })
+    })
 
     // Inicializa acumuladores
     const skus: Record<string, {
