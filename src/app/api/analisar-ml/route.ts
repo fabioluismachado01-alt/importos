@@ -52,17 +52,34 @@ function resolverColunas(headerRow: unknown[]) {
   }
 }
 
+// Padrões que EXCLUEM a venda (usar substrings específicas, não palavras soltas)
+const EXCLUIR_PATTERNS = [
+  'cancelad',                            // cancelada pelo comprador / pelo ml
+  'reembolso para o comprador',          // mediação finalizada com reembolso ao comprador
+  'colocamos o produto',                 // devolução finalizada/revisada — produto recolocado à venda
+  'estamos analisando o que aconteceu',  // ml analisando devolução
+  'pacote cancelado',                    // pacote cancelado pelo ml
+  'pacote não entregue',                 // pacote não entregue
+  'troca entregue',                      // troca entregue + devolução finalizada
+]
+
+// Status exatos que indicam venda válida
 const STATUS_VALIDOS = new Set([
   'entregue','no ponto de retirada','a caminho','vamos enviar',
   'processando','envio atrasado','envio reagendado','venda entregue',
 ])
 
-// Prefixos/substrings que indicam venda válida mesmo com status composto
-const STATUS_VALIDOS_PARTIAL = [
-  'pacote de ',           // "pacote de 2 produtos" — entrega multi-produto válida
-  'reclamação',           // "reclamação esperando resposta" — venda ativa com disputa aberta
-  'mediação para responder', // mediação ainda em aberto (vendedor não perdeu)
-  'mediação com devolução habilitada', // comprador pode devolver mas ainda não devolveu
+// Substrings que também indicam venda válida
+const INCLUIR_PATTERNS = [
+  'pacote de ',                          // "pacote de 2 produtos" — entrega multi-produto
+  'reclamação',                          // reclamação aberta — venda ativa com disputa
+  'mediação para responder',             // mediação em aberto — vendedor ainda não perdeu
+  'mediação com devolução habilitada',   // comprador pode devolver mas ainda não devolveu
+  'descartamos o produto',               // devolução descartada — ml reembolsou o vendedor
+  'liberamos o valor',                   // ml liberou o valor ao vendedor
+  'te demos o dinheiro',                 // ml deu o dinheiro ao vendedor (perdeu o produto etc.)
+  'dinheiro liberado',                   // dinheiro liberado ao vendedor
+  'venda com solicitação de alteração',  // venda com alteração solicitada pelo comprador
 ]
 
 function limparTitulo(t: string): string {
@@ -198,29 +215,11 @@ export async function POST(req: NextRequest) {
 
       const status = String(r[COL.STATUS] ?? '').toLowerCase()
 
-      // ─── FILTROS DE STATUS ────────────────────────────────────────────────
-      // Cancelamentos: excluídos completamente
-      if (status.includes('cancelad')) { totais.cancelados++; continue }
+      // Exclusões específicas (substrings precisas — não palavras soltas como "devolu" ou "reembolso")
+      if (EXCLUIR_PATTERNS.some(p => status.includes(p))) { totais.cancelados++; continue }
 
-      // Devoluções e reembolsos completos: excluídos
-      // Inclui: "Devolução...", "Mediação finalizada com reembolso", "Reembolso..."
-      // Inclui: "Mediação finalizada. Te demos o dinheiro." (ML pagou o comprador)
-      // "mediação com devolução habilitada" = comprador PODE devolver mas ainda não devolveu → venda ativa
-      const ehDevolucaoAtiva = status.includes('devolu') && !status.includes('habilitada')
-      if (
-        ehDevolucaoAtiva ||
-        status.includes('reembolso') ||
-        status.includes('te demos o dinheiro') ||
-        status.includes('dinheiro liberado')
-      ) { totais.devolucoes++; continue }
-
-      // Mediações sem reembolso explícito: INCLUIR mas o Col 16 (cancelamento) deduzirá automaticamente
-      // Ex: "Mediação finalizada." sem "reembolso" — vendedor pode ter ganho a mediação
-
-      const isValido = STATUS_VALIDOS.has(status)
-        || status.includes('vamos enviar')
-        || status.includes('processando')
-        || STATUS_VALIDOS_PARTIAL.some(p => status.includes(p))
+      // Venda válida: status exato ou substring de inclusão
+      const isValido = STATUS_VALIDOS.has(status) || INCLUIR_PATTERNS.some(p => status.includes(p))
       if (!isValido) continue
 
       const sku = String(r[COL.SKU] ?? '').trim() || 'SEM-SKU'
