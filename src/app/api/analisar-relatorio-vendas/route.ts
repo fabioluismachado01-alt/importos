@@ -160,6 +160,12 @@ export async function POST(req: NextRequest) {
         continue
       }
 
+      // Coleta order_id de qualquer linha (não só de vendas) — pedidos cujo pagamento
+      // caiu em ciclo de fatura adjacente aparecem no CSV apenas com linha de taxa FBA;
+      // excluí-los do Set causaria descarte indevido no Relatório de Pedidos.
+      const orderId = String(r[COL.ORDER_ID] ?? '').trim()
+      if (orderId && orderId !== '---') pedidos_ids.add(orderId)
+
       // ─── Apenas "Pagamento do pedido" conta como venda ─────────────────────
       if (!tipo.includes(TIPO_VENDA)) continue
 
@@ -174,9 +180,6 @@ export async function POST(req: NextRequest) {
       outros          += out
       pedidos++
       unidades++ // 1 por linha de transação (CSV não informa qty — use o Relatório de Pedidos para qty exata)
-
-      const orderId = String(r[COL.ORDER_ID] ?? '').trim()
-      if (orderId && orderId !== '---') pedidos_ids.add(orderId)
 
       const d = parseDateBR(String(r[COL.DATA] ?? ''))
       if (d) diasComVenda.add(d.toISOString().split('T')[0])
