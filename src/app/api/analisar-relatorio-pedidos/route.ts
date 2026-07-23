@@ -84,10 +84,11 @@ export async function POST(req: NextRequest) {
     const mesExplicito = formData.get('mes') ? parseInt(String(formData.get('mes'))) : null
     const anoExplicito = formData.get('ano') ? parseInt(String(formData.get('ano'))) : null
     // IDs dos pedidos do CSV — quando fornecidos, filtra o TXT para cobrir exatamente os mesmos pedidos
-    const orderIdsRaw = formData.get('order_ids')
-    const orderIdsFilter: Set<string> | null = orderIdsRaw
-      ? new Set(JSON.parse(String(orderIdsRaw)) as string[])
-      : null
+    // order_ids ignorado — cruzamento com Visualizar Transações removido.
+    // Pedidos entregues no fim do mês têm liquidação no CSV do mês seguinte,
+    // causando descarte de até 83% dos pedidos válidos. O Relatório de Pedidos
+    // é autossuficiente para determinar pedidos/unidades/SKU/receita (order-status
+    // = Shipped). O CSV serve só para agregar comissão Amazon (dado de caixa).
 
     if (!file) return NextResponse.json({ error: 'Arquivo não enviado' }, { status: 400 })
 
@@ -186,12 +187,6 @@ export async function POST(req: NextRequest) {
       if (STATUS_CANCELADOS.has(status)) { cancelados++; descartados.push({ order_id: orderId, sku: skuRaw, status, motivo: 'cancelado' }); continue }
       if (STATUS_PENDENTES.has(status))  { pendentes++;  descartados.push({ order_id: orderId, sku: skuRaw, status, motivo: 'pendente' });  continue }
       if (!isStatusValido(status))       { pendentes++;  descartados.push({ order_id: orderId, sku: skuRaw, status, motivo: `status_desconhecido:${status}` }); continue }
-
-      // Se o CSV forneceu seus order IDs, só conta pedidos que aparecem lá (mesmo período)
-      if (orderIdsFilter && orderId && !orderIdsFilter.has(orderId)) {
-        descartados.push({ order_id: orderId, sku: skuRaw, status, motivo: 'fora_do_filtro_csv' })
-        continue
-      }
 
       const sku    = normalizarSku(skuRaw)
       const titulo = String(r[COL.PRODUTO] ?? '').slice(0, 80)
