@@ -145,6 +145,9 @@ export async function POST(req: NextRequest) {
     // Período detectado das datas
     const datasDoMes: Date[] = []
 
+    // Linhas descartadas — para diagnóstico
+    const descartados: { order_id: string; sku: string; status: string; motivo: string }[] = []
+
     for (let i = 1; i < rows.length; i++) {
       const r = rows[i] as unknown[]
       if (!r?.[COL.ORDER_ID]) continue
@@ -153,27 +156,42 @@ export async function POST(req: NextRequest) {
       const canal    = String(r[COL.CANAL]  ?? '').trim().toLowerCase()
       const skuRaw   = String(r[COL.SKU]    ?? '').trim()
       const dataStr  = String(r[COL.DATA]   ?? '').trim()
+      const orderId  = String(r[COL.ORDER_ID] ?? '').trim()
 
       if (!skuRaw) continue
 
       // Remoções FBA, MCF e pedidos B2B — sales-channel = "Non-Amazon" — não são vendas ao consumidor
-      if (canal && canal !== CANAL_VALIDO) continue
-
-      // Se o CSV forneceu seus order IDs, só conta pedidos que aparecem lá (mesmo período)
-      const orderId = String(r[COL.ORDER_ID] ?? '').trim()
-      if (orderIdsFilter && orderId && !orderIdsFilter.has(orderId)) continue
+      if (canal && canal !== CANAL_VALIDO) {
+        descartados.push({ order_id: orderId, sku: skuRaw, status, motivo: `canal_invalido:${canal}` })
+        continue
+      }
 
       const data = parseDataISO(dataStr)
-      if (!data) continue
+      if (!data) {
+        descartados.push({ order_id: orderId, sku: skuRaw, status, motivo: 'data_invalida' })
+        continue
+      }
 
       // Filtra pelo mês/ano explícito se fornecido
-      if (mesExplicito && data.getMonth() + 1 !== mesExplicito) continue
-      if (anoExplicito && data.getFullYear() !== anoExplicito) continue
+      if (mesExplicito && data.getMonth() + 1 !== mesExplicito) {
+        descartados.push({ order_id: orderId, sku: skuRaw, status, motivo: `mes_fora:${data.getMonth()+1}/${data.getFullYear()}` })
+        continue
+      }
+      if (anoExplicito && data.getFullYear() !== anoExplicito) {
+        descartados.push({ order_id: orderId, sku: skuRaw, status, motivo: `ano_fora:${data.getFullYear()}` })
+        continue
+      }
 
       // Contadores de status
-      if (STATUS_CANCELADOS.has(status)) { cancelados++; continue }
-      if (STATUS_PENDENTES.has(status))  { pendentes++; continue }
-      if (!isStatusValido(status))       { pendentes++; continue }   // qualquer outro status desconhecido → pendente
+      if (STATUS_CANCELADOS.has(status)) { cancelados++; descartados.push({ order_id: orderId, sku: skuRaw, status, motivo: 'cancelado' }); continue }
+      if (STATUS_PENDENTES.has(status))  { pendentes++;  descartados.push({ order_id: orderId, sku: skuRaw, status, motivo: 'pendente' });  continue }
+      if (!isStatusValido(status))       { pendentes++;  descartados.push({ order_id: orderId, sku: skuRaw, status, motivo: `status_desconhecido:${status}` }); continue }
+
+      // Se o CSV forneceu seus order IDs, só conta pedidos que aparecem lá (mesmo período)
+      if (orderIdsFilter && orderId && !orderIdsFilter.has(orderId)) {
+        descartados.push({ order_id: orderId, sku: skuRaw, status, motivo: 'fora_do_filtro_csv' })
+        continue
+      }
 
       const sku    = normalizarSku(skuRaw)
       const titulo = String(r[COL.PRODUTO] ?? '').slice(0, 80)
@@ -257,6 +275,7 @@ export async function POST(req: NextRequest) {
         sem_custo:       skusArray.filter(s => s.sem_custo).map(s => s.sku),
         margem_negativa: skusArray.filter(s => s.margem_perc < 0 && !s.sem_custo).map(s => s.sku),
       },
+      descartados,
       // Compatibilidade com interface GeralData (campos não disponíveis = 0)
       fba_fulfillment:      0,
       fba_armazenagem:      0,

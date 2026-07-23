@@ -457,12 +457,25 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
               criancas={estG === 'ok' && dadosG ? (
                 <div className="space-y-1 text-xs">
                   <div className="flex justify-between"><span className="text-slate-400">Arquivo</span><span className="font-semibold truncate max-w-[120px]">{dadosG.arquivo}</span></div>
-                  {(() => { const d = dadosG as unknown as {pedidos?:number;unidades?:number;cancelados?:number;receita_total?:number;custo_total?:number}; return (<>
+                  {(() => { const d = dadosG as unknown as {pedidos?:number;unidades?:number;cancelados?:number;pendentes?:number;receita_total?:number;custo_total?:number;descartados?:{order_id:string;sku:string;status:string;motivo:string}[]}; const naoContabilizados = (d.descartados ?? []).filter(x => !x.motivo.startsWith('cancelado') && !x.motivo.startsWith('pendente')); return (<>
                     {d.pedidos != null && <div className="flex justify-between"><span className="text-slate-400">Pedidos</span><span className="font-bold">{d.pedidos} · {d.unidades} un.</span></div>}
                     {d.cancelados != null && d.cancelados > 0 && <div className="flex justify-between"><span className="text-slate-400">Cancelados</span><span className="font-bold text-amber-600">{d.cancelados}</span></div>}
+                    {d.pendentes != null && d.pendentes > 0 && <div className="flex justify-between"><span className="text-slate-400">Pendentes</span><span className="font-bold text-amber-600">{d.pendentes}</span></div>}
                     {dadosG.skus.length > 0 && <div className="flex justify-between"><span className="text-slate-400">SKUs</span><span className="font-bold">{dadosG.skus.map(s => s.sku).join(', ')}</span></div>}
                     {d.receita_total != null && <div className="flex justify-between"><span className="text-slate-400">Receita</span><span className="font-black text-emerald-600 font-mono">{formatCurrency(d.receita_total)}</span></div>}
                     {d.custo_total != null && <div className="flex justify-between"><span className="text-slate-400">CMV</span><span className="font-bold text-red-500 font-mono">-{formatCurrency(d.custo_total)}</span></div>}
+                    {naoContabilizados.length > 0 && (
+                      <details className="mt-1">
+                        <summary className="text-amber-600 font-bold cursor-pointer">⚠ {naoContabilizados.length} linha(s) descartada(s)</summary>
+                        <div className="mt-1 space-y-0.5 max-h-40 overflow-y-auto">
+                          {naoContabilizados.map((x, i) => (
+                            <div key={i} className="text-[10px] text-slate-500 font-mono bg-slate-50 px-1 rounded">
+                              {x.order_id} · {x.sku} · <span className="text-amber-700">{x.motivo}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
                   </>)})()}
                 </div>
               ) : erroG ? <p className="text-xs text-red-600">{erroG}</p> : null}
