@@ -173,7 +173,7 @@ export async function salvarAnaliseML(dados: DadosConsolidadosML) {
     if (!jaTemPaginaML) {
       lancamentos.push({
         faturamento_id: fat.id,
-        tipo: 'DESPESA_VARIAVEL',
+        tipo: 'DESPESA_FIXA',
         categoria: 'PAGINA_ML',
         descricao: 'ML Import — Página Oficial ML',
         valor: dados.pagina_ml,
