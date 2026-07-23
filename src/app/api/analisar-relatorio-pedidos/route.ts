@@ -42,14 +42,23 @@ const COL = {
 // Canal de vendas aceito — exclui remoções FBA, MCF e pedidos B2B que têm item-price = 0
 const CANAL_VALIDO = 'amazon.com.br'
 
-// Pedidos entregues/em trânsito — conta como venda
-const STATUS_VALIDOS = new Set(['shipped'])
-
 // Pedidos cancelados — exclui definitivamente
 const STATUS_CANCELADOS = new Set(['cancelled', 'canceled'])
 
+// Variações de "Shipped" que NÃO são venda (rejeições/devoluções)
+const STATUS_SHIPPED_EXCLUIDOS = new Set([
+  'shipped - rejected by buyer',
+  'shipped - returned to seller',
+  'shipped - damaged',
+])
+
 // Pedidos pendentes/não enviados — exclui por agora (podem aparecer no mês seguinte)
 const STATUS_PENDENTES = new Set(['pending', 'unshipped', 'partiallyshipped'])
+
+function isStatusValido(status: string): boolean {
+  // Qualquer variação de "Shipped" é válida, exceto as de rejeição/devolução
+  return status.startsWith('shipped') && !STATUS_SHIPPED_EXCLUIDOS.has(status)
+}
 
 function normalizarSku(sku: string): string {
   return sku.replace(/_fba/gi, '').replace(/\s/g, '').trim().toUpperCase()
@@ -164,7 +173,7 @@ export async function POST(req: NextRequest) {
       // Contadores de status
       if (STATUS_CANCELADOS.has(status)) { cancelados++; continue }
       if (STATUS_PENDENTES.has(status))  { pendentes++; continue }
-      if (!STATUS_VALIDOS.has(status))   { pendentes++; continue }   // qualquer outro status desconhecido → pendente
+      if (!isStatusValido(status))       { pendentes++; continue }   // qualquer outro status desconhecido → pendente
 
       const sku    = normalizarSku(skuRaw)
       const titulo = String(r[COL.PRODUTO] ?? '').slice(0, 80)
