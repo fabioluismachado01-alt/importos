@@ -85,18 +85,24 @@ export async function POST(req: NextRequest) {
     let pedidos_cancelados = 0
     let pedidos_devolvidos = 0
 
-    // Pedidos combo: TikTok emite uma linha por SKU; linhas adicionais do mesmo Order ID
-    // costumam ter Order Status em branco — propaga o status da primeira linha do pedido.
-    const statusPorPedido: Record<string, string> = {}
+    // Pedidos combo: TikTok emite uma linha por SKU; linhas adicionais do mesmo pedido
+    // costumam ter Order ID e Order Status em branco — propaga da primeira linha do pedido.
+    let lastOrderId = ''
+    let lastStatus = ''
 
     for (let i = dataStart; i < rows.length; i++) {
       const r = rows[i] as unknown[]
-      if (!r?.[COL.ORDER_ID]) continue
+      // Linha totalmente vazia → fim do arquivo
+      if (!r || r.every(c => c === '' || c == null)) continue
 
-      const orderId = String(r[COL.ORDER_ID]).trim()
+      const rawOrderId = String(r[COL.ORDER_ID] ?? '').trim()
+      const orderId = rawOrderId || lastOrderId
+      if (!orderId) continue  // sem nenhum Order ID conhecido ainda
+      if (rawOrderId) lastOrderId = rawOrderId
+
       const rawStatus = String(r[COL.STATUS] ?? '').trim()
-      const status = rawStatus || statusPorPedido[orderId] || ''
-      if (rawStatus) statusPorPedido[orderId] = rawStatus
+      const status = rawStatus || (rawOrderId ? '' : lastStatus)
+      if (rawStatus) lastStatus = rawStatus
 
       const cancelType = String(r[COL.CANCEL_TYPE] ?? '').trim()
       const qtdReturn = n(r[COL.QTD_RETURN])
