@@ -462,7 +462,7 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-black text-slate-700 flex items-center gap-2">
               <BarChart2 className="w-4 h-4 text-emerald-500" />
-              Resultado Consolidado {v?.periodo ? `— ${['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][v.periodo.mes-1]} ${v.periodo.ano}` : ''}
+              Resultado Consolidado — {MESES_NOMES[mesSel-1]} {anoSel}
             </CardTitle>
           </CardHeader>
           <CardContent>

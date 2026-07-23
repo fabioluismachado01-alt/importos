@@ -213,25 +213,60 @@ export async function configurarMes(
 
   // Replicar despesas fixas
   if (data.replicar_fixas) {
-    const templates = await prisma.despesa_fixa_template.findMany({
-      where: { workspace_id: workspaceId, ativo: true, recorrente: true },
-      orderBy: { ordem: 'asc' },
+    await _replicarFixasParaMes(fat.id, workspaceId, ano, mes)
+  }
+
+  revalidatePath(`/faturamento/${ano}/${mes}`)
+  revalidatePath('/faturamento')
+}
+
+// =============================================
+// REPLICAR DESPESAS FIXAS — INTERNO E PÚBLICO
+// =============================================
+
+// Upsert por item: cria ou atualiza cada template sem apagar lançamentos de outras fontes.
+// Lançamentos e_fixo cujo categoria não está mais nos templates são removidos.
+async function _replicarFixasParaMes(fatId: string, workspaceId: string, ano: number, mes: number) {
+  const templates = await prisma.despesa_fixa_template.findMany({
+    where: { workspace_id: workspaceId, ativo: true, recorrente: true },
+    orderBy: { ordem: 'asc' },
+  })
+
+  const categoriasAtivas = templates
+    .filter(t => t.categoria !== 'PREVIDENCIA_PRIVADA' && t.valor_padrao > 0)
+    .map(t => t.categoria)
+
+  // Remove e_fixo de categorias que saíram dos templates ativos
+  await prisma.lancamento.deleteMany({
+    where: {
+      faturamento_id: fatId,
+      e_fixo: true,
+      ...(categoriasAtivas.length > 0
+        ? { categoria: { notIn: categoriasAtivas } }
+        : {}),
+    },
+  })
+
+  const primeiroDia = new Date(ano, mes - 1, 1)
+
+  for (const t of templates) {
+    if (t.categoria === 'PREVIDENCIA_PRIVADA') continue // calculada pela engine
+    if (t.valor_padrao <= 0) continue
+
+    const existing = await prisma.lancamento.findFirst({
+      where: { faturamento_id: fatId, e_fixo: true, categoria: t.categoria },
+      select: { id: true },
     })
 
-    // Remove fixas automáticas existentes do mês
-    await prisma.lancamento.deleteMany({
-      where: { faturamento_id: fat.id, e_fixo: true },
-    })
-
-    const primeiroDia = new Date(ano, mes - 1, 1)
-
-    for (const t of templates) {
-      if (t.categoria === 'PREVIDENCIA_PRIVADA') continue // calculada pela engine
-      if (t.valor_padrao <= 0) continue
-
+    if (existing) {
+      await prisma.lancamento.update({
+        where: { id: existing.id },
+        data: { valor: t.valor_padrao, descricao: t.nome, data: primeiroDia },
+      })
+    } else {
       await prisma.lancamento.create({
         data: {
-          faturamento_id: fat.id,
+          faturamento_id: fatId,
           tipo: 'DESPESA_FIXA',
           categoria: t.categoria,
           descricao: t.nome,
@@ -242,10 +277,21 @@ export async function configurarMes(
         },
       })
     }
-
-    await recalcularMes(fat.id, workspaceId, ano, mes)
   }
 
+  await recalcularMes(fatId, workspaceId, ano, mes)
+}
+
+// Action pública: funciona mesmo para meses fechados (usado para corrigir meses com fixas ausentes)
+export async function replicarDespesasFixas(ano: number, mes: number) {
+  const { workspaceId } = await getAuthContext()
+
+  const fat = await prisma.faturamento_mes.findUnique({
+    where: { workspace_id_ano_mes: { workspace_id: workspaceId, ano, mes } },
+  })
+  if (!fat) throw new Error('Mês não configurado — abra o mês primeiro')
+
+  await _replicarFixasParaMes(fat.id, workspaceId, ano, mes)
   revalidatePath(`/faturamento/${ano}/${mes}`)
   revalidatePath('/faturamento')
 }

@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { cn, formatCurrency, getMesNome, getDiasParaVencimento } from '@/lib/utils'
-import { removeLancamento, registrarPagamentoDAS, cancelarPagamentoDAS, fecharMes, configurarMes, editarLancamento } from '@/actions/finance'
+import { removeLancamento, registrarPagamentoDAS, cancelarPagamentoDAS, fecharMes, configurarMes, editarLancamento, replicarDespesasFixas } from '@/actions/finance'
 import { CATEGORIA_LABELS, CANAIS_RECEITA } from '@/engines/finance'
 import { LancamentoModal } from './LancamentoModal'
 import { DASPagamentoForm } from './DASPagamentoForm'
@@ -251,6 +251,13 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
       setShowDASForm(false); router.refresh()
     } catch (e) { alert(e instanceof Error ? e.message : 'Erro ao cancelar pagamento') }
   }
+  async function handleReplicarFixas() {
+    if (!confirm(`Replicar despesas fixas em ${nomeMes} ${ano}? As despesas fixas existentes serão atualizadas ou criadas conforme os templates configurados.`)) return
+    startTransition(async () => {
+      try { await replicarDespesasFixas(ano, mes); router.refresh() }
+      catch (e) { alert(e instanceof Error ? e.message : 'Erro ao replicar despesas fixas') }
+    })
+  }
   async function handleFecharMes() {
     if (!confirm(`Fechar ${nomeMes} ${ano}? O mês ficará protegido contra edições.`)) return
     try { await fecharMes(ano, mes); router.refresh() }
@@ -358,7 +365,11 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
             onClick={() => window.open(`/api/export/pdf-mes?ano=${ano}&mes=${mes}`, '_blank')}>
             <FileDown className="w-3.5 h-3.5 mr-1.5" /> PDF
           </Button>
-          {!d.fechado && (
+          {d.fechado ? (
+            <Button variant="outline" size="sm" onClick={handleReplicarFixas} disabled={isPending}>
+              Replicar fixas
+            </Button>
+          ) : (
             <>
               <Button variant="outline" size="sm" onClick={() => setShowConfigModal(true)}>
                 Configurar mês
@@ -392,7 +403,13 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
                   className="w-full text-left px-3 py-2 text-xs font-medium rounded-lg hover:bg-slate-50 flex items-center gap-2 text-slate-700">
                   <FileDown className="w-3.5 h-3.5" /> Exportar PDF
                 </button>
-                {!d.fechado && (
+                {d.fechado ? (
+                  <button
+                    onClick={() => { handleReplicarFixas(); setShowMoreMenu(false) }}
+                    className="w-full text-left px-3 py-2 text-xs font-medium rounded-lg hover:bg-slate-50 flex items-center gap-2 text-slate-700">
+                    Replicar fixas
+                  </button>
+                ) : (
                   <>
                     <button
                       onClick={() => { setShowConfigModal(true); setShowMoreMenu(false) }}

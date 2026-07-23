@@ -28,13 +28,18 @@ function extrairTotal(ws: XLSX.WorkSheet, colunaValor = 5): { total: number; dat
   for (let i = 6; i < rows.length; i++) {
     const r = rows[i] as unknown[]
     if (!r?.[0] || r[0] === '') continue
+
+    // Valida que col 1 é uma data — linhas de total/imposto não têm data e devem ser ignoradas
+    const dataCell = r[1]
+    const isDate = dataCell instanceof Date || typeof dataCell === 'number'
+    if (!isDate) continue
+
     const valor = Number(r[colunaValor]) || 0
     total += valor
 
     if (!dataRef) {
-      const d = r[1]
-      if (d instanceof Date) dataRef = d
-      else if (typeof d === 'number') dataRef = new Date((d - 25569) * 86400 * 1000)
+      if (dataCell instanceof Date) dataRef = dataCell
+      else dataRef = new Date((dataCell as number - 25569) * 86400 * 1000)
     }
   }
   return { total, dataRef }

@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
         }
       }
       skus[skuRaw].unidades += qty
-      skus[skuRaw].receita += receita
+      skus[skuRaw].receita += receita + platDisc  // platform disc é receita do vendedor, inclui na base
       skus[skuRaw].plataforma_disc += platDisc
     }
 
@@ -163,9 +163,13 @@ export async function POST(req: NextRequest) {
       }
     }).sort((a, b) => b.unidades - a.unidades)
 
-    // receita_bruta = SKU Subtotal After Discount + SKU Platform Discount
-    // = o que o TikTok reconhece como "Vendas líquidas" por pedido (base competência)
-    const receita_bruta = skusArray.reduce((s, x) => s + x.receita + x.plataforma_disc, 0)
+    // receita_bruta = soma de x.receita (já inclui plataforma_disc por SKU)
+    const receita_bruta = skusArray.reduce((s, x) => s + x.receita, 0)
+
+    const totalLinhas = rows.length - dataStart
+    const aviso_zero_pedidos = pedidos_validos === 0 && totalLinhas > 3
+      ? `Arquivo contém ${totalLinhas} linhas de dados mas nenhum pedido válido foi encontrado. Verifique se o arquivo CSV está íntegro (aspas e quebras de linha podem estar corrompidas) ou se os status dos pedidos ('Concluído', 'Enviado', 'Entregue') estão em português.`
+      : undefined
 
     return NextResponse.json({
       arquivo: file.name,
@@ -175,6 +179,7 @@ export async function POST(req: NextRequest) {
       receita_bruta,
       descartados,
       skus: skusArray,
+      ...(aviso_zero_pedidos ? { aviso_zero_pedidos } : {}),
     })
   } catch (err) {
     console.error('[pedidos-tiktok]', err)

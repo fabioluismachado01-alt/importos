@@ -61,6 +61,7 @@ interface PedidosData {
   receita_bruta: number  // soma de (SUBTOTAL + PLATFORM_DISC) — base competência
   skus: SkuPedido[]
   descartados?: { linha: number; order_id: string; sku: string; status: string; cancel_type: string; qtd_return: number; motivo: string }[]
+  aviso_zero_pedidos?: string
 }
 
 type UploadEstado = 'idle' | 'carregando' | 'ok' | 'erro'
@@ -444,6 +445,11 @@ export function TiktokAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
                   <div className="flex justify-between"><span className="text-slate-400">Cancelados</span><span className="font-bold text-slate-400">{dadosP.pedidos_cancelados}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Receita (competência)</span><span className="font-black text-purple-600 font-mono">{formatCurrency(dadosP.receita_bruta)}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">SKUs identificados</span><span className="font-bold text-purple-600">{dadosP.skus.length} SKUs — CMV exato</span></div>
+                  {dadosP.aviso_zero_pedidos && (
+                    <div className="mt-1 p-2 bg-red-50 border border-red-200 rounded text-[10px] text-red-700 leading-snug">
+                      ⚠ {dadosP.aviso_zero_pedidos}
+                    </div>
+                  )}
                   {(dadosP.descartados ?? []).filter(x => x.motivo !== 'cancelado').length > 0 && (
                     <details className="mt-1">
                       <summary className="text-amber-600 font-bold cursor-pointer text-xs">⚠ {(dadosP.descartados ?? []).filter(x => x.motivo !== 'cancelado').length} linha(s) descartada(s)</summary>
