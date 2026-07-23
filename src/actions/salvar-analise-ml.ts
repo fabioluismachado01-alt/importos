@@ -163,7 +163,25 @@ export async function salvarAnaliseML(dados: DadosConsolidadosML) {
   }
 
   // ── Página ML ─────────────────────────────────────────────────────
-  // NÃO importada: já registrada como despesa fixa mensal para evitar dupla contagem
+  // Só importa se o mês ainda não tem um lançamento PAGINA_ML (fixo ou variável).
+  // Meses que já têm a despesa fixa cadastrada manualmente não são duplicados.
+  if (dados.pagina_ml > 0) {
+    const jaTemPaginaML = await prisma.lancamento.findFirst({
+      where: { faturamento_id: fat.id, categoria: 'PAGINA_ML' },
+      select: { id: true },
+    })
+    if (!jaTemPaginaML) {
+      lancamentos.push({
+        faturamento_id: fat.id,
+        tipo: 'DESPESA_VARIAVEL',
+        categoria: 'PAGINA_ML',
+        descricao: 'ML Import — Página Oficial ML',
+        valor: dados.pagina_ml,
+        data: primeiroDia,
+        status: 'CONFIRMADO',
+      })
+    }
+  }
 
   // ── Afiliados ─────────────────────────────────────────────────────
   if (dados.afiliados > 0) {
