@@ -60,6 +60,7 @@ interface PedidosData {
   pedidos_validos: number; pedidos_cancelados: number; pedidos_devolvidos: number
   receita_bruta: number  // soma de (SUBTOTAL + PLATFORM_DISC) — base competência
   skus: SkuPedido[]
+  descartados?: { linha: number; order_id: string; sku: string; status: string; cancel_type: string; qtd_return: number; motivo: string }[]
 }
 
 type UploadEstado = 'idle' | 'carregando' | 'ok' | 'erro'
@@ -443,6 +444,18 @@ export function TiktokAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
                   <div className="flex justify-between"><span className="text-slate-400">Cancelados</span><span className="font-bold text-slate-400">{dadosP.pedidos_cancelados}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Receita (competência)</span><span className="font-black text-purple-600 font-mono">{formatCurrency(dadosP.receita_bruta)}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">SKUs identificados</span><span className="font-bold text-purple-600">{dadosP.skus.length} SKUs — CMV exato</span></div>
+                  {(dadosP.descartados ?? []).filter(x => x.motivo !== 'cancelado').length > 0 && (
+                    <details className="mt-1">
+                      <summary className="text-amber-600 font-bold cursor-pointer text-xs">⚠ {(dadosP.descartados ?? []).filter(x => x.motivo !== 'cancelado').length} linha(s) descartada(s)</summary>
+                      <div className="mt-1 space-y-0.5 max-h-40 overflow-y-auto">
+                        {(dadosP.descartados ?? []).filter(x => x.motivo !== 'cancelado').map((x, i) => (
+                          <div key={i} className="text-[10px] text-slate-500 font-mono bg-slate-50 px-1 rounded">
+                            L{x.linha} · {x.order_id} · {x.sku} · <span className="text-amber-700">{x.motivo}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
                 </div>
               ) : erroP ? <p className="text-xs text-red-600">{erroP}</p> : null}
             />

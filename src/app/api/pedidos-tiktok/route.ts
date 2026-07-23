@@ -85,6 +85,9 @@ export async function POST(req: NextRequest) {
     let pedidos_cancelados = 0
     let pedidos_devolvidos = 0
 
+    // Diagnóstico: linhas descartadas com motivo para facilitar debug
+    const descartados: { linha: number; order_id: string; sku: string; status: string; cancel_type: string; qtd_return: number; motivo: string }[] = []
+
     // Pedidos combo: TikTok emite uma linha por SKU; linhas adicionais do mesmo pedido
     // costumam ter Order ID e Order Status em branco — propaga da primeira linha do pedido.
     let lastOrderId = ''
@@ -106,16 +109,22 @@ export async function POST(req: NextRequest) {
 
       const cancelType = String(r[COL.CANCEL_TYPE] ?? '').trim()
       const qtdReturn = n(r[COL.QTD_RETURN])
+      const skuDiag = String(r[COL.SELLER_SKU] ?? '').trim()
 
       if (status.toLowerCase().startsWith('cancelad')) {
         pedidos_cancelados++
+        descartados.push({ linha: i, order_id: orderId, sku: skuDiag, status, cancel_type: cancelType, qtd_return: qtdReturn, motivo: 'cancelado' })
         continue
       }
       if (cancelType.toLowerCase().includes('return') || qtdReturn > 0) {
         pedidos_devolvidos++
+        descartados.push({ linha: i, order_id: orderId, sku: skuDiag, status, cancel_type: cancelType, qtd_return: qtdReturn, motivo: `devolvido:cancel_type="${cancelType}":qtd_return=${qtdReturn}` })
         continue
       }
-      if (!STATUS_VALIDOS.some(v => status.startsWith(v))) continue
+      if (!STATUS_VALIDOS.some(v => status.startsWith(v))) {
+        descartados.push({ linha: i, order_id: orderId, sku: skuDiag, status, cancel_type: cancelType, qtd_return: qtdReturn, motivo: `status_invalido:"${status}"` })
+        continue
+      }
 
       pedidos_validos++
       const skuRaw = String(r[COL.SELLER_SKU] ?? '').trim()
@@ -161,6 +170,7 @@ export async function POST(req: NextRequest) {
       pedidos_cancelados,
       pedidos_devolvidos,
       receita_bruta,
+      descartados,
       skus: skusArray,
     })
   } catch (err) {
