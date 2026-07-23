@@ -46,7 +46,10 @@ export async function POST(req: NextRequest) {
     const wsName = wb.SheetNames.find(s => s.toLowerCase().includes('ordersku') || s.toLowerCase().includes('order'))
       ?? wb.SheetNames[0]
     const ws = wb.Sheets[wsName]
-    const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' }) as unknown[][]
+    // raw: false → usa o texto formatado da célula (.w) em vez do valor numérico (.v)
+    // Necessário porque Order IDs do TikTok têm 18-19 dígitos, acima do limite de precisão
+    // segura de float64 (~9×10¹⁵), e seriam corrompidos se tratados como Number.
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '', raw: false }) as unknown[][]
 
     // Linha 0 = header, linha 1 = descrição das colunas, dados a partir da linha 2
     if (rows.length < 2) return NextResponse.json({ error: 'Arquivo vazio ou formato incorreto' }, { status: 400 })
