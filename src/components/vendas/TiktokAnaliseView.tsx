@@ -58,6 +58,7 @@ interface SkuPedido {
 interface PedidosData {
   arquivo: string
   pedidos_validos: number; pedidos_cancelados: number; pedidos_devolvidos: number
+  receita_bruta: number  // soma de (SUBTOTAL + PLATFORM_DISC) — base competência
   skus: SkuPedido[]
 }
 
@@ -264,14 +265,22 @@ export function TiktokAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
     const aliq = parseFloat(aliquota.replace(',', '.')) / 100 || 0.08
     setSalvando(true); setErroSalvar('')
     try {
+      const recSalvar = usandoCompetencia ? dadosP!.receita_bruta : dadosD.receita_bruta
+      const taxasSalvar = usandoCompetencia
+        ? (dadosD.receita_bruta > 0 ? dadosD.taxas_plataforma_servico / dadosD.receita_bruta * recSalvar : dadosD.taxas_plataforma_servico)
+        : dadosD.taxas_plataforma_servico
+      const cmvSalvar = dadosP
+        ? dadosP.skus.reduce((s, x) => s + x.custo_total, 0)
+        : dadosD.cmv_estimado
+      const pedidosSalvar = dadosP ? dadosP.pedidos_validos : dadosD.pedidos_count
       await salvarAnaliseTiktok({
         mes, ano, aliquota: aliq,
-        receita_bruta: dadosD.receita_bruta,
-        taxas_plataforma: dadosD.taxas_plataforma_servico,
+        receita_bruta: recSalvar,
+        taxas_plataforma: taxasSalvar,
         com_afiliados: dadosD.com_afiliados,
         frete_liquido: Math.max(0, dadosD.frete_liquido),
-        cmv: dadosD.cmv_estimado,
-        pedidos: dadosD.pedidos_count,
+        cmv: cmvSalvar,
+        pedidos: pedidosSalvar,
         desconto_vendedor: dadosD.desconto_vendedor,
       })
       setSalvo(true)
@@ -281,9 +290,23 @@ export function TiktokAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
   }
 
   // Cálculos DRE
-  const aliq      = parseFloat(aliquota.replace(',', '.')) / 100 || 0.08
-  const rec       = dadosD?.receita_bruta ?? 0
-  const taxas     = dadosD?.taxas_plataforma_servico ?? 0
+  const aliq = parseFloat(aliquota.replace(',', '.')) / 100 || 0.08
+
+  // Receita: usa Relatório de Pedidos (competência) quando disponível;
+  // evita misturar liquidações de um mês com pedidos de outro.
+  const usandoCompetencia = !!(dadosP && dadosP.receita_bruta > 0)
+  const rec = usandoCompetencia
+    ? dadosP!.receita_bruta
+    : (dadosD?.receita_bruta ?? 0)
+
+  // Taxas: quando em competência, aplica alíquota efetiva do Demonstrativo
+  const taxaEfetiva = dadosD && dadosD.receita_bruta > 0
+    ? dadosD.taxas_plataforma_servico / dadosD.receita_bruta
+    : 0
+  const taxas = usandoCompetencia
+    ? taxaEfetiva * rec
+    : (dadosD?.taxas_plataforma_servico ?? 0)
+
   const afiliados = dadosD?.com_afiliados ?? 0
   // CMV: usa pedidos (exato) quando disponível, senão heurística do demonstrativo
   const cmv = dadosP
@@ -292,7 +315,7 @@ export function TiktokAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const unidadesCmv = dadosP
     ? dadosP.skus.reduce((s, x) => s + x.unidades, 0)
     : (dadosD?.unidades_total ?? 0)
-  const das       = rec * aliq
+  const das = rec * aliq
 
   const lucro_bruto = rec - taxas - afiliados
   const lucro_liq   = lucro_bruto - cmv - das
@@ -418,6 +441,7 @@ export function TiktokAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
                   <div className="flex justify-between"><span className="text-slate-400">Arquivo</span><span className="font-semibold truncate max-w-[130px]">{dadosP.arquivo}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Pedidos válidos</span><span className="font-bold text-emerald-600">{dadosP.pedidos_validos}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Cancelados</span><span className="font-bold text-slate-400">{dadosP.pedidos_cancelados}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Receita (competência)</span><span className="font-black text-purple-600 font-mono">{formatCurrency(dadosP.receita_bruta)}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">SKUs identificados</span><span className="font-bold text-purple-600">{dadosP.skus.length} SKUs — CMV exato</span></div>
                 </div>
               ) : erroP ? <p className="text-xs text-red-600">{erroP}</p> : null}
@@ -428,13 +452,19 @@ export function TiktokAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
           {dadosD && (
             <>
               <div className="rounded-2xl border border-slate-200 overflow-hidden">
-                <div className="bg-slate-900 px-5 py-3 flex items-center justify-between">
+                <div className="bg-slate-900 px-5 py-3 flex items-center justify-between gap-2 flex-wrap">
                   <p className="text-xs font-black text-white uppercase tracking-widest">DRE — {MESES[mes-1]} {ano}</p>
-                  <span className="text-[9px] text-slate-400">fonte: Demonstrativo TikTok · aba Relatórios</span>
+                  {usandoCompetencia
+                    ? <span className="text-[9px] bg-purple-700 text-purple-100 rounded px-2 py-0.5 font-bold">
+                        Competência (Pedidos) · taxas estimadas pelo Demonstrativo
+                      </span>
+                    : <span className="text-[9px] text-slate-400">fonte: Demonstrativo TikTok · aba Relatórios</span>}
                 </div>
                 <div className="divide-y divide-slate-100 px-5">
                   <DRELinha label="Receita Bruta (Vendas líquidas)" valor={rec} cor="text-emerald-600"
-                    sub={`${dadosD.pedidos_count} liquidações`} />
+                    sub={usandoCompetencia
+                      ? `${dadosP!.pedidos_validos} pedidos · base competência`
+                      : `${dadosD.pedidos_count} liquidações`} />
 
                   {/* Taxas detalhadas */}
                   <DRELinha label={`(−) Taxas Plataforma + Serviço`} valor={-taxas} cor="text-red-500" indent
@@ -471,13 +501,15 @@ export function TiktokAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
                     valor={lucro_bruto} destaque
                     cor={lucro_bruto >= 0 ? 'text-blue-600' : 'text-red-500'} />
 
-                  {/* Verificação: deve ser ≈ liquidado */}
-                  <div className="flex items-center gap-2 py-1 pl-4">
-                    <span className="text-[10px] text-slate-300">≈ Valor a liquidar TikTok:</span>
-                    <span className="text-[10px] font-mono text-slate-300">{formatCurrency(dadosD.liquidado)}</span>
-                    {Math.abs(lucro_bruto - dadosD.liquidado) < 1 &&
-                      <span className="text-[9px] text-emerald-500 font-bold">✓ confere</span>}
-                  </div>
+                  {/* Verificação liquidado: só faz sentido no modo caixa (Demonstrativo) */}
+                  {!usandoCompetencia && (
+                    <div className="flex items-center gap-2 py-1 pl-4">
+                      <span className="text-[10px] text-slate-300">≈ Valor a liquidar TikTok:</span>
+                      <span className="text-[10px] font-mono text-slate-300">{formatCurrency(dadosD.liquidado)}</span>
+                      {Math.abs(lucro_bruto - dadosD.liquidado) < 1 &&
+                        <span className="text-[9px] text-emerald-500 font-bold">✓ confere</span>}
+                    </div>
+                  )}
 
                   {cmv > 0 && (
                     <DRELinha label={`(−) CMV (${unidadesCmv} unidades)`}

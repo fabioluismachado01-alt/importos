@@ -19,7 +19,10 @@ const COL = {
   ORDER_ID: 0, STATUS: 2, CANCEL_TYPE: 4,
   SKU_ID: 6, SELLER_SKU: 7, NOME: 8, VARIACAO: 9,
   QTD: 11, QTD_RETURN: 12,
-  PRECO_UNIT: 13, SUBTOTAL: 17,
+  PRECO_UNIT: 13,
+  PLATFORM_DISC: 15,  // SKU Platform Discount (pago pelo TikTok, conta como receita)
+  SUBTOTAL: 17,       // SKU Subtotal After Discount
+  REFUND: 25,         // Order Refund Amount
 }
 
 function n(v: unknown): number {
@@ -75,7 +78,7 @@ export async function POST(req: NextRequest) {
 
     const skus: Record<string, {
       sku: string; nome_produto: string; nome_catalogo: string; variacao: string
-      unidades: number; receita: number; custo_unit: number; sem_custo: boolean
+      unidades: number; receita: number; plataforma_disc: number; custo_unit: number; sem_custo: boolean
     }> = {}
 
     let pedidos_validos = 0
@@ -105,6 +108,7 @@ export async function POST(req: NextRequest) {
       const sku = skuRaw.toUpperCase()
       const qty = n(r[COL.QTD]) || 1
       const receita = n(r[COL.SUBTOTAL])
+      const platDisc = n(r[COL.PLATFORM_DISC])
       const nome = String(r[COL.NOME] ?? '').trim().slice(0, 80)
       const variacao = String(r[COL.VARIACAO] ?? '').trim()
       const custo_unit = custoPorSku[sku] ?? 0
@@ -114,12 +118,13 @@ export async function POST(req: NextRequest) {
           sku: skuRaw, nome_produto: nome,
           nome_catalogo: nomePorSku[sku] ?? '',
           variacao,
-          unidades: 0, receita: 0,
+          unidades: 0, receita: 0, plataforma_disc: 0,
           custo_unit, sem_custo: custo_unit === 0,
         }
       }
       skus[skuRaw].unidades += qty
       skus[skuRaw].receita += receita
+      skus[skuRaw].plataforma_disc += platDisc
     }
 
     const skusArray = Object.values(skus).map(s => {
@@ -132,11 +137,16 @@ export async function POST(req: NextRequest) {
       }
     }).sort((a, b) => b.unidades - a.unidades)
 
+    // receita_bruta = SKU Subtotal After Discount + SKU Platform Discount
+    // = o que o TikTok reconhece como "Vendas líquidas" por pedido (base competência)
+    const receita_bruta = skusArray.reduce((s, x) => s + x.receita + x.plataforma_disc, 0)
+
     return NextResponse.json({
       arquivo: file.name,
       pedidos_validos,
       pedidos_cancelados,
       pedidos_devolvidos,
+      receita_bruta,
       skus: skusArray,
     })
   } catch (err) {
