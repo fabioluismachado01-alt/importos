@@ -420,7 +420,7 @@ export function TiktokAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
               criancas={estD === 'ok' && dadosD ? (
                 <div className="space-y-1 text-xs">
                   <div className="flex justify-between"><span className="text-slate-400">Arquivo</span><span className="font-semibold truncate max-w-[130px]">{dadosD.arquivo}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Liquidações / Unidades</span><span className="font-bold">{dadosD.pedidos_count} / {dadosD.unidades_total} un.</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Liquidações</span><span className="font-bold">{dadosD.pedidos_count}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Receita (Vendas líquidas)</span><span className="font-black text-emerald-600 font-mono">{formatCurrency(dadosD.receita_bruta)}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Taxas TikTok</span><span className="font-bold text-red-500 font-mono">-{formatCurrency(dadosD.taxas_total)}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Frete bruto / coberto</span><span className="font-bold text-slate-500 font-mono">{formatCurrency(dadosD.frete_bruto)} / {formatCurrency(dadosD.frete_coberto_tts)}</span></div>
@@ -481,7 +481,9 @@ export function TiktokAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
 
                   {/* Taxas detalhadas */}
                   <DRELinha label={`(−) Taxas Plataforma + Serviço`} valor={-taxas} cor="text-red-500" indent
-                    sub={`comissão R$${dadosD.com_plataforma.toFixed(2)} + serviço R$${dadosD.taxas_servico.toFixed(2)}`} />
+                    sub={usandoCompetencia
+                      ? `≈ ${(taxaEfetiva * 100).toFixed(1)}% da receita — rateio proporcional do Demonstrativo`
+                      : `comissão ${formatCurrency(dadosD.com_plataforma)} + serviço ${formatCurrency(dadosD.taxas_servico)}`} />
                   <DRELinha label="(−) Comissão Afiliados / Criadores" valor={-afiliados} cor="text-red-500" indent
                     sub="fonte: Demonstrativo" />
 
