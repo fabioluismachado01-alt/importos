@@ -85,11 +85,19 @@ export async function POST(req: NextRequest) {
     let pedidos_cancelados = 0
     let pedidos_devolvidos = 0
 
+    // Pedidos combo: TikTok emite uma linha por SKU; linhas adicionais do mesmo Order ID
+    // costumam ter Order Status em branco — propaga o status da primeira linha do pedido.
+    const statusPorPedido: Record<string, string> = {}
+
     for (let i = dataStart; i < rows.length; i++) {
       const r = rows[i] as unknown[]
       if (!r?.[COL.ORDER_ID]) continue
 
-      const status = String(r[COL.STATUS] ?? '').trim()
+      const orderId = String(r[COL.ORDER_ID]).trim()
+      const rawStatus = String(r[COL.STATUS] ?? '').trim()
+      const status = rawStatus || statusPorPedido[orderId] || ''
+      if (rawStatus) statusPorPedido[orderId] = rawStatus
+
       const cancelType = String(r[COL.CANCEL_TYPE] ?? '').trim()
       const qtdReturn = n(r[COL.QTD_RETURN])
 
