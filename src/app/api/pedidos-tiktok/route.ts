@@ -12,6 +12,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
+import { parse as parseCsv } from 'csv-parse/sync'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/auth'
 
@@ -41,17 +42,30 @@ export async function POST(req: NextRequest) {
     if (!file) return NextResponse.json({ error: 'Arquivo não enviado' }, { status: 400 })
 
     const buffer = Buffer.from(await file.arrayBuffer())
-    const wb = XLSX.read(buffer, { type: 'buffer' })
+    const isCsv = file.name.toLowerCase().endsWith('.csv')
 
-    const wsName = wb.SheetNames.find(s => s.toLowerCase().includes('ordersku') || s.toLowerCase().includes('order'))
-      ?? wb.SheetNames[0]
-    const ws = wb.Sheets[wsName]
-    // raw: false → usa o texto formatado da célula (.w) em vez do valor numérico (.v)
-    // Necessário porque Order IDs do TikTok têm 18-19 dígitos, acima do limite de precisão
-    // segura de float64 (~9×10¹⁵), e seriam corrompidos se tratados como Number.
-    const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '', raw: false }) as unknown[][]
+    let rows: unknown[][]
 
-    // Linha 0 = header, linha 1 = descrição das colunas, dados a partir da linha 2
+    if (isCsv) {
+      // csv-parse lida corretamente com campos multilinha e aspas escapadas (RFC 4180)
+      // que o XLSX falha quando o CSV do TikTok tem endereços com \n interno.
+      const text = buffer.toString('utf-8').replace(/^﻿/, '') // remove BOM se presente
+      rows = parseCsv(text, {
+        relax_quotes: true,           // tolera aspas mal-fechadas
+        relax_column_count: true,     // tolera linhas com número diferente de colunas
+        skip_empty_lines: true,
+        cast: false,                  // mantém tudo como string (Order ID tem 19 dígitos)
+      }) as string[][]
+    } else {
+      const wb = XLSX.read(buffer, { type: 'buffer' })
+      const wsName = wb.SheetNames.find(s => s.toLowerCase().includes('ordersku') || s.toLowerCase().includes('order'))
+        ?? wb.SheetNames[0]
+      const ws = wb.Sheets[wsName]
+      // raw: false → usa o texto formatado da célula (.w) para preservar Order IDs de 18-19 dígitos
+      rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '', raw: false }) as unknown[][]
+    }
+
+    // Linha 0 = header, linha 1 = descrição das colunas (apenas no XLSX), dados a partir da linha 2 ou 1
     if (rows.length < 2) return NextResponse.json({ error: 'Arquivo vazio ou formato incorreto' }, { status: 400 })
 
     const header = rows[0].map(c => String(c).toLowerCase())
@@ -60,7 +74,6 @@ export async function POST(req: NextRequest) {
     }
 
     // XLSX tem linha 1 como descrição das colunas; CSV começa direto nos dados
-    // Detecta pelo conteúdo da primeira célula da linha 1
     const primeiraLinha1 = String(rows[1]?.[COL.ORDER_ID] ?? '').toLowerCase()
     const temLinhaDescricao = primeiraLinha1.includes('platform') || primeiraLinha1.includes('unique') || primeiraLinha1.includes('id.')
     const dataStart = temLinhaDescricao ? 2 : 1

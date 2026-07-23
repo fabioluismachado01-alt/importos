@@ -236,16 +236,17 @@ async function _replicarFixasParaMes(fatId: string, workspaceId: string, ano: nu
     .filter(t => t.categoria !== 'PREVIDENCIA_PRIVADA' && t.valor_padrao > 0)
     .map(t => t.categoria)
 
-  // Remove e_fixo de categorias que saíram dos templates ativos
-  await prisma.lancamento.deleteMany({
-    where: {
-      faturamento_id: fatId,
-      e_fixo: true,
-      ...(categoriasAtivas.length > 0
-        ? { categoria: { notIn: categoriasAtivas } }
-        : {}),
-    },
-  })
+  // Remove apenas lançamentos e_fixo: true de categorias removidas dos templates ativos.
+  // Nunca toca em lançamentos e_fixo: false (criados por imports ML/TikTok).
+  if (categoriasAtivas.length > 0) {
+    await prisma.lancamento.deleteMany({
+      where: {
+        faturamento_id: fatId,
+        e_fixo: true,
+        categoria: { notIn: categoriasAtivas },
+      },
+    })
+  }
 
   const primeiroDia = new Date(ano, mes - 1, 1)
 
@@ -253,15 +254,17 @@ async function _replicarFixasParaMes(fatId: string, workspaceId: string, ano: nu
     if (t.categoria === 'PREVIDENCIA_PRIVADA') continue // calculada pela engine
     if (t.valor_padrao <= 0) continue
 
+    // Busca por categoria independente de e_fixo — evita duplicar lançamentos criados
+    // pelo import do ML (e_fixo: false) quando o template teria a mesma categoria.
     const existing = await prisma.lancamento.findFirst({
-      where: { faturamento_id: fatId, e_fixo: true, categoria: t.categoria },
-      select: { id: true },
+      where: { faturamento_id: fatId, categoria: t.categoria },
+      select: { id: true, e_fixo: true },
     })
 
     if (existing) {
       await prisma.lancamento.update({
         where: { id: existing.id },
-        data: { valor: t.valor_padrao, descricao: t.nome, data: primeiroDia },
+        data: { valor: t.valor_padrao, descricao: t.nome, data: primeiroDia, e_fixo: true },
       })
     } else {
       await prisma.lancamento.create({
