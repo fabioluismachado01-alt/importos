@@ -168,7 +168,7 @@ export function ShopeeAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const [ano, setAno] = useState(hoje.getFullYear())
   const [periodoOk, setPeriodoOk] = useState(false)
   const [aliquota, setAliquota] = useState('8.0')
-  const [incluirFrete, setIncluirFrete] = useState(true)
+  const incluirFrete = false
 
   // Vendas
   const [estV, setEstV] = useState<UploadEstado>('idle')
@@ -403,25 +403,6 @@ export function ShopeeAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
           {/* DRE — aparece assim que Vendas for carregado */}
           {dadosV && (
             <>
-              {/* Toggle frete */}
-              <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-                <Info className="w-4 h-4 text-slate-500 shrink-0" />
-                <div className="flex-1 text-xs text-slate-600">
-                  <span className="font-bold">Frete estimado</span> — inclui na DRE?
-                  <p className="text-slate-400 text-[10px]">O frete estimado pode diferir do real. Use como indicador operacional se preferir.</p>
-                </div>
-                <button
-                  onClick={() => setIncluirFrete(!incluirFrete)}
-                  className={cn('w-10 h-5 rounded-full transition-colors shrink-0',
-                    incluirFrete ? 'bg-orange-500' : 'bg-slate-300')}>
-                  <div className={cn('w-4 h-4 bg-white rounded-full transition-transform mx-0.5',
-                    incluirFrete ? 'translate-x-5' : 'translate-x-0')} />
-                </button>
-                <span className="text-xs font-bold text-slate-600 shrink-0">
-                  {incluirFrete ? 'Incluído' : 'Excluído'}
-                </span>
-              </div>
-
               {/* DRE */}
               <div className="rounded-2xl border border-slate-200 overflow-hidden">
                 <div className="bg-slate-900 px-5 py-3 flex items-center justify-between">
