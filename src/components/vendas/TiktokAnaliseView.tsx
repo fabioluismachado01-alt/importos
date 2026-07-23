@@ -289,6 +289,9 @@ export function TiktokAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const cmv = dadosP
     ? dadosP.skus.reduce((s, x) => s + x.custo_total, 0)
     : (dadosD?.cmv_estimado ?? 0)
+  const unidadesCmv = dadosP
+    ? dadosP.skus.reduce((s, x) => s + x.unidades, 0)
+    : (dadosD?.unidades_total ?? 0)
   const das       = rec * aliq
 
   const lucro_bruto = rec - taxas - afiliados
@@ -477,7 +480,7 @@ export function TiktokAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
                   </div>
 
                   {cmv > 0 && (
-                    <DRELinha label={`(−) CMV (${dadosD.unidades_total} unidades)`}
+                    <DRELinha label={`(−) CMV (${unidadesCmv} unidades)`}
                       valor={-cmv} cor="text-slate-600" indent
                       sub={dadosD.detalhes_incompleto ? '⚠ parcial — Detalhes do pedido incompleto' : undefined} />
                   )}
