@@ -46,6 +46,8 @@ interface GeralData {
   reembolsos_fba: number; reembolsos_liquido: number
   ajustes: number; publicidade_interno: number
   skus: SkuGeral[]
+  // Campos do Relatório de Pedidos (base competência)
+  receita_total?: number; pedidos?: number; unidades?: number
 }
 
 interface PubData {
@@ -272,12 +274,12 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
     try {
       await salvarAnaliseAmazon({
         mes, ano, aliquota: aliq,
-        // Relatório de Vendas
-        receita_bruta:     dadosV.receita_bruta,
-        comissao_amazon:   dadosV.comissao_amazon,
+        // Receita de competência quando Relatório de Pedidos disponível; senão caixa (CSV)
+        receita_bruta:     rec,
+        comissao_amazon:   comissao,
         descontos:         dadosV.descontos,
-        pedidos:           dadosV.pedidos,
-        unidades:          dadosV.unidades,
+        pedidos:           usandoCompetencia ? (dadosG!.pedidos ?? dadosV.pedidos) : dadosV.pedidos,
+        unidades:          usandoCompetencia ? (dadosG!.unidades ?? dadosV.unidades) : dadosV.unidades,
         dias_com_venda:    dadosV.dias_com_venda,
         // Relatório Geral (TXT real ou fallback embutido do CSV)
         fba_fulfillment:       geralEfetivo?.fba_fulfillment       ?? 0,
@@ -305,10 +307,22 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
 
   const aliq       = parseFloat(aliquota.replace(',', '.')) / 100 || 0.08
   const pub        = parseFloat(pubManual.replace(',', '.')) || 0
-  const rec        = dadosV?.receita_bruta ?? 0
-  const comissao   = dadosV?.comissao_amazon ?? 0
   // usa dados do TXT real; cai no embutido do CSV como fallback
   const geralEfetivo = dadosG ?? geralEmbutido
+
+  // Quando Relatório de Pedidos disponível: receita de competência (entregues no mês)
+  // CSV de Transações serve apenas para extrair a taxa de comissão Amazon
+  const usandoCompetencia = !!dadosG && (dadosG.receita_total ?? 0) > 0
+  const rec = usandoCompetencia
+    ? (dadosG!.receita_total ?? dadosV?.receita_bruta ?? 0)
+    : (dadosV?.receita_bruta ?? 0)
+  // Taxa efetiva do CSV aplicada proporcionalmente à receita de competência
+  const taxaComissaoCSV = dadosV && dadosV.receita_bruta > 0
+    ? dadosV.comissao_amazon / dadosV.receita_bruta
+    : 0
+  const comissao = usandoCompetencia && dadosV
+    ? taxaComissaoCSV * rec
+    : (dadosV?.comissao_amazon ?? 0)
   const fbaFull    = geralEfetivo?.fba_fulfillment ?? 0
   const fbaArm     = geralEfetivo?.fba_armazenagem ?? 0
   const mensal     = geralEfetivo?.mensalidade ?? 0
@@ -538,8 +552,13 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
                 </div>
                 <div className="divide-y divide-slate-100 px-5">
                   <DRELinha label="Receita Bruta" valor={rec} cor="text-emerald-600"
-                    sub={`${dadosV.unidades} un · ${dadosV.pedidos} pedidos`} />
-                  <DRELinha label="(−) Comissão Amazon" valor={-comissao} cor="text-red-500" indent />
+                    sub={usandoCompetencia
+                      ? `${dadosG!.unidades ?? '?'} un · ${dadosG!.pedidos ?? '?'} pedidos — Relatório de Pedidos (competência)`
+                      : `${dadosV.unidades} un · ${dadosV.pedidos} pedidos — Visualizar Transações (caixa)`} />
+                  <DRELinha label="(−) Comissão Amazon" valor={-comissao} cor="text-red-500" indent
+                    sub={usandoCompetencia
+                      ? `≈ ${(taxaComissaoCSV * 100).toFixed(1)}% — rateio proporcional do CSV`
+                      : undefined} />
                   {geralEfetivo && <DRELinha label="(−) FBA Fulfillment" valor={-fbaFull} cor="text-red-500" indent />}
                   {geralEfetivo && <DRELinha label="(−) Armazenagem FBA" valor={-fbaArm} cor="text-red-500" indent />}
                   {geralEfetivo && mensal > 0 && <DRELinha label="(−) Mensalidade Amazon" valor={-mensal} cor="text-red-500" indent />}
