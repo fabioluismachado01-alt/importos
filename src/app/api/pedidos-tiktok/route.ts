@@ -27,8 +27,11 @@ const COL = {
 }
 
 function n(v: unknown): number {
-  // Aceita "BRL 39,90", "39,90", "39.90"
   const s = String(v ?? '').replace(/BRL\s*/i, '').trim()
+  // Pré-processamento CSV converte para período decimal sem vírgula (ex: "39.90")
+  // Detecta: só dígitos/período, sem vírgula → parseFloat direto
+  if (/^\d+\.\d{1,2}$/.test(s)) return parseFloat(s) || 0
+  // Formato BR: vírgula = decimal, ponto = milhar (ex: "1.234,90" → 1234.90)
   return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0
 }
 
@@ -47,14 +50,34 @@ export async function POST(req: NextRequest) {
     let rows: unknown[][]
 
     if (isCsv) {
-      // csv-parse lida corretamente com campos multilinha e aspas escapadas (RFC 4180)
-      // que o XLSX falha quando o CSV do TikTok tem endereços com \n interno.
-      const text = buffer.toString('utf-8').replace(/^﻿/, '') // remove BOM se presente
+      // O CSV do TikTok Seller Center tem dois artefatos de exportação que quebram parsers RFC 4180:
+      // 1. Cada linha de pedido começa com " abrindo um campo-guarda-chuva que nunca fecha.
+      // 2. Valores monetários são duplamente quotados: ""BRL 39,90"" (quoted dentro de quoted).
+      // 3. IDs longos têm \t, (tab+vírgula) como separador em vez de só vírgula.
+      // Pré-processamento resolve os três antes de passar ao parser.
+      let text = buffer.toString('utf-8').replace(/^﻿/, '') // remove BOM
+
+      // Artefato 3: normaliza separador \t, → ,
+      text = text.replace(/\t,/g, ',')
+
+      // Artefato 2: converte ""BRL 1.234,90"" → BRL 1234.90 (período decimal, sem vírgula)
+      // Usar período como decimal evita que a vírgula decimal quebre o split por colunas.
+      // n() detecta o formato período e faz parseFloat direto.
+      text = text.replace(/""BRL\s+([\d.]*),([\d]{2})""/g, (_, int, dec) =>
+        'BRL ' + int.replace(/\./g, '') + '.' + dec
+      )
+
+      // Artefato 1: remove aspa de abertura do campo-guarda-chuva linha a linha.
+      // Só remove " quando seguida de dígito (Order ID) para preservar o header.
+      // Também remove a aspa de fechamento no fim de cada linha de dados.
+      text = text.replace(/^"(\d)/gm, '$1')
+      text = text.replace(/"(\r?\n|$)/gm, '$1')
+
       rows = parseCsv(text, {
-        relax_quotes: true,           // tolera aspas mal-fechadas
-        relax_column_count: true,     // tolera linhas com número diferente de colunas
+        relax_quotes: true,       // tolerância residual para aspas soltas
+        relax_column_count: true, // tolera linhas com número diferente de colunas
         skip_empty_lines: true,
-        cast: false,                  // mantém tudo como string (Order ID tem 19 dígitos)
+        cast: false,              // mantém tudo como string (Order ID tem 19 dígitos)
       }) as string[][]
     } else {
       const wb = XLSX.read(buffer, { type: 'buffer' })
