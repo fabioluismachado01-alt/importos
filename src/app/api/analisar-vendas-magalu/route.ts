@@ -40,8 +40,11 @@ function normalizarSku(sku: string): string {
   return sku.trim().toUpperCase().replace(/-M$/, '')
 }
 
+const STATUS_EXCLUIDOS = ['cancelad', 'estorno', 'solicitação de estorno']
+
 function isStatusValido(status: string): boolean {
-  return !status.toLowerCase().includes('cancelad')
+  const s = status.toLowerCase()
+  return !STATUS_EXCLUIDOS.some(ex => s.includes(ex))
 }
 
 export async function POST(req: NextRequest) {
