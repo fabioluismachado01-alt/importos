@@ -254,10 +254,11 @@ model faturamento_mes {
   desp_outras_taxas   Float @default(0)
 
   // Impostos
-  das_valor_calc  Float     @default(0)
-  das_valor_real  Float?
-  das_status      String    @default("PENDENTE")
-  das_vencimento  DateTime?
+  das_valor_calc      Float     @default(0)
+  das_valor_real      Float?
+  das_status          String    @default("PENDENTE")
+  das_vencimento      DateTime?
+  das_data_pagamento  DateTime?
 
   // Despesas fixas
   desp_pro_labore          Float @default(0)

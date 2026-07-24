@@ -584,7 +584,7 @@ export async function registrarPagamentoDAS(ano: number, mes: number, valorPago:
 
   const fat = await prisma.faturamento_mes.update({
     where: { workspace_id_ano_mes: { workspace_id: workspaceId, ano, mes } },
-    data: { das_valor_real: valorPago, das_status: 'PAGO' },
+    data: { das_valor_real: valorPago, das_status: 'PAGO', das_data_pagamento: dataPagamento },
   })
 
   // Recalcula o mês usando o DAS real informado — Lucro Bruto/Líquido,

@@ -498,7 +498,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
         <KPICard label="Lucro Bruto" value={formatCurrency(d.lucro_bruto)} color={d.lucro_bruto >= 0 ? 'blue' : 'red'} big />
         <KPICard label="Lucro Líquido" value={formatCurrency(d.lucro_liquido)} color={d.lucro_liquido >= 0 ? 'emerald' : 'red'} big />
         <KPICard label={`DAS (${(d.aliquota_simples > 1 ? d.aliquota_simples : d.aliquota_simples * 100).toFixed(2)}%)`} value={formatCurrency(d.das_valor_calc)} color="amber"
-          sub={d.das_status === 'PAGO' ? `Pago: ${formatCurrency(d.das_valor_real ?? 0)} em ${format(new Date(d.updated_at), 'dd/MM/yyyy', { locale: ptBR })}` : undefined} big />
+          sub={d.das_status === 'PAGO' ? `Pago: ${formatCurrency(d.das_valor_real ?? 0)} em ${format(new Date(d.das_data_pagamento ?? d.updated_at), 'dd/MM/yyyy', { locale: ptBR })}` : undefined} big />
       </div>
 
       {/* ── KPIs ROW 2: Gerenciais ── */}
