@@ -50,34 +50,57 @@ export async function POST(req: NextRequest) {
     let rows: unknown[][]
 
     if (isCsv) {
-      // O CSV do TikTok Seller Center tem dois artefatos de exportação que quebram parsers RFC 4180:
-      // 1. Cada linha de pedido começa com " abrindo um campo-guarda-chuva que nunca fecha.
-      // 2. Valores monetários são duplamente quotados: ""BRL 39,90"" (quoted dentro de quoted).
-      // 3. IDs longos têm \t, (tab+vírgula) como separador em vez de só vírgula.
-      // Pré-processamento resolve os três antes de passar ao parser.
+      // O CSV do TikTok Seller Center é estruturalmente malformado:
+      // 1. O campo de endereço do destinatário ocupa múltiplas linhas físicas (nome, tel, rua,
+      //    cidade/UF, CEP, país) sem fechar as aspas de guarda-chuva corretamente.
+      // 2. Campos monetários e de endereço são duplamente quotados: ""conteúdo"".
+      // 3. IDs longos têm \t, (tab+vírgula) como separador.
+      // 4. Campos vazios aparecem como ""\t"".
+      //
+      // Estratégia: agrupar linhas físicas por marcador de Order ID (linha que começa com
+      // aspas opcionais + 10+ dígitos), depois normalizar aspas e parsear cada registro.
       let text = buffer.toString('utf-8').replace(/^﻿/, '') // remove BOM
 
       // Artefato 3: normaliza separador \t, → ,
       text = text.replace(/\t,/g, ',')
 
-      // Artefato 2: converte ""BRL 1.234,90"" → BRL 1234.90 (período decimal, sem vírgula)
-      // Usar período como decimal evita que a vírgula decimal quebre o split por colunas.
-      // n() detecta o formato período e faz parseFloat direto.
-      text = text.replace(/""BRL\s+([\d.]*),([\d]{2})""/g, (_, int, dec) =>
-        'BRL ' + int.replace(/\./g, '') + '.' + dec
-      )
+      const physicalLines = text.split(/\r?\n/)
+      // Marcador de início de registro: aspas opcionais + Order ID numérico (10+ dígitos)
+      const ORDER_ID_RE = /^"?\d{10,}/
 
-      // Artefato 1: remove aspa de abertura do campo-guarda-chuva linha a linha.
-      // Só remove " quando seguida de dígito (Order ID) para preservar o header.
-      // Também remove a aspa de fechamento no fim de cada linha de dados.
-      text = text.replace(/^"(\d)/gm, '$1')
-      text = text.replace(/"(\r?\n|$)/gm, '$1')
+      // Agrupa linhas de continuação (endereço multi-linha) de volta ao registro principal.
+      // Linhas que não começam com Order ID são continuação do registro anterior — descartamos
+      // os dados de endereço pois receita/SKU/status já estão inteiramente na primeira linha.
+      const logicalLines: string[] = []
+      for (const line of physicalLines) {
+        if (ORDER_ID_RE.test(line)) {
+          logicalLines.push(line)
+        }
+        // linhas de continuação são descartadas (só contêm endereço, irrelevante para nós)
+      }
 
-      rows = parseCsv(text, {
-        relax_quotes: true,       // tolerância residual para aspas soltas
-        relax_column_count: true, // tolera linhas com número diferente de colunas
+      // Extrai o header (primeira linha do arquivo, não começa com dígito)
+      const headerLine = physicalLines.find(l => l.length > 0 && !ORDER_ID_RE.test(l)) ?? ''
+
+      // Normalização genérica de aspas duplas: ""qualquer conteúdo"" → o conteúdo sem aspas.
+      // Isso cobre BRL, endereços com vírgula, campos \t vazios, e qualquer outro padrão futuro.
+      // Feito depois do agrupamento para não interferir na detecção de Order ID.
+      const normalize = (line: string) =>
+        line
+          .replace(/^"(\d)/, '$1')               // remove aspa de abertura do guarda-chuva
+          .replace(/""\s*BRL\s+([\d.]*),([\d]{2})""/g, (_, int, dec) =>
+            'BRL ' + int.replace(/\./g, '') + '.' + dec)  // BRL: vírgula → período decimal
+          .replace(/""([^"]*)""/g, (_, inner) =>
+            '"' + inner.replace(/,/g, '‚') + '"') // outros campos duplamente-quotados: preserva vírgulas internas
+          // (‚ é U+201A SINGLE LOW-9 QUOTATION MARK — visualmente idêntico, nunca confundido com separador CSV)
+
+      const normalizedCsv = [headerLine, ...logicalLines.map(normalize)].join('\n')
+
+      rows = parseCsv(normalizedCsv, {
+        relax_quotes: true,
+        relax_column_count: true,
         skip_empty_lines: true,
-        cast: false,              // mantém tudo como string (Order ID tem 19 dígitos)
+        cast: false,
       }) as string[][]
     } else {
       const wb = XLSX.read(buffer, { type: 'buffer' })
