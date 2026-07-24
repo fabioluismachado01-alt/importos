@@ -39,6 +39,7 @@ interface DadosMes {
   desp_custo_produtos: number; desp_tarifas: number; desp_frete: number
   desp_fatura_ml: number; desp_outras_taxas: number; das_valor_calc: number
   das_valor_real: number | null; das_status: string; das_vencimento: Date | null
+  das_data_pagamento: Date | null
   updated_at: Date
   desp_pro_labore: number; desp_inss: number; desp_contabilidade: number
   desp_erp: number; desp_emprestimo: number; desp_aluguel: number
