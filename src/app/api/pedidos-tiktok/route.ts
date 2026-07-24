@@ -50,58 +50,67 @@ export async function POST(req: NextRequest) {
     let rows: unknown[][]
 
     if (isCsv) {
-      // O CSV do TikTok Seller Center é estruturalmente malformado:
-      // 1. O campo de endereço do destinatário ocupa múltiplas linhas físicas (nome, tel, rua,
-      //    cidade/UF, CEP, país) sem fechar as aspas de guarda-chuva corretamente.
-      // 2. Campos monetários e de endereço são duplamente quotados: ""conteúdo"".
-      // 3. IDs longos têm \t, (tab+vírgula) como separador.
-      // 4. Campos vazios aparecem como ""\t"".
+      // O TikTok Seller Center exporta CSVs em dois formatos distintos dependendo do mês:
       //
-      // Estratégia: agrupar linhas físicas por marcador de Order ID (linha que começa com
-      // aspas opcionais + 10+ dígitos), depois normalizar aspas e parsear cada registro.
-      let text = buffer.toString('utf-8').replace(/^﻿/, '') // remove BOM
+      // Formato A (RFC 4180 válido — Março, Abril, Junho e maioria dos meses):
+      //   Campo de endereço do destinatário contém quebras de linha reais corretamente
+      //   quotadas. Qualquer parser RFC 4180 com suporte a campos multi-linha lida bem.
+      //
+      // Formato B (malformado — detectado em Maio/2026):
+      //   Aspa de guarda-chuva fecha prematuramente logo após o nome do destinatário,
+      //   jogando as demais linhas do endereço para fora do campo. csv-parse falha com
+      //   "Quote Not Closed". Contém também ""BRL x,xx"" (duplo-quote em valores).
+      //
+      // Estratégia de duas camadas:
+      //   1. Tenta parse RFC 4180 nativo (sem pré-processamento) → resolve Formato A.
+      //   2. Se falhar (throw), cai no fallback de agrupamento por Order ID → resolve Formato B.
 
-      // Artefato 3: normaliza separador \t, → ,
-      text = text.replace(/\t,/g, ',')
+      const rawText = buffer.toString('utf-8').replace(/^﻿/, '') // remove BOM
 
-      const physicalLines = text.split(/\r?\n/)
-      // Marcador de início de registro: aspas opcionais + Order ID numérico (10+ dígitos)
-      const ORDER_ID_RE = /^"?\d{10,}/
+      // Camada 1: parse padrão RFC 4180 com suporte nativo a campos multi-linha
+      try {
+        rows = parseCsv(rawText, {
+          relax_column_count: true,
+          skip_empty_lines: true,
+          cast: false,
+        }) as string[][]
+      } catch {
+        // Camada 2: fallback para arquivos com aspa de guarda-chuva malformada (Formato B).
+        // Agrupa linhas físicas por marcador de Order ID: qualquer linha que não começa com
+        // aspas+dígitos é continuação do endereço multi-linha do registro anterior e é descartada
+        // (receita/SKU/status estão inteiramente na primeira linha de cada grupo).
+        let text = rawText
 
-      // Agrupa linhas de continuação (endereço multi-linha) de volta ao registro principal.
-      // Linhas que não começam com Order ID são continuação do registro anterior — descartamos
-      // os dados de endereço pois receita/SKU/status já estão inteiramente na primeira linha.
-      const logicalLines: string[] = []
-      for (const line of physicalLines) {
-        if (ORDER_ID_RE.test(line)) {
-          logicalLines.push(line)
+        // Normaliza separador \t, → ,
+        text = text.replace(/\t,/g, ',')
+
+        const physicalLines = text.split(/\r?\n/)
+        const ORDER_ID_RE = /^"?\d{10,}/
+        const headerLine = physicalLines.find(l => l.length > 0 && !ORDER_ID_RE.test(l)) ?? ''
+        const logicalLines: string[] = []
+        for (const line of physicalLines) {
+          if (ORDER_ID_RE.test(line)) logicalLines.push(line)
         }
-        // linhas de continuação são descartadas (só contêm endereço, irrelevante para nós)
+
+        // Normalização genérica de campos duplamente-quotados após agrupamento:
+        // ""BRL x,xx"" → BRL x.xx (período decimal para n() detectar)
+        // ""conteúdo com vírgula"" → conteúdo com vírgula substituída por ‚ (U+201A)
+        const normalize = (line: string) =>
+          line
+            .replace(/^"(\d)/, '$1')
+            .replace(/""\s*BRL\s+([\d.]*),([\d]{2})""/g, (_, int, dec) =>
+              'BRL ' + int.replace(/\./g, '') + '.' + dec)
+            .replace(/""([^"]*)""/g, (_, inner) =>
+              '"' + inner.replace(/,/g, '‚') + '"')
+
+        const normalizedCsv = [headerLine, ...logicalLines.map(normalize)].join('\n')
+        rows = parseCsv(normalizedCsv, {
+          relax_quotes: true,
+          relax_column_count: true,
+          skip_empty_lines: true,
+          cast: false,
+        }) as string[][]
       }
-
-      // Extrai o header (primeira linha do arquivo, não começa com dígito)
-      const headerLine = physicalLines.find(l => l.length > 0 && !ORDER_ID_RE.test(l)) ?? ''
-
-      // Normalização genérica de aspas duplas: ""qualquer conteúdo"" → o conteúdo sem aspas.
-      // Isso cobre BRL, endereços com vírgula, campos \t vazios, e qualquer outro padrão futuro.
-      // Feito depois do agrupamento para não interferir na detecção de Order ID.
-      const normalize = (line: string) =>
-        line
-          .replace(/^"(\d)/, '$1')               // remove aspa de abertura do guarda-chuva
-          .replace(/""\s*BRL\s+([\d.]*),([\d]{2})""/g, (_, int, dec) =>
-            'BRL ' + int.replace(/\./g, '') + '.' + dec)  // BRL: vírgula → período decimal
-          .replace(/""([^"]*)""/g, (_, inner) =>
-            '"' + inner.replace(/,/g, '‚') + '"') // outros campos duplamente-quotados: preserva vírgulas internas
-          // (‚ é U+201A SINGLE LOW-9 QUOTATION MARK — visualmente idêntico, nunca confundido com separador CSV)
-
-      const normalizedCsv = [headerLine, ...logicalLines.map(normalize)].join('\n')
-
-      rows = parseCsv(normalizedCsv, {
-        relax_quotes: true,
-        relax_column_count: true,
-        skip_empty_lines: true,
-        cast: false,
-      }) as string[][]
     } else {
       const wb = XLSX.read(buffer, { type: 'buffer' })
       const wsName = wb.SheetNames.find(s => s.toLowerCase().includes('ordersku') || s.toLowerCase().includes('order'))
