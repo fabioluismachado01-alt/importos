@@ -87,12 +87,12 @@ const DEFAULT_BANK: BankDetails = {
 // ─── Utilitários ─────────────────────────────────────────────────────────────
 
 function fmtUsd(v: number, decimals?: number) {
-  if (decimals !== undefined) return v.toFixed(decimals)
-  // auto: usa 2 casas mínimo, mas expande se o valor tiver dígitos significativos além da 2ª casa
-  const s = v.toString()
+  const n = Number(v) || 0
+  if (decimals !== undefined) return n.toFixed(decimals)
+  const s = n.toString()
   const dot = s.indexOf('.')
   const actualDecimals = dot >= 0 ? s.length - dot - 1 : 0
-  return v.toFixed(Math.max(2, Math.min(actualDecimals, 6)))
+  return n.toFixed(Math.max(2, Math.min(actualDecimals, 6)))
 }
 
 function totalQty(item: DocItem) {
@@ -266,8 +266,13 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
   function setBnk<K extends keyof BankDetails>(k: K, v: string) { setBank(p => ({ ...p, [k]: v })) }
   function setLog<K extends keyof SimplifiedLogistics>(k: K, v: number) { setLogistics(p => ({ ...p, [k]: v })) }
 
+  const NUMERIC_ITEM_FIELDS = new Set<keyof DocItem>(['qtyCtns','unitPerCtn','price','h','w','l','netWeightUnit','grossWeightCtn'])
   function setItem(id: number, field: keyof DocItem, val: string | number) {
-    setItems(prev => prev.map(i => i.id === id ? { ...i, [field]: typeof val === 'string' ? val : (parseFloat(String(val)) || 0) } : i))
+    setItems(prev => prev.map(i => {
+      if (i.id !== id) return i
+      const stored = NUMERIC_ITEM_FIELDS.has(field) ? (parseFloat(String(val)) || 0) : val
+      return { ...i, [field]: stored }
+    }))
   }
 
   function switchMode(m: ImportMode) {
