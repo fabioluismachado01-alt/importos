@@ -312,12 +312,22 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
         @media print {
           @page { size: A4 landscape; margin: 0; }
           body * { visibility: hidden; }
+          /* Invoice / PI / CI — single page, fixed position */
           .a4-doc, .a4-doc * { visibility: visible; }
           .a4-doc {
             position: fixed !important;
             top: 0 !important; left: 0 !important;
             margin: 0 !important; box-shadow: none !important;
             width: 297mm !important; min-height: 210mm !important;
+            padding: 8mm !important;
+          }
+          /* Shipping Mark — multi-page, natural flow */
+          .sm-doc, .sm-doc * { visibility: visible; }
+          .sm-doc {
+            position: absolute !important;
+            top: 0 !important; left: 0 !important;
+            margin: 0 !important;
+            width: 297mm !important;
             padding: 8mm !important;
           }
         }
@@ -908,7 +918,7 @@ function ShippingMarkDoc({ importer, items, docInfo, supplier, mode, logistics }
   )
 
   return (
-    <div style={{ padding: '8mm', background: '#fff' }}>
+    <div className="sm-doc" style={{ background: '#fff' }}>
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(2, 1fr)',
@@ -923,9 +933,12 @@ function ShippingMarkDoc({ importer, items, docInfo, supplier, mode, logistics }
               <div style={{ fontWeight: 900, fontSize: '10px', textTransform: 'uppercase', borderBottom: '1.5px solid #000', paddingBottom: '4px', marginBottom: '6px', letterSpacing: '-0.01em' }}>
                 SHIPPING MARK
               </div>
+              {/* Product em destaque — fornecedora precisa identificar a caixa sem ambiguidade */}
+              <div style={{ background: '#000', color: '#fff', fontWeight: 900, fontSize: '11px', textTransform: 'uppercase', padding: '4px 6px', marginBottom: '6px', letterSpacing: '0.02em', textAlign: 'center' }}>
+                {item.productName || 'PRODUCT'}
+              </div>
               {row('Importer', importer.name || 'IMPORTER NAME')}
               {row('CNPJ', importer.taxId || '-')}
-              {row('Product', item.productName || '-')}
               {row('Quantity per CTN', `${item.unitPerCtn.toLocaleString('pt-BR')} ${item.unit || 'UN'}`)}
               {row('Net Weight', `${netPerCtn} kg`)}
               {row('Gross Weight', `${grossPerCtn} kg`)}
