@@ -310,9 +310,13 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
       {/* CSS de impressão — força A4 Paisagem */}
       <style>{`
         @media print {
+          /* Invoice/PI/CI/PL — A4 paisagem, margem zero, posição fixa numa página */
           @page { size: A4 landscape; margin: 0; }
+          /* Shipping Mark — A4 retrato, margens de 12,7mm (0,5"), fluxo natural multi-página */
+          @page sm-page { size: A4 portrait; margin: 12.7mm; }
+
           body * { visibility: hidden; }
-          /* Invoice / PI / CI — single page, fixed position */
+
           .a4-doc, .a4-doc * { visibility: visible; }
           .a4-doc {
             position: fixed !important;
@@ -321,14 +325,14 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
             width: 297mm !important; min-height: 210mm !important;
             padding: 8mm !important;
           }
-          /* Shipping Mark — multi-page, natural flow */
+
           .sm-doc, .sm-doc * { visibility: visible; }
           .sm-doc {
+            page: sm-page;
             position: absolute !important;
             top: 0 !important; left: 0 !important;
             margin: 0 !important;
-            width: 297mm !important;
-            padding: 8mm !important;
+            width: 100% !important;
           }
         }
       `}</style>
@@ -898,59 +902,63 @@ function ShippingMarkDoc({ importer, items, docInfo, supplier, mode, logistics }
       : tGW > 0 ? (tGW / tV).toFixed(1) : '—'
   }
 
+  // Agrupa 2 cards por página (A4 retrato com margens 12,7mm → altura útil ~271mm ÷ ~115mm/card ≈ 2/página)
+  const pages: Array<typeof labels> = []
+  for (let i = 0; i < labels.length; i += 2) pages.push(labels.slice(i, i + 2))
+
   const card: React.CSSProperties = {
     border: '2px solid #000',
-    padding: '10px 14px',
+    padding: '14px 18px',
+    marginBottom: '14px',
     pageBreakInside: 'avoid',
     breakInside: 'avoid',
-    fontSize: '9px',
-    lineHeight: 1.6,
-    fontFamily: 'Inter, Arial, sans-serif',
+    fontSize: '13pt',
+    lineHeight: 1.7,
+    fontFamily: 'Arial, sans-serif',
     color: '#000',
     background: '#fff',
   }
 
   const row = (label: string, value: string) => (
-    <div style={{ display: 'flex', gap: '4px' }}>
-      <span style={{ fontWeight: 900, minWidth: '130px', flexShrink: 0 }}>{label}:</span>
+    <div style={{ display: 'flex', gap: '8px' }}>
+      <span style={{ fontWeight: 900, minWidth: '200px', flexShrink: 0 }}>{label}:</span>
       <span>{value || '-'}</span>
     </div>
   )
 
   return (
     <div className="sm-doc" style={{ background: '#fff' }}>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(2, 1fr)',
-        gap: '12px',
-      }}>
-        {labels.map(({ item, cartonNo, totalCtns }) => {
-          const netPerCtn   = netPerCtnMap(item)
-          const grossPerCtn = grossPerCtnMap(item)
-          const pad = (n: number) => String(n).padStart(2, '0')
-          return (
-            <div key={`${item.id}-${cartonNo}`} style={card}>
-              <div style={{ fontWeight: 900, fontSize: '10px', textTransform: 'uppercase', borderBottom: '1.5px solid #000', paddingBottom: '4px', marginBottom: '6px', letterSpacing: '-0.01em' }}>
-                SHIPPING MARK
+      {pages.map((page, pageIdx) => (
+        <div key={pageIdx} style={{ pageBreakAfter: pageIdx < pages.length - 1 ? 'always' : 'auto' }}>
+          {page.map(({ item, cartonNo, totalCtns }) => {
+            const netPerCtn   = netPerCtnMap(item)
+            const grossPerCtn = grossPerCtnMap(item)
+            const pad = (n: number) => String(n).padStart(2, '0')
+            return (
+              <div key={`${item.id}-${cartonNo}`} style={card}>
+                {/* Título centralizado ~17pt com separador */}
+                <div style={{ fontWeight: 900, fontSize: '17pt', textTransform: 'uppercase', textAlign: 'center', borderBottom: '2px solid #000', paddingBottom: '8px', marginBottom: '12px', letterSpacing: '0.05em' }}>
+                  SHIPPING MARK
+                </div>
+                {/* Produto em banner preto — identificação primária para fiscalização */}
+                <div style={{ background: '#000', color: '#fff', fontWeight: 900, fontSize: '14pt', textTransform: 'uppercase', padding: '6px 12px', marginBottom: '12px', textAlign: 'center', letterSpacing: '0.03em' }}>
+                  {item.productName || 'PRODUCT'}
+                </div>
+                {row('Importer', importer.name || 'IMPORTER NAME')}
+                {row('CNPJ', importer.taxId || '-')}
+                {row('Quantity per CTN', `${Number(item.unitPerCtn).toLocaleString('pt-BR')} ${item.unit || 'UN'}`)}
+                {row('Net Weight', `${netPerCtn} kg`)}
+                {row('Gross Weight', `${grossPerCtn} kg`)}
+                {row('Invoice Nº', docInfo.invoiceNo || '-')}
+                {row('Carton Number', `${pad(cartonNo)} of ${pad(totalCtns)}`)}
+                {row('Validity', docInfo.validity || 'Indeterminate')}
+                {row('Composition', item.material || '-')}
+                {row('Origin', `Made in ${supplier.originCountry || 'China'}`)}
               </div>
-              {/* Product em destaque — fornecedora precisa identificar a caixa sem ambiguidade */}
-              <div style={{ background: '#000', color: '#fff', fontWeight: 900, fontSize: '11px', textTransform: 'uppercase', padding: '4px 6px', marginBottom: '6px', letterSpacing: '0.02em', textAlign: 'center' }}>
-                {item.productName || 'PRODUCT'}
-              </div>
-              {row('Importer', importer.name || 'IMPORTER NAME')}
-              {row('CNPJ', importer.taxId || '-')}
-              {row('Quantity per CTN', `${item.unitPerCtn.toLocaleString('pt-BR')} ${item.unit || 'UN'}`)}
-              {row('Net Weight', `${netPerCtn} kg`)}
-              {row('Gross Weight', `${grossPerCtn} kg`)}
-              {row('Invoice Nº', docInfo.invoiceNo || '-')}
-              {row('Carton Number', `${pad(cartonNo)} of ${pad(totalCtns)}`)}
-              {row('Validity', docInfo.validity || 'Indeterminate')}
-              {row('Composition', item.material || '-')}
-              {row('Origin', `Made in ${supplier.originCountry || 'China'}`)}
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      ))}
     </div>
   )
 }
