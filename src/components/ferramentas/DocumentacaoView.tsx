@@ -329,7 +329,9 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
           .sm-doc, .sm-doc * { visibility: visible; }
           .sm-doc {
             page: sm-page;
-            display: block;
+            position: absolute !important;
+            top: 0 !important; left: 0 !important;
+            margin: 0 !important;
             width: 100% !important;
           }
         }
