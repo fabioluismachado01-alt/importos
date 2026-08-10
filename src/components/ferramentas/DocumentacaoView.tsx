@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect, useTransition } from 'react'
+import { useState, useMemo, useEffect, useTransition, useRef } from 'react'
 import { usePersistedState } from '@/hooks/usePersistedState'
 import { cn } from '@/lib/utils'
 import { Plus, Trash2, Printer, ChevronDown, ChevronUp, Building2, Search, Save, X, Package, RotateCcw } from 'lucide-react'
@@ -166,6 +166,24 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
   const [editingForn, setEditingForn] = useState<Partial<FornDB> | null>(null)
   const [fornMsg, setFornMsg] = useState('')
   const [isPending, startTransition] = useTransition()
+  const smRef = useRef<HTMLDivElement>(null)
+
+  function handlePrint() {
+    if (docType === 'SM' && smRef.current) {
+      const win = window.open('', '_blank', 'width=800,height=600')
+      if (!win) { window.print(); return }
+      win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+        @page { size: A4 portrait; margin: 12.7mm; }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: #fff; }
+      </style></head><body>${smRef.current.innerHTML}</body></html>`)
+      win.document.close()
+      win.focus()
+      setTimeout(() => { win.print(); win.close() }, 250)
+    } else {
+      window.print()
+    }
+  }
 
   useEffect(() => {
     getFornecedores().then(setFornecedores)
@@ -326,14 +344,7 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
             padding: 8mm !important;
           }
 
-          .sm-doc, .sm-doc * { visibility: visible; }
-          .sm-doc {
-            page: sm-page;
-            position: absolute !important;
-            top: 0 !important; left: 0 !important;
-            margin: 0 !important;
-            width: 100% !important;
-          }
+          /* SM prints via JS window.open — no CSS rules needed here */
         }
       `}</style>
 
@@ -357,7 +368,7 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
               {novoDocConfirm ? 'Confirmar Limpeza?' : 'Novo Documento'}
             </button>
             <button
-              onClick={() => window.print()}
+              onClick={handlePrint}
               className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-600/20 transition-all"
             >
               <Printer className="w-4 h-4" />
@@ -584,6 +595,7 @@ export function DocumentacaoView({ workspaceId = 'default' }: { workspaceId?: st
                 <ShippingMarkDoc
                   importer={importer} items={items} docInfo={docInfo}
                   supplier={supplier} mode={mode} logistics={logistics}
+                  printRef={smRef}
                 />
               ) : (
                 <A4Doc
@@ -850,9 +862,10 @@ function InvoiceTable({ items, docType, totals, grandTotal, freight }: {
 
 // ─── Shipping Mark ───────────────────────────────────────────────────────────
 
-function ShippingMarkDoc({ importer, items, docInfo, supplier, mode, logistics }: {
+function ShippingMarkDoc({ importer, items, docInfo, supplier, mode, logistics, printRef }: {
   importer: Importer; items: DocItem[]; docInfo: DocInfo; supplier: Supplier
   mode: ImportMode; logistics: SimplifiedLogistics
+  printRef?: React.RefObject<HTMLDivElement | null>
 }) {
   // Fonte de verdade do nº de caixas depende do modo
   // Formal: item.qtyCtns por item | Simplificada: logistics.totalVolumes dividido entre itens
@@ -903,46 +916,45 @@ function ShippingMarkDoc({ importer, items, docInfo, supplier, mode, logistics }
   }
 
   const row = (label: string, value: string) => (
-    <div style={{ display: 'flex', gap: '8px' }}>
-      <span style={{ fontWeight: 900, minWidth: '200px', flexShrink: 0 }}>{label}:</span>
+    <div style={{ display: 'flex', gap: '6px' }}>
+      <span style={{ fontWeight: 700, minWidth: '160px', flexShrink: 0 }}>{label}:</span>
       <span>{value || '-'}</span>
     </div>
   )
 
   return (
-    <div className="sm-doc" style={{ background: '#fff' }}>
+    <div ref={printRef} style={{ background: '#fff', fontFamily: 'Arial, sans-serif' }}>
       {labels.map(({ item, cartonNo, totalCtns }, idx) => {
         const netPerCtn   = netPerCtnMap(item)
         const grossPerCtn = grossPerCtnMap(item)
         const pad = (n: number) => String(n).padStart(2, '0')
-        // Start a new page before every 3rd, 5th, 7th... card (idx 2, 4, 6...)
-        // pageBreakBefore never stretches the previous card — it just starts this one on a fresh page
-        const startsNewPage = idx > 0 && idx % 2 === 0
-        // Gap between the two cards on the same page; no margin after the 2nd card (sits at page bottom)
-        const isFirstOfPair = idx % 2 === 0
+        // 3 cards per page: break before every 4th, 7th, 10th... (idx 3, 6, 9...)
+        const startsNewPage = idx > 0 && idx % 3 === 0
+        // Gap after 1st and 2nd card of each triple; no gap after 3rd
+        const posInGroup = idx % 3  // 0, 1, or 2
         const hasNext = idx < labels.length - 1
+        const needsGap = posInGroup < 2 && hasNext
         return (
           <div
             key={`${item.id}-${cartonNo}`}
             style={{
               border: '2px solid #000',
-              padding: '14px 18px',
-              marginBottom: isFirstOfPair && hasNext ? '8mm' : '0',
+              padding: '8px 12px',
+              marginBottom: needsGap ? '5mm' : '0',
               pageBreakBefore: startsNewPage ? 'always' : 'auto',
               breakBefore: startsNewPage ? 'page' : 'auto',
               pageBreakInside: 'avoid',
               breakInside: 'avoid',
-              fontSize: '13pt',
-              lineHeight: 1.7,
-              fontFamily: 'Arial, sans-serif',
+              fontSize: '11pt',
+              lineHeight: 1.15,
               color: '#000',
               background: '#fff',
             }}
           >
-            <div style={{ fontWeight: 900, fontSize: '17pt', textTransform: 'uppercase', textAlign: 'center', borderBottom: '2px solid #000', paddingBottom: '8px', marginBottom: '12px', letterSpacing: '0.05em' }}>
+            <div style={{ fontWeight: 900, fontSize: '15pt', textTransform: 'uppercase', textAlign: 'center', borderBottom: '2px solid #000', paddingBottom: '4px', marginBottom: '6px', letterSpacing: '0.05em' }}>
               SHIPPING MARK
             </div>
-            <div style={{ background: '#000', color: '#fff', fontWeight: 900, fontSize: '14pt', textTransform: 'uppercase', padding: '6px 12px', marginBottom: '12px', textAlign: 'center', letterSpacing: '0.03em' }}>
+            <div style={{ background: '#000', color: '#fff', fontWeight: 900, fontSize: '12pt', textTransform: 'uppercase', padding: '3px 10px', marginBottom: '6px', textAlign: 'center', letterSpacing: '0.03em' }}>
               {item.productName || 'PRODUCT'}
             </div>
             {row('Importer', importer.name || 'IMPORTER NAME')}
