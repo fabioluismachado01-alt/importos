@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { cn, formatCurrency, getMesNome, getDiasParaVencimento } from '@/lib/utils'
-import { removeLancamento, registrarPagamentoDAS, cancelarPagamentoDAS, fecharMes, configurarMes, editarLancamento, replicarDespesasFixas } from '@/actions/finance'
+import { removeLancamento, registrarPagamentoDAS, cancelarPagamentoDAS, fecharMes, reabrirMes, configurarMes, editarLancamento, replicarDespesasFixas } from '@/actions/finance'
 import { CATEGORIA_LABELS, CANAIS_RECEITA } from '@/engines/finance'
 import { LancamentoModal } from './LancamentoModal'
 import { DASPagamentoForm } from './DASPagamentoForm'
@@ -265,6 +265,12 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
     catch (e) { alert(e instanceof Error ? e.message : 'Erro ao fechar mês') }
   }
 
+  async function handleReabrirMes() {
+    if (!confirm(`Reabrir ${nomeMes} ${ano}? O mês voltará a aceitar edições.`)) return
+    try { await reabrirMes(ano, mes); router.refresh() }
+    catch (e) { alert(e instanceof Error ? e.message : 'Erro ao reabrir mês') }
+  }
+
   const receitas = d.lancamentos.filter(l => l.tipo === 'RECEITA')
   const despVariaveis = d.lancamentos.filter(l => l.tipo === 'DESPESA_VARIAVEL')
   const despFixas = d.lancamentos.filter(l => l.tipo === 'DESPESA_FIXA')
@@ -367,9 +373,14 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
             <FileDown className="w-3.5 h-3.5 mr-1.5" /> PDF
           </Button>
           {d.fechado ? (
-            <Button variant="outline" size="sm" onClick={handleReplicarFixas} disabled={isPending}>
-              Replicar fixas
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={handleReplicarFixas} disabled={isPending}>
+                Replicar fixas
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleReabrirMes} className="text-amber-700 border-amber-300 hover:bg-amber-50">
+                <Lock className="w-3.5 h-3.5 mr-1.5" /> Reabrir mês
+              </Button>
+            </>
           ) : (
             <>
               <Button variant="outline" size="sm" onClick={() => setShowConfigModal(true)}>
@@ -405,12 +416,18 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
                   <FileDown className="w-3.5 h-3.5" /> Exportar PDF
                 </button>
                 {d.fechado ? (
+                  <>
+                  <button
+                    onClick={() => { handleReabrirMes(); setShowMoreMenu(false) }}
+                    className="w-full text-left px-3 py-2 text-xs font-medium rounded-lg hover:bg-amber-50 flex items-center gap-2 text-amber-700">
+                    <Lock className="w-3.5 h-3.5" /> Reabrir mês
+                  </button>
                   <button
                     onClick={() => { handleReplicarFixas(); setShowMoreMenu(false) }}
                     className="w-full text-left px-3 py-2 text-xs font-medium rounded-lg hover:bg-slate-50 flex items-center gap-2 text-slate-700">
                     Replicar fixas
                   </button>
-                ) : (
+                  </>) : (
                   <>
                     <button
                       onClick={() => { setShowConfigModal(true); setShowMoreMenu(false) }}

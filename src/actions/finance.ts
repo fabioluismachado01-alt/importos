@@ -647,6 +647,22 @@ export async function fecharMes(ano: number, mes: number) {
 }
 
 // =============================================
+// REABRIR MÊS
+// =============================================
+
+export async function reabrirMes(ano: number, mes: number) {
+  const { workspaceId } = await getAuthContext()
+
+  await prisma.faturamento_mes.update({
+    where: { workspace_id_ano_mes: { workspace_id: workspaceId, ano, mes } },
+    data: { fechado: false },
+  })
+
+  revalidatePath(`/faturamento/${ano}/${mes}`)
+  revalidatePath('/faturamento')
+}
+
+// =============================================
 // BUSCAR DADOS
 // =============================================
 
