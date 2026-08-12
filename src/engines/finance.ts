@@ -186,6 +186,9 @@ export function calcularKPIs(
       // Estorno de tarifa: reduz desp_tarifas (valor sempre positivo no banco)
       // Não entra em receita_total — é crédito dentro do bloco de despesas
       kpis.desp_tarifas -= l.valor
+    } else if (l.tipo !== 'DAS') {
+      // tipo não reconhecido: lançamento some de todos os totais sem erro visível
+      console.error(`[finance] tipo desconhecido ignorado — tipo="${l.tipo}" cat="${l.categoria}" val=${l.valor} data=${new Date(l.data).toISOString().split('T')[0]}`)
     }
   }
 

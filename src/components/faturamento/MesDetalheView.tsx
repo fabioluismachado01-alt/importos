@@ -80,7 +80,10 @@ function AnalisePorCanal({ lancamentos, receita_total }: {
     const despesas = lancamentos
       .filter(l => (l.tipo === 'DESPESA_VARIAVEL' || l.tipo === 'DESPESA_FIXA') && l.descricao.includes(c.tag))
       .reduce((s, l) => s + l.valor, 0)
-    const lucro = receita - despesas
+    const creditos = lancamentos
+      .filter(l => l.tipo === 'RECUPERACAO_DESPESA' && l.descricao.includes(c.tag))
+      .reduce((s, l) => s + l.valor, 0)
+    const lucro = receita - despesas + creditos
     const margem = receita > 0 ? (lucro / receita) * 100 : 0
     const participacao = receita_total > 0 ? (receita / receita_total) * 100 : 0
     return { ...c, receita, despesas, lucro, margem, participacao }
@@ -317,7 +320,8 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
   const canalAnalise: CanalAnalise[] = ANALISE_TAGS.map(c => {
     const rec  = d.lancamentos.filter(l => l.tipo === 'RECEITA' && l.canal === c.key).reduce((s, l) => s + l.valor, 0)
     const desp = d.lancamentos.filter(l => (l.tipo === 'DESPESA_VARIAVEL' || l.tipo === 'DESPESA_FIXA') && l.descricao.includes(c.tag)).reduce((s, l) => s + l.valor, 0)
-    const luc  = rec - desp
+    const cred = d.lancamentos.filter(l => l.tipo === 'RECUPERACAO_DESPESA' && l.descricao.includes(c.tag)).reduce((s, l) => s + l.valor, 0)
+    const luc  = rec - desp + cred
     return { key: c.key, label: c.label, cor: c.cor, receita: rec, despesas: desp, lucro: luc,
       margem: rec > 0 ? (luc / rec) * 100 : 0,
       participacao: receitaTotal > 0 ? (rec / receitaTotal) * 100 : 0,
