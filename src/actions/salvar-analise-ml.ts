@@ -196,13 +196,14 @@ export async function salvarAnaliseML(dados: DadosConsolidadosML) {
     })
   }
 
-  // ── Estornos (lançado separado como crédito) ─────────────────────
-  // estornos já vem negativo (cancelamento de tarifa = dinheiro que voltou)
+  // ── Estornos (crédito dentro do bloco de despesas) ───────────────
+  // estornos vem negativo (cancelamento de tarifa = dinheiro que voltou)
+  // RECUPERACAO_DESPESA: valor positivo no banco, engine subtrai de desp_tarifas
   if (dados.estornos < 0) {
     lancamentos.push({
       faturamento_id: fat.id,
-      tipo: 'RECEITA',            // entra como receita pois é dinheiro que voltou
-      categoria: 'OUTRO_CANAL',
+      tipo: 'RECUPERACAO_DESPESA',
+      categoria: 'TARIFAS',
       descricao: 'ML Import — Estornos e Cancelamentos de Tarifas',
       valor: Math.abs(dados.estornos),
       data: primeiroDia,

@@ -182,6 +182,10 @@ export function calcularKPIs(
       if (l.categoria === 'PREVIDENCIA_PRIVADA') continue
       const campo = CATEGORIA_FIXA_MAP[l.categoria]
       if (campo) (kpis[campo] as number) += l.valor
+    } else if (l.tipo === 'RECUPERACAO_DESPESA') {
+      // Estorno de tarifa: reduz desp_tarifas (valor sempre positivo no banco)
+      // Não entra em receita_total — é crédito dentro do bloco de despesas
+      kpis.desp_tarifas -= l.valor
     }
   }
 

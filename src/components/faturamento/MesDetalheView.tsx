@@ -272,7 +272,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
   }
 
   const receitas = d.lancamentos.filter(l => l.tipo === 'RECEITA')
-  const despVariaveis = d.lancamentos.filter(l => l.tipo === 'DESPESA_VARIAVEL')
+  const despVariaveis = d.lancamentos.filter(l => l.tipo === 'DESPESA_VARIAVEL' || l.tipo === 'RECUPERACAO_DESPESA')
   const despFixas = d.lancamentos.filter(l => l.tipo === 'DESPESA_FIXA')
 
   // Receita por canal calculada dos lançamentos (fonte única — independe dos campos pré-computados)
@@ -1037,6 +1037,13 @@ function GrupoLancamentos({ titulo, lancamentos, total, totalLabel, cor, fechado
                       <X className="w-3 h-3" />
                     </button>
                   </div>
+                </div>
+              ) : l.tipo === 'RECUPERACAO_DESPESA' ? (
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">CRÉDITO</span>
+                  <span className="text-xs font-black font-mono text-emerald-600">
+                    +{formatCurrency(l.valor)}
+                  </span>
                 </div>
               ) : (
                 <span className={cn('text-xs font-black font-mono shrink-0', COR[cor])}>
