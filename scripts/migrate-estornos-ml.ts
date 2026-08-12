@@ -27,17 +27,14 @@ const DRY_RUN = !process.argv.includes('--execute')
 
 function toDecimalAliq(v: number) { return v > 1 ? v / 100 : v }
 
-async function recalcularMesLocal(faturamentoId: string, ano: number, mes: number) {
-  const lancamentos = await prisma.lancamento.findMany({
-    where: { faturamento_id: faturamentoId, status: 'CONFIRMADO' },
-    select: { tipo: true, categoria: true, canal: true, valor: true, data: true, descricao: true },
-  })
+async function lerConfigMes(fatId: string) {
   const fat = await prisma.faturamento_mes.findUnique({
-    where: { id: faturamentoId },
+    where: { id: fatId },
     select: {
       aliquota_simples: true, meta_mes: true, dias_no_mes: true,
       dlr_modo: true, dlr_percentual_custom: true, dlr_valor_fixo: true,
       das_valor_real: true, das_status: true,
+      lucro_bruto: true, lucro_liquido: true,
     },
   })
   const empresa = await prisma.empresa.findUnique({
@@ -47,19 +44,26 @@ async function recalcularMesLocal(faturamentoId: string, ano: number, mes: numbe
     where: { workspace_id: WORKSPACE_ID }, orderBy: { ano: 'desc' },
     select: { percentual_dlr_socio: true, percentual_reinvestimento: true, formula_previdencia: true },
   })
-
-  const config = {
-    aliquota_simples: toDecimalAliq(fat?.aliquota_simples ?? empresa?.aliquota_simples ?? 8),
-    percentual_dlr_socio: finConfig?.percentual_dlr_socio ?? 0.5,
-    percentual_reinvestimento: finConfig?.percentual_reinvestimento ?? 0.5,
-    formula_previdencia: finConfig?.formula_previdencia ?? 'PRO_LABORE*0.20+LUCRO_BRUTO*0.11',
-    dias_no_mes: fat?.dias_no_mes ?? 30,
-    meta_mes: fat?.meta_mes ?? 0,
-    dlr_modo: (fat?.dlr_modo as 'PERCENTUAL' | 'FIXO') ?? 'PERCENTUAL',
-    dlr_percentual_custom: fat?.dlr_percentual_custom ?? undefined,
-    dlr_valor_fixo: fat?.dlr_valor_fixo ?? undefined,
-    das_valor_real: fat?.das_status === 'PAGO' ? fat?.das_valor_real : null,
+  return {
+    fat,
+    config: {
+      aliquota_simples: toDecimalAliq(fat?.aliquota_simples ?? empresa?.aliquota_simples ?? 8),
+      percentual_dlr_socio: finConfig?.percentual_dlr_socio ?? 0.5,
+      percentual_reinvestimento: finConfig?.percentual_reinvestimento ?? 0.5,
+      formula_previdencia: finConfig?.formula_previdencia ?? 'PRO_LABORE*0.20+LUCRO_BRUTO*0.11',
+      dias_no_mes: fat?.dias_no_mes ?? 30,
+      meta_mes: fat?.meta_mes ?? 0,
+      das_valor_real: fat?.das_status === 'PAGO' ? fat?.das_valor_real : null,
+    } as const,
   }
+}
+
+async function recalcularMesLocal(fatId: string, ano: number, mes: number) {
+  const lancamentos = await prisma.lancamento.findMany({
+    where: { faturamento_id: fatId, status: 'CONFIRMADO' },
+    select: { tipo: true, categoria: true, canal: true, valor: true, data: true, descricao: true },
+  })
+  const { fat, config } = await lerConfigMes(fatId)
 
   const PEDIDOS_RE = /(\d+)\s+pedidos?/i
   let total_pedidos = 0
@@ -76,7 +80,7 @@ async function recalcularMesLocal(faturamentoId: string, ano: number, mes: numbe
   const anoVenc = mes === 12 ? ano + 1 : ano
 
   await prisma.faturamento_mes.update({
-    where: { id: faturamentoId },
+    where: { id: fatId },
     data: {
       receita_total: kpis.receita_total, receita_ml: kpis.receita_ml,
       receita_magalu: kpis.receita_magalu, receita_casas_bahia: kpis.receita_casas_bahia,
@@ -97,7 +101,6 @@ async function recalcularMesLocal(faturamentoId: string, ano: number, mes: numbe
       lucro_bruto: kpis.lucro_bruto, lucro_liquido: kpis.lucro_liquido,
       margem_contribuicao: kpis.margem_contribuicao, break_even: kpis.break_even,
       roas_atual: kpis.roas_atual,
-      // dias_com_venda: não alterado (mesmo lógica que recalcularMes em finance.ts)
     },
   })
 
@@ -112,9 +115,10 @@ async function main() {
   console.log()
 
   // ── SELECT ANTES ───────────────────────────────────────────────────────────
+  // "faturamento" é o nome da relação em lancamento → faturamento_mes
   const alvo = await prisma.lancamento.findMany({
     where: {
-      faturamento_mes: { workspace_id: WORKSPACE_ID, ano: 2026, mes: { gte: 1, lte: 7 } },
+      faturamento: { workspace_id: WORKSPACE_ID, ano: 2026, mes: { gte: 1, lte: 7 } },
       tipo: 'RECEITA',
       categoria: 'OUTRO_CANAL',
       descricao: 'ML Import — Estornos e Cancelamentos de Tarifas',
@@ -122,9 +126,9 @@ async function main() {
     },
     select: {
       id: true, tipo: true, categoria: true, canal: true, descricao: true, valor: true, data: true, status: true,
-      faturamento_mes: { select: { id: true, ano: true, mes: true, das_valor_real: true, das_status: true } },
+      faturamento: { select: { id: true, ano: true, mes: true, das_valor_real: true, das_status: true } },
     },
-    orderBy: { faturamento_mes: { mes: 'asc' } },
+    orderBy: { faturamento: { mes: 'asc' } },
   })
 
   console.log(`ANTES: ${alvo.length} linha(s) encontrada(s)`)
@@ -132,7 +136,7 @@ async function main() {
   console.log('--- ESTADO ATUAL ---')
   console.log(`${'id'.padEnd(28)} ${'mes'.padEnd(7)} ${'tipo'.padEnd(20)} ${'cat'.padEnd(14)} ${'canal'.padEnd(14)} ${'valor'.padStart(10)}`)
   for (const r of alvo) {
-    const mes = `${r.faturamento_mes.ano}/${String(r.faturamento_mes.mes).padStart(2,'0')}`
+    const mes = `${r.faturamento.ano}/${String(r.faturamento.mes).padStart(2,'0')}`
     console.log(`${r.id.padEnd(28)} ${mes.padEnd(7)} ${r.tipo.padEnd(20)} ${r.categoria.padEnd(14)} ${String(r.canal ?? 'null').padEnd(14)} ${r.valor.toFixed(2).padStart(10)}`)
   }
 
@@ -150,7 +154,60 @@ async function main() {
   console.log('  valor:     inalterado (já positivo)')
   console.log()
 
+  // ── DRY-RUN: simula efeito no lucro por mês ──────────────────────────────
   if (DRY_RUN) {
+    console.log('=== SIMULAÇÃO DE IMPACTO (dry-run) ===')
+    console.log('Validação chave: todos os meses têm das_valor_real preenchido,')
+    console.log('portanto a migração é reclassificação pura — lucro deve ser IDÊNTICO antes/depois.')
+    console.log()
+
+    const mesesAlvo = [...new Set(alvo.map(r => r.faturamento.id))].map(id => {
+      const r = alvo.find(a => a.faturamento.id === id)!
+      return { fatId: id, ano: r.faturamento.ano, mes: r.faturamento.mes }
+    }).sort((a, b) => a.mes - b.mes)
+
+    let algumLucroDiverge = false
+
+    for (const m of mesesAlvo) {
+      const { fat, config } = await lerConfigMes(m.fatId)
+
+      const lancsAntes = await prisma.lancamento.findMany({
+        where: { faturamento_id: m.fatId, status: 'CONFIRMADO' },
+        select: { id: true, tipo: true, categoria: true, canal: true, valor: true, data: true },
+      })
+
+      const estornoIds = new Set(alvo.filter(r => r.faturamento.id === m.fatId).map(r => r.id))
+      const lancsDepois = lancsAntes.map(l =>
+        estornoIds.has(l.id)
+          ? { ...l, tipo: 'RECUPERACAO_DESPESA', categoria: 'TARIFAS', canal: 'MERCADO_LIVRE' }
+          : l
+      )
+
+      const kpisAntes  = calcularKPIs(lancsAntes  as any, config as any)
+      const kpisDepois = calcularKPIs(lancsDepois as any, config as any)
+
+      const lbDiff = Math.abs(kpisDepois.lucro_bruto - kpisAntes.lucro_bruto)
+      const llDiff = Math.abs(kpisDepois.lucro_liquido - kpisAntes.lucro_liquido)
+      const lucroOk = lbDiff < 0.02 && llDiff < 0.02
+
+      if (!lucroOk) algumLucroDiverge = true
+
+      console.log(`  ${m.ano}/${String(m.mes).padStart(2,'0')}:`)
+      console.log(`    Receita  ANTES=${kpisAntes.receita_total.toFixed(2).padStart(11)}   DEPOIS=${kpisDepois.receita_total.toFixed(2).padStart(11)}`)
+      console.log(`    Tarifas  ANTES=${kpisAntes.desp_tarifas.toFixed(2).padStart(11)}   DEPOIS=${kpisDepois.desp_tarifas.toFixed(2).padStart(11)}`)
+      console.log(`    DAS      ANTES=${kpisAntes.das_valor_calc.toFixed(2).padStart(11)}   DEPOIS=${kpisDepois.das_valor_calc.toFixed(2).padStart(11)}  (das_valor_real=${config.das_valor_real?.toFixed(2) ?? 'null — pendente'})`)
+      console.log(`    LucroBrt ANTES=${kpisAntes.lucro_bruto.toFixed(2).padStart(11)}   DEPOIS=${kpisDepois.lucro_bruto.toFixed(2).padStart(11)}  ${lucroOk ? '✓ IDÊNTICO' : `✗ DIFERE ${lbDiff.toFixed(4)}`}`)
+      console.log(`    LucroLiq ANTES=${kpisAntes.lucro_liquido.toFixed(2).padStart(11)}   DEPOIS=${kpisDepois.lucro_liquido.toFixed(2).padStart(11)}  ${lucroOk ? '✓ IDÊNTICO' : `✗ DIFERE ${llDiff.toFixed(4)}`}`)
+      console.log()
+    }
+
+    if (algumLucroDiverge) {
+      console.log('⚠️  ATENÇÃO: algum mês tem lucro divergente — verifique antes de executar.')
+    } else {
+      console.log('✓  Validação OK: lucro_bruto e lucro_liquido idênticos em todos os meses.')
+      console.log('   (reclassificação pura — DAS real absorve a diferença de receita)')
+    }
+    console.log()
     console.log('DRY-RUN: NENHUMA ESCRITA. Rode com --execute para persistir.')
     await prisma.$disconnect()
     return
@@ -163,9 +220,9 @@ async function main() {
     tipo: r.tipo,
     categoria: r.categoria,
     canal: r.canal,
-    faturamento_mes_id: r.faturamento_mes.id,
-    mes: r.faturamento_mes.mes,
-    ano: r.faturamento_mes.ano,
+    faturamento_mes_id: r.faturamento.id,
+    mes: r.faturamento.mes,
+    ano: r.faturamento.ano,
   }))
   fs.writeFileSync(rollbackPath, JSON.stringify(rollbackData, null, 2))
   console.log(`ROLLBACK salvo em: ${rollbackPath}`)
@@ -183,29 +240,30 @@ async function main() {
   // ── SELECT DEPOIS ─────────────────────────────────────────────────────────
   const depois = await prisma.lancamento.findMany({
     where: { id: { in: ids } },
-    select: { id: true, tipo: true, categoria: true, canal: true, valor: true,
-      faturamento_mes: { select: { ano: true, mes: true } } },
-    orderBy: { faturamento_mes: { mes: 'asc' } },
+    select: {
+      id: true, tipo: true, categoria: true, canal: true, valor: true,
+      faturamento: { select: { ano: true, mes: true } }
+    },
+    orderBy: { faturamento: { mes: 'asc' } },
   })
   console.log('--- ESTADO APÓS UPDATE ---')
   console.log(`${'id'.padEnd(28)} ${'mes'.padEnd(7)} ${'tipo'.padEnd(22)} ${'cat'.padEnd(10)} ${'canal'.padEnd(14)} ${'valor'.padStart(10)}`)
   for (const r of depois) {
-    const mes = `${r.faturamento_mes.ano}/${String(r.faturamento_mes.mes).padStart(2,'0')}`
+    const mes = `${r.faturamento.ano}/${String(r.faturamento.mes).padStart(2,'0')}`
     console.log(`${r.id.padEnd(28)} ${mes.padEnd(7)} ${r.tipo.padEnd(22)} ${r.categoria.padEnd(10)} ${String(r.canal ?? 'null').padEnd(14)} ${r.valor.toFixed(2).padStart(10)}`)
   }
 
   // ── RECALCULAR CADA MÊS ──────────────────────────────────────────────────
-  const mesesAfetados = [...new Set(alvo.map(r => r.faturamento_mes.id))].map(id => {
-    const r = alvo.find(a => a.faturamento_mes.id === id)!
-    return { id, ano: r.faturamento_mes.ano, mes: r.faturamento_mes.mes,
-             das_valor_real: r.faturamento_mes.das_valor_real, das_status: r.faturamento_mes.das_status }
+  const mesesAfetados = [...new Set(alvo.map(r => r.faturamento.id))].map(id => {
+    const r = alvo.find(a => a.faturamento.id === id)!
+    return { id, ano: r.faturamento.ano, mes: r.faturamento.mes,
+             das_valor_real: r.faturamento.das_valor_real, das_status: r.faturamento.das_status }
   }).sort((a, b) => a.mes - b.mes)
 
   console.log()
   console.log('--- RECALCULANDO KPIs ---')
   for (const m of mesesAfetados) {
     const { kpis, das_valor_real, das_status } = await recalcularMesLocal(m.id, m.ano, m.mes)
-    // Verifica que das_valor_real e das_status não foram alterados (não estão no update)
     const fatPosRecalc = await prisma.faturamento_mes.findUnique({
       where: { id: m.id },
       select: { das_valor_real: true, das_status: true },
@@ -222,10 +280,8 @@ async function main() {
   }
 
   console.log()
-  console.log('Migração concluída. Arquivo de rollback disponível em:')
+  console.log('Migração concluída. Arquivo de rollback:')
   console.log(`  ${rollbackPath}`)
-  console.log()
-  console.log('Para reverter: UPDATE lancamento SET tipo=\'RECEITA\', categoria=\'OUTRO_CANAL\', canal=null WHERE id IN (...ids do rollback.json...)')
 
   await prisma.$disconnect()
 }
