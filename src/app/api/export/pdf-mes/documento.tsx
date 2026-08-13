@@ -95,7 +95,7 @@ export function PDFDocumento({ fat, canaisData, outrosLancamentos, mesNome, ano,
     (f.desp_erp||0)+(f.desp_emprestimo||0)+(f.desp_aluguel||0)+(f.desp_pagina_ml||0)+(f.desp_fixas_outras||0)
   const totalVarComDAS = (f.desp_armazenagem||0)+(f.desp_ads_ml||0)+(f.desp_ads_outros||0)+
     (f.desp_custo_produtos||0)+(f.desp_tarifas||0)+(f.desp_frete||0)+(f.desp_fatura_ml||0)+
-    (f.desp_outras_taxas||0)+(f.das_valor_calc||0)
+    (f.desp_outras_taxas||0)+(f.desp_outras||0)+(f.das_valor_calc||0)
   const margemLiq = (f.receita_total||0) > 0 ? ((f.lucro_liquido||0)/(f.receita_total||0))*100 : 0
   const cmvPerc   = (f.receita_total||0) > 0 ? ((f.desp_custo_produtos||0)/(f.receita_total||0))*100 : 0
 
@@ -122,6 +122,7 @@ export function PDFDocumento({ fat, canaisData, outrosLancamentos, mesNome, ano,
     { l:'Frete',                  v:f.desp_frete||0 },
     { l:'Fatura ML',              v:f.desp_fatura_ml||0 },
     { l:'Outras Taxas',           v:f.desp_outras_taxas||0 },
+    { l:'Outras (não reconhecida)',v:f.desp_outras||0 },
     { l:'DAS',                    v:f.das_valor_calc||0 },
   ].filter(c=>c.v>0)
 

@@ -37,7 +37,7 @@ interface DadosMes {
   receita_tiktok: number; receita_presencial: number; receita_outros: number
   desp_armazenagem: number; desp_ads_ml: number; desp_ads_outros: number
   desp_custo_produtos: number; desp_tarifas: number; desp_frete: number
-  desp_fatura_ml: number; desp_outras_taxas: number; das_valor_calc: number
+  desp_fatura_ml: number; desp_outras_taxas: number; desp_outras: number; das_valor_calc: number
   das_valor_real: number | null; das_status: string; das_vencimento: Date | null
   das_data_pagamento: Date | null
   updated_at: Date
@@ -211,7 +211,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
     d.desp_erp + d.desp_emprestimo + d.desp_aluguel + d.desp_pagina_ml + d.desp_fixas_outras +
     d.desp_previdencia_privada
   const totalVarSemDAS = d.desp_armazenagem + d.desp_ads_ml + d.desp_ads_outros +
-    d.desp_custo_produtos + d.desp_tarifas + d.desp_frete + d.desp_fatura_ml + d.desp_outras_taxas
+    d.desp_custo_produtos + d.desp_tarifas + d.desp_frete + d.desp_fatura_ml + d.desp_outras_taxas + d.desp_outras
   const totalAds = d.desp_ads_ml + d.desp_ads_outros
   const metaPorc = d.meta_mes > 0 ? Math.min((d.receita_total / d.meta_mes) * 100, 100) : 0
 
@@ -689,6 +689,9 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
               <PainelLinha label="Frete"             value={-d.desp_frete}          cor="red" />
               <PainelLinha label="Fatura ML"         value={-d.desp_fatura_ml}      cor="red" />
               <PainelLinha label="Outras Taxas"      value={-d.desp_outras_taxas}   cor="red" />
+              {d.desp_outras > 0 && (
+                <PainelLinha label="⚠ Outras (cat. não reconhecida)" value={-d.desp_outras} cor="red" />
+              )}
               <PainelLinha label="DAS"               value={-d.das_valor_calc}      cor="amber" />
 
               <Separator className="my-2" />

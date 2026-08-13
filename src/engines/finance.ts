@@ -70,6 +70,7 @@ export interface KPIsMes {
   desp_frete: number
   desp_fatura_ml: number
   desp_outras_taxas: number
+  desp_outras: number           // bucket para categorias variáveis não reconhecidas
 
   das_valor_calc: number
 
@@ -150,7 +151,7 @@ export function calcularKPIs(
     receita_amazon: 0, receita_shopee: 0, receita_tiktok: 0, receita_presencial: 0,
     receita_outros: 0,
     desp_armazenagem: 0, desp_ads_ml: 0, desp_ads_outros: 0, desp_custo_produtos: 0,
-    desp_tarifas: 0, desp_frete: 0, desp_fatura_ml: 0, desp_outras_taxas: 0,
+    desp_tarifas: 0, desp_frete: 0, desp_fatura_ml: 0, desp_outras_taxas: 0, desp_outras: 0,
     das_valor_calc: 0,
     desp_pro_labore: 0, desp_inss: 0, desp_contabilidade: 0, desp_erp: 0,
     desp_emprestimo: 0, desp_aluguel: 0, desp_pagina_ml: 0,
@@ -175,13 +176,23 @@ export function calcularKPIs(
       else kpis.receita_outros += l.valor
     } else if (l.tipo === 'DESPESA_VARIAVEL') {
       const campo = CATEGORIA_VARIAVEL_MAP[l.categoria]
-      if (campo) (kpis[campo] as number) += l.valor
+      if (campo) {
+        (kpis[campo] as number) += l.valor
+      } else {
+        kpis.desp_outras += l.valor
+        console.error(`[finance] DESPESA_VARIAVEL categoria não reconhecida → desp_outras | cat="${l.categoria}" val=${l.valor} data=${new Date(l.data).toISOString().split('T')[0]}`)
+      }
     } else if (l.tipo === 'DESPESA_FIXA') {
       // Previdência Privada: IGNORADA nos lançamentos (calculada pela fórmula)
       // Isso garante que nunca haverá dupla contagem
       if (l.categoria === 'PREVIDENCIA_PRIVADA') continue
       const campo = CATEGORIA_FIXA_MAP[l.categoria]
-      if (campo) (kpis[campo] as number) += l.valor
+      if (campo) {
+        (kpis[campo] as number) += l.valor
+      } else {
+        kpis.desp_fixas_outras += l.valor
+        console.error(`[finance] DESPESA_FIXA categoria não reconhecida → desp_fixas_outras | cat="${l.categoria}" val=${l.valor} data=${new Date(l.data).toISOString().split('T')[0]}`)
+      }
     } else if (l.tipo === 'RECUPERACAO_DESPESA') {
       // Estorno de tarifa: reduz desp_tarifas (valor sempre positivo no banco)
       // Não entra em receita_total — é crédito dentro do bloco de despesas
@@ -205,7 +216,7 @@ export function calcularKPIs(
   kpis.total_despesas_variaveis =
     kpis.desp_armazenagem + kpis.desp_ads_ml + kpis.desp_ads_outros +
     kpis.desp_custo_produtos + kpis.desp_tarifas + kpis.desp_frete +
-    kpis.desp_fatura_ml + kpis.desp_outras_taxas + kpis.das_valor_calc
+    kpis.desp_fatura_ml + kpis.desp_outras_taxas + kpis.desp_outras + kpis.das_valor_calc
 
   kpis.total_despesas_fixas =
     kpis.desp_pro_labore + kpis.desp_inss + kpis.desp_contabilidade +
@@ -404,6 +415,7 @@ export const CATEGORIA_LABELS: Record<string, string> = {
   ARMAZENAGEM: 'Armazenagem', ADS_ML: 'Ads Mercado Livre', ADS_OUTROS: 'Ads Outras Plataformas',
   CUSTO_PRODUTOS: 'Custo com Produtos', TARIFAS: 'Tarifas Marketplaces',
   FRETE: 'Frete', FATURA_ML: 'Fatura Mercado Livre', OUTRAS_TAXAS: 'Outras Taxas',
+  OUTRAS: 'Outras Despesas Variáveis',
   PRO_LABORE: 'Pró Labore', INSS: 'INSS', CONTABILIDADE: 'Contabilidade',
   ERP: 'ERP Mensal', EMPRESTIMO: 'Empréstimo', ALUGUEL: 'Aluguel',
   PAGINA_ML: 'Página Oficial ML', PREVIDENCIA_PRIVADA: 'Previdência Privada',

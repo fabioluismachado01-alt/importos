@@ -38,6 +38,7 @@ export async function getImpostosData(): Promise<ImpostosPageData> {
     desp_frete: true,
     desp_fatura_ml: true,
     desp_outras_taxas: true,
+    desp_outras: true,
     desp_pro_labore: true,
     desp_inss: true,
     desp_contabilidade: true,
@@ -84,6 +85,7 @@ export async function getImpostosData(): Promise<ImpostosPageData> {
       + (fatRef.desp_frete ?? 0)
       + (fatRef.desp_fatura_ml ?? 0)
       + (fatRef.desp_outras_taxas ?? 0)
+      + (fatRef.desp_outras ?? 0)
       + (fatRef.desp_pro_labore ?? 0)
       + (fatRef.desp_inss ?? 0)
       + (fatRef.desp_contabilidade ?? 0)

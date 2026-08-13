@@ -252,6 +252,7 @@ model faturamento_mes {
   desp_frete          Float @default(0)
   desp_fatura_ml      Float @default(0)
   desp_outras_taxas   Float @default(0)
+  desp_outras         Float @default(0)
 
   // Impostos
   das_valor_calc      Float     @default(0)
