@@ -35,7 +35,7 @@ export async function salvarAnaliseShopee(dados: DadosShopee) {
   const mesVenc = mes === 12 ? 1 : mes + 1
   const anoVenc = mes === 12 ? ano + 1 : ano
   const vencDas = new Date(anoVenc, mesVenc - 1, 20)
-  const primeiroDia = new Date(ano, mes - 1, 1)
+  const primeiroDia = new Date(Date.UTC(ano, mes - 1, 1, 12, 0, 0))
 
   const fat = await prisma.faturamento_mes.upsert({
     where: { workspace_id_ano_mes: { workspace_id: workspaceId, ano, mes } },

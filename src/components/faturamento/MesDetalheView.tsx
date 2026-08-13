@@ -239,7 +239,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
   }
   async function handleEdit(id: string, updates: { valor: number; data: string; descricao: string }) {
     startTransition(async () => {
-      try { await editarLancamento(id, { valor: updates.valor, data: new Date(updates.data), descricao: updates.descricao }); router.refresh() }
+      try { await editarLancamento(id, { valor: updates.valor, data: new Date(updates.data + 'T12:00:00Z'), descricao: updates.descricao }); router.refresh() }
       catch (e) { alert(e instanceof Error ? e.message : 'Erro ao editar lançamento') }
     })
   }
@@ -826,7 +826,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
                   <div>
                     <p className="text-xs font-medium text-slate-700">{l.descricao}</p>
                     <p className="text-[9px] text-slate-400">
-                      {l.categoria} · {new Date(l.data).toLocaleDateString('pt-BR')}
+                      {l.categoria} · {new Date(l.data).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                     </p>
                   </div>
                   <span className="text-xs font-black font-mono text-emerald-600">{formatCurrency(l.valor)}</span>
@@ -864,7 +864,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
                     <div className="min-w-0 flex-1 mr-4">
                       <p className="text-xs font-medium text-slate-700 truncate">{l.descricao}</p>
                       <p className="text-[9px] text-slate-400">
-                        {l.tipo.replace('DESPESA_', '').replace('_', ' ')} · {l.categoria} · {new Date(l.data).toLocaleDateString('pt-BR')}
+                        {l.tipo.replace('DESPESA_', '').replace('_', ' ')} · {l.categoria} · {new Date(l.data).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                       </p>
                     </div>
                     <span className={cn('text-xs font-black font-mono shrink-0',

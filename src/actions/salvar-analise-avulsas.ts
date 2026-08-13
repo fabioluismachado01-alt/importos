@@ -25,7 +25,7 @@ export async function salvarAnaliseAvulsas(dados: AvulsasPayload): Promise<{ ok:
     const mesVenc = mes === 12 ? 1 : mes + 1
     const anoVenc = mes === 12 ? ano + 1 : ano
     const vencDas = new Date(anoVenc, mesVenc - 1, 20)
-    const primeiroDia = new Date(ano, mes - 1, 1)
+    const primeiroDia = new Date(Date.UTC(ano, mes - 1, 1, 12, 0, 0))
 
     const empresa = await prisma.empresa.findUnique({
       where: { workspace_id: workspaceId }, select: { aliquota_simples: true },
