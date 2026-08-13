@@ -963,6 +963,7 @@ function GrupoLancamentos({ titulo, lancamentos, total, totalLabel, cor, fechado
   function iniciarEdicao(l: Lancamento) {
     setEditandoId(l.id)
     setNovoValor(l.valor.toFixed(2))
+    // INVARIANTE: datas são gravadas em T12:00:00Z — seguro em UTC-11..UTC+12, evita mismatch SSR/browser
     setNovaData(format(new Date(l.data), 'yyyy-MM-dd'))
     setNovaDescricao(l.descricao)
   }
