@@ -742,7 +742,7 @@ function A4Doc({ docType, mode, supplier, importer, docInfo, bank, items, totals
         <div><b>INCOTERMS:</b> {docInfo.incoterms || '-'}</div>
         <div><b>INVOICE Nº:</b> {docInfo.invoiceNo || '-'}</div>
         {mode === 'formal' && <div><b>PL Nº:</b> {docInfo.plNo || '-'}</div>}
-        {(docType === 'PI' || docType === 'CI') && docInfo.payTerms && <div><b>PAYMENT:</b> {docInfo.payTerms}</div>}
+        {(docType === 'PI' || docType === 'CI') && docInfo.payTerms?.trim() && <div><b>PAYMENT:</b> {docInfo.payTerms.trim()}</div>}
         <div><b>MODE:</b> {docInfo.importMode || '-'}</div>
         <div><b>CURRENCY:</b> USD</div>
       </div>
