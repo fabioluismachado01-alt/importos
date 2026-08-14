@@ -155,8 +155,14 @@ export async function POST(req: NextRequest) {
     // Header real do ML está na linha 5 (índice 5); dados a partir da linha 6
     const COL = resolverColunas(rows[5] as unknown[])
 
-    // Busca custos do catálogo de produtos e UF da empresa
-    const [produtosRaw, empresa] = await Promise.all([
+    // Busca custos do catálogo de produtos, histórico de vigência e UF da empresa
+    const competenciaData = new Date(Date.UTC(
+      anoExplicito ?? new Date().getUTCFullYear(),
+      (mesExplicito ?? new Date().getUTCMonth() + 1) - 1,
+      1
+    ))
+
+    const [produtosRaw, empresa, historicoRaw] = await Promise.all([
       prisma.produto_catalogo.findMany({
         where: { workspace_id: workspaceId },
         select: { sku_interno: true, nome: true, custo_brl: true, sku_alias: true },
@@ -165,15 +171,51 @@ export async function POST(req: NextRequest) {
         where: { workspace_id: workspaceId },
         select: { estado_uf: true },
       }),
+      // Custo vigente por produto_id na competência: maior data_inicio <= 1º do mês
+      prisma.$queryRaw<{ sku_interno: string; custo_brl: number }[]>`
+        SELECT DISTINCT ON (p.sku_interno)
+          p.sku_interno,
+          h.custo_brl
+        FROM produto_custo_historico h
+        JOIN produto_catalogo p ON p.id = h.produto_id
+        WHERE h.workspace_id = ${workspaceId}
+          AND p.sku_interno IS NOT NULL
+          AND h.data_inicio <= ${competenciaData}::date
+        ORDER BY p.sku_interno, h.data_inicio DESC
+      `.catch(() => [] as { sku_interno: string; custo_brl: number }[]),
     ])
+
     const produtos = produtosRaw
     const ufOrigem = (empresa?.estado_uf ?? 'SP') as UF
+
+    // Custo por SKU via produto_custo_historico (custo vigente na competência)
+    const custoVigente = new Map(historicoRaw.map(h => [h.sku_interno, h.custo_brl]))
+
+    // Construção do custoPorSku em duas passagens:
+    // 1ª passagem: entradas próprias (sku_interno) — nunca sobrescritas por alias
+    // 2ª passagem: aliases — só preenchem SKUs ainda não definidos
     const custoPorSku: Record<string, number> = {}
-    produtos.forEach(p => {
-      if (!p.custo_brl) return
-      if (p.sku_interno) custoPorSku[p.sku_interno] = p.custo_brl
-      if (p.sku_alias) p.sku_alias.split(',').forEach(a => { const s = a.trim(); if (s) custoPorSku[s] = p.custo_brl! })
-    })
+    for (const p of produtos) {
+      if (!p.sku_interno) continue
+      // Usa histórico vigente se existir, senão custo_brl do catálogo
+      const custo = custoVigente.get(p.sku_interno) ?? p.custo_brl
+      if (!custo) continue
+      custoPorSku[p.sku_interno] = custo
+    }
+    for (const p of produtos) {
+      if (!p.sku_alias) continue
+      const custo = custoVigente.get(p.sku_interno ?? '') ?? p.custo_brl
+      if (!custo) continue
+      p.sku_alias.split(',').forEach(a => {
+        const s = a.trim()
+        if (s && !(s in custoPorSku)) {
+          // SKU de alias nunca tem histórico próprio — usa custo do produto pai
+          custoPorSku[s] = custo
+        } else if (s && s in custoPorSku && custoPorSku[s] !== custo) {
+          console.warn(`[analisar-ml] colisão de alias: SKU "${s}" já definido por entrada própria; alias de "${p.sku_interno}" ignorado`)
+        }
+      })
+    }
 
     // ─── PERÍODO DE COMPETÊNCIA (mês civil: dia 01 ao último dia) ──────────
     // O Relatório de Vendas do ML deve ser exportado pelo mês civil (não pelo
