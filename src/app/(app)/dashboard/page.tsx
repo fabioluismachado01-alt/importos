@@ -43,6 +43,7 @@ export default async function DashboardPage() {
   const lucroMes   = temPlanilha ? (mesData?.lucro_bruto   ?? 0) : (provisional?.lucro_bruto   ?? 0)
   const lucroLiq   = temPlanilha ? (mesData?.lucro_liquido ?? 0) : (provisional?.lucro_liquido  ?? 0)
   const dasMes     = temPlanilha ? (mesData?.das_valor_calc ?? 0) : (provisional?.das_valor_calc ?? 0)
+  const cmvMes     = temPlanilha ? (mesData?.desp_custo_produtos ?? 0) : (provisional?.desp_custo_produtos ?? 0)
   const dasStatus  = mesData?.das_status ?? 'PENDENTE'
 
   // Acumulado do ano (inclui provisório do mês atual se aplicável)
@@ -168,11 +169,10 @@ export default async function DashboardPage() {
             <p className={`text-2xl font-black font-mono ${lucroLiq >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
               {brl(lucroLiq)}
             </p>
-            {receitaMes > 0 && (() => {
-              const custoTotal = receitaMes - lucroLiq
-              const roi = custoTotal > 0 ? (lucroLiq / custoTotal) * 100 : 0
+            {cmvMes > 0 && (() => {
+              const roi = (lucroLiq / cmvMes) * 100
               return (
-                <p className={`text-[9px] mt-1 font-bold ${roi >= 15 ? 'text-emerald-600' : roi >= 5 ? 'text-amber-600' : 'text-red-500'}`}>
+                <p className={`text-[9px] mt-1 font-bold ${roi >= 30 ? 'text-emerald-600' : roi >= 10 ? 'text-amber-600' : 'text-red-500'}`}>
                   ROI {roi.toFixed(1)}%
                 </p>
               )

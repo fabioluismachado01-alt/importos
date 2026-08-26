@@ -609,8 +609,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
           <div>
             <p className="text-[9px] text-slate-300 uppercase tracking-widest">ROI (excl. Ads)</p>
             {(() => {
-              const custoTotal = totalFat - totalLucro
-              const roi = custoTotal > 0 ? (totalLucro / custoTotal) * 100 : 0
+              const roi = totalCustos > 0 ? (totalLucro / totalCustos) * 100 : 0
               return (
                 <p className={`text-lg font-black ${roi >= 15 ? 'text-emerald-400' : roi >= 5 ? 'text-amber-400' : 'text-red-400'}`}>
                   {pct(roi)}

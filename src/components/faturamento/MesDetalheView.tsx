@@ -340,8 +340,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
 
   // KPIs derivados para o 2º row
   const margemLiquida   = receitaTotal > 0 ? (d.lucro_liquido / receitaTotal) * 100 : 0
-  const custoTotalMes   = d.receita_total - d.lucro_liquido
-  const roiMes          = custoTotalMes > 0 ? (d.lucro_liquido / custoTotalMes) * 100 : 0
+  const roiMes          = d.desp_custo_produtos > 0 ? (d.lucro_liquido / d.desp_custo_produtos) * 100 : 0
   const cmvPerc         = receitaTotal > 0 ? (d.desp_custo_produtos / receitaTotal) * 100 : 0
   const maiorCanal      = canalAnalise[0]
   const canalMaisRental = [...canalAnalise].sort((a, b) => b.margem - a.margem)[0]
@@ -538,7 +537,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
             label="ROI"
             value={`${roiMes.toFixed(1)}%`}
             color={roiMes >= 15 ? 'emerald' : roiMes >= 5 ? 'amber' : 'red'}
-            sub={`Lucro Líquido ÷ Custo ${formatCurrency(custoTotalMes)}`}
+            sub={`Lucro Líquido ÷ CMV ${formatCurrency(d.desp_custo_produtos)}`}
           />
           <KPICard
             label="Canal Mais Rentável"

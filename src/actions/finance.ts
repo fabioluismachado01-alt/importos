@@ -838,6 +838,7 @@ export type ProvisionalMes = {
   lucro_bruto: number
   lucro_liquido: number
   das_valor_calc: number
+  desp_custo_produtos: number
   pedidos: number
   fonte: 'ML_API'
 }
@@ -880,5 +881,5 @@ export async function getProvisionalMesAtual(): Promise<ProvisionalMes | null> {
   const lucro_bruto    = receita_total - tarifas - frete - custo_produtos
   const lucro_liquido  = lucro_bruto - das_valor_calc
 
-  return { receita_total, lucro_bruto, lucro_liquido, das_valor_calc, pedidos: pedidos.length, fonte: 'ML_API' }
+  return { receita_total, lucro_bruto, lucro_liquido, das_valor_calc, desp_custo_produtos: custo_produtos, pedidos: pedidos.length, fonte: 'ML_API' }
 }

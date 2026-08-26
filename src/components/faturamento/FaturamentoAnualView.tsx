@@ -9,7 +9,7 @@ import { cn, formatCurrency, getMesNome, getDiasParaVencimento } from '@/lib/uti
 
 interface MesData {
   id: string; ano: number; mes: number
-  receita_total: number; lucro_bruto: number; lucro_liquido: number
+  receita_total: number; lucro_bruto: number; lucro_liquido: number; desp_custo_produtos: number
   das_valor_calc: number; das_status: string; das_vencimento: Date | null
   margem_contribuicao: number; fechado: boolean
   aliquota_simples: number
@@ -192,10 +192,7 @@ function MesCard({ mes, ano, dados, isAtual, isFuturo }: {
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-slate-400 font-bold uppercase">ROI</span>
                 <span className="text-xs font-bold text-slate-600">
-                  {(() => {
-                    const custo = dados!.receita_total - dados!.lucro_liquido
-                    return custo > 0 ? (dados!.lucro_liquido / custo * 100).toFixed(1) : '0.0'
-                  })()}%
+                  {dados!.desp_custo_produtos > 0 ? (dados!.lucro_liquido / dados!.desp_custo_produtos * 100).toFixed(1) : '0.0'}%
                 </span>
               </div>
               {dados?.das_status && DAS_STATUS[dados.das_status] && (
