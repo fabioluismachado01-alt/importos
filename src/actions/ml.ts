@@ -5,6 +5,7 @@ import { getAuthContext } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getMLAuthUrl, refreshMLToken, getMLOrders, getMLUserItemIds, getMLItemsBatch } from '@/lib/ml-api'
 import { estimarAliquotasFuturas } from '@/actions/aliquotas'
+import { encryptToken, decryptToken } from '@/lib/crypto'
 
 // ─── URL de conexão OAuth ─────────────────────────────────────────────────────
 
@@ -56,16 +57,16 @@ export async function getTokenValido(conexaoId: string, workspaceId: string): Pr
 
   // Token ainda válido (margem de 5 min)
   if (conn.expires_at > new Date(Date.now() + 5 * 60 * 1000)) {
-    return conn.access_token
+    return decryptToken(conn.access_token)
   }
 
   // Renova
-  const tokens = await refreshMLToken(conn.refresh_token)
+  const tokens = await refreshMLToken(decryptToken(conn.refresh_token))
   await prisma.ml_conexao.update({
     where: { id: conexaoId },
     data: {
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
+      access_token: encryptToken(tokens.access_token),
+      refresh_token: encryptToken(tokens.refresh_token),
       expires_at: new Date(Date.now() + tokens.expires_in * 1000),
     },
   })

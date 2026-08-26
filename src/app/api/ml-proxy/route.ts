@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { refreshMLToken } from '@/lib/ml-api'
+import { encryptToken, decryptToken } from '@/lib/crypto'
 
 const ML_BASE = 'https://api.mercadolibre.com'
 const ALLOWED = /^\/(items|users|sites\/MLB\/(search|listing_prices)|products)/
@@ -15,20 +16,20 @@ async function getToken(): Promise<string | null> {
   // Renova se expira em menos de 5 min
   if (conn.expires_at && conn.expires_at < new Date(Date.now() + 5 * 60_000)) {
     try {
-      const t = await refreshMLToken(conn.refresh_token)
+      const t = await refreshMLToken(decryptToken(conn.refresh_token))
       await prisma.ml_conexao.update({
         where: { id: conn.id },
         data: {
-          access_token: t.access_token,
-          refresh_token: t.refresh_token,
+          access_token: encryptToken(t.access_token),
+          refresh_token: encryptToken(t.refresh_token),
           expires_at: new Date(Date.now() + t.expires_in * 1000),
         },
       })
       return t.access_token
-    } catch { return conn.access_token }
+    } catch { return decryptToken(conn.access_token) }
   }
 
-  return conn.access_token
+  return decryptToken(conn.access_token)
 }
 
 export async function GET(req: NextRequest) {

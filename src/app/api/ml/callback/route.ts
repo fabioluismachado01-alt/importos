@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { exchangeMLCode, getMLUser } from '@/lib/ml-api'
 import { prisma } from '@/lib/prisma'
+import { encryptToken } from '@/lib/crypto'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -41,14 +42,14 @@ export async function GET(req: NextRequest) {
         workspace_id: workspaceId,
         ml_user_id: String(mlUser.id),
         nickname: mlUser.nickname,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
+        access_token: encryptToken(tokens.access_token),
+        refresh_token: encryptToken(tokens.refresh_token),
         expires_at: new Date(Date.now() + tokens.expires_in * 1000),
       },
       update: {
         nickname: mlUser.nickname,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
+        access_token: encryptToken(tokens.access_token),
+        refresh_token: encryptToken(tokens.refresh_token),
         expires_at: new Date(Date.now() + tokens.expires_in * 1000),
         ativo: true,
       },

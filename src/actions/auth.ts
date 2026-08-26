@@ -10,20 +10,72 @@ import type { SessionData } from '@/types/auth'
 import { slugify } from '@/lib/utils'
 
 // =============================================
+// RATE LIMIT — proteção brute-force no login
+// =============================================
+
+const MAX_ATTEMPTS  = 5
+const BASE_WAIT_MS  = 60_000         // 1 min inicial
+const MAX_WAIT_MS   = 30 * 60_000    // 30 min máximo
+
+type RateBucket = { count: number; lockedUntil: number; lastFail: number }
+const loginAttempts = new Map<string, RateBucket>()
+
+function checkRateLimit(key: string): { allowed: boolean; waitSec?: number } {
+  const now   = Date.now()
+  const entry = loginAttempts.get(key)
+
+  if (!entry) return { allowed: true }
+
+  if (entry.lockedUntil > now) {
+    return { allowed: false, waitSec: Math.ceil((entry.lockedUntil - now) / 1000) }
+  }
+
+  // Janela de 15 min — reseta contagem se ficou sem tentar
+  if (now - entry.lastFail > 15 * 60_000) loginAttempts.delete(key)
+
+  return { allowed: true }
+}
+
+function recordFailure(key: string): void {
+  const now   = Date.now()
+  const entry = loginAttempts.get(key) ?? { count: 0, lockedUntil: 0, lastFail: 0 }
+  const count = entry.count + 1
+  const waitMs = count >= MAX_ATTEMPTS
+    ? Math.min(BASE_WAIT_MS * Math.pow(2, count - MAX_ATTEMPTS), MAX_WAIT_MS)
+    : 0
+  loginAttempts.set(key, { count, lockedUntil: waitMs ? now + waitMs : 0, lastFail: now })
+}
+
+function clearFailures(key: string): void {
+  loginAttempts.delete(key)
+}
+
+// =============================================
 // LOGIN
 // =============================================
 
 export async function loginAction(email: string, password: string) {
-  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } })
+  const key = email.toLowerCase().trim()
+
+  const { allowed, waitSec } = checkRateLimit(key)
+  if (!allowed) {
+    return { error: `Muitas tentativas. Aguarde ${waitSec}s antes de tentar novamente.` }
+  }
+
+  const user = await prisma.user.findUnique({ where: { email: key } })
 
   if (!user) {
+    recordFailure(key)
     return { error: 'E-mail ou senha inválidos.' }
   }
 
   const senhaCorreta = await bcrypt.compare(password, user.password)
   if (!senhaCorreta) {
+    recordFailure(key)
     return { error: 'E-mail ou senha inválidos.' }
   }
+
+  clearFailures(key)
 
   const cookieStore = await cookies()
   const session = await getIronSession<SessionData>(cookieStore, SESSION_OPTIONS)

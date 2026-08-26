@@ -14,7 +14,7 @@ export const SESSION_OPTIONS = {
   cookieOptions: {
     secure: true,
     httpOnly: true,
-    sameSite: 'none' as const,
+    sameSite: 'lax' as const,
     maxAge: 60 * 60 * 24 * 7, // 7 dias
   },
 }
