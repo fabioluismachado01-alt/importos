@@ -338,6 +338,12 @@ export async function configurarRetiradaMes(
 // LANÇAMENTOS
 // =============================================
 
+const lancamentoSchema = {
+  descricao: (v: string) => typeof v === 'string' && v.trim().length >= 2 && v.length <= 500,
+  valor:     (v: number) => typeof v === 'number' && isFinite(v) && v > 0 && v < 100_000_000,
+  tipo:      (v: string) => ['RECEITA','DESPESA','DESPESA_FIXA','IMPOSTO','TARIFA_IMPORTACAO','FRETE','ESTORNO'].includes(v),
+}
+
 export async function addLancamento(
   ano: number,
   mes: number,
@@ -351,6 +357,11 @@ export async function addLancamento(
     observacoes?: string
   }
 ) {
+  if (!lancamentoSchema.tipo(input.tipo))       throw new Error('Tipo inválido')
+  if (!lancamentoSchema.descricao(input.descricao)) throw new Error('Descrição inválida (2-500 chars)')
+  if (!lancamentoSchema.valor(input.valor))     throw new Error('Valor inválido')
+  if (!input.data || isNaN(new Date(input.data).getTime())) throw new Error('Data inválida')
+
   const { workspaceId } = await getAuthContext()
   await upsertFaturamentoMes(ano, mes)
 
@@ -581,6 +592,11 @@ export async function reajustarDespesaFixa(params: {
 // =============================================
 
 export async function registrarPagamentoDAS(ano: number, mes: number, valorPago: number, dataPagamento: Date) {
+  if (typeof valorPago !== 'number' || !isFinite(valorPago) || valorPago <= 0 || valorPago > 10_000_000)
+    throw new Error('Valor DAS inválido')
+  if (!dataPagamento || isNaN(new Date(dataPagamento).getTime()))
+    throw new Error('Data de pagamento inválida')
+
   const { workspaceId } = await getAuthContext()
 
   const fat = await prisma.faturamento_mes.update({
