@@ -184,8 +184,19 @@ function MesCard({ mes, ano, dados, isAtual, isFuturo }: {
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-400 font-bold uppercase">Margem</span>
-                <span className="text-xs font-bold text-slate-600">{dados!.margem_contribuicao.toFixed(1)}%</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase">Margem Líq.</span>
+                <span className="text-xs font-bold text-slate-600">
+                  {dados!.receita_total > 0 ? (dados!.lucro_liquido / dados!.receita_total * 100).toFixed(1) : '0.0'}%
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-400 font-bold uppercase">ROI</span>
+                <span className="text-xs font-bold text-slate-600">
+                  {(() => {
+                    const custo = dados!.receita_total - dados!.lucro_liquido
+                    return custo > 0 ? (dados!.lucro_liquido / custo * 100).toFixed(1) : '0.0'
+                  })()}%
+                </span>
               </div>
               {dados?.das_status && DAS_STATUS[dados.das_status] && (
                 <div className="flex items-center justify-between pt-1">
