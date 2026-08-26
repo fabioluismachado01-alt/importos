@@ -9,20 +9,23 @@ export function cn(...inputs: ClassValue[]) {
 // FORMATAÇÃO DE VALORES
 // =============================================
 
+function ptBrNumber(value: number, decimals: number): string {
+  const abs = Math.abs(value)
+  const fixed = abs.toFixed(decimals)
+  const [integer, decimal] = fixed.split('.')
+  const thousands = integer.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return decimal !== undefined ? `${thousands},${decimal}` : thousands
+}
+
 export function formatCurrency(value: number, currency = 'BRL'): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-  }).format(value)
+  const sign = value < 0 ? '-' : ''
+  if (currency === 'USD') return `${sign}US$ ${ptBrNumber(value, 2)}`
+  return `${sign}R$ ${ptBrNumber(value, 2)}`
 }
 
 export function formatCurrencyUSD(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-  }).format(value)
+  const sign = value < 0 ? '-' : ''
+  return `${sign}US$ ${ptBrNumber(value, 2)}`
 }
 
 export function formatPercent(value: number, decimals = 1): string {
@@ -30,10 +33,7 @@ export function formatPercent(value: number, decimals = 1): string {
 }
 
 export function formatNumber(value: number, decimals = 2): string {
-  return new Intl.NumberFormat('pt-BR', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(value)
+  return ptBrNumber(value, decimals)
 }
 
 // =============================================
