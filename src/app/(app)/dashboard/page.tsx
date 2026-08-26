@@ -168,6 +168,15 @@ export default async function DashboardPage() {
             <p className={`text-2xl font-black font-mono ${lucroLiq >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
               {brl(lucroLiq)}
             </p>
+            {receitaMes > 0 && (() => {
+              const custoTotal = receitaMes - lucroLiq
+              const roi = custoTotal > 0 ? (lucroLiq / custoTotal) * 100 : 0
+              return (
+                <p className={`text-[9px] mt-1 font-bold ${roi >= 15 ? 'text-emerald-600' : roi >= 5 ? 'text-amber-600' : 'text-red-500'}`}>
+                  ROI {roi.toFixed(1)}%
+                </p>
+              )
+            })()}
           </div>
 
           {/* DAS */}

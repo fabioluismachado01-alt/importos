@@ -340,6 +340,8 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
 
   // KPIs derivados para o 2º row
   const margemLiquida   = receitaTotal > 0 ? (d.lucro_liquido / receitaTotal) * 100 : 0
+  const custoTotalMes   = d.receita_total - d.lucro_liquido
+  const roiMes          = custoTotalMes > 0 ? (d.lucro_liquido / custoTotalMes) * 100 : 0
   const cmvPerc         = receitaTotal > 0 ? (d.desp_custo_produtos / receitaTotal) * 100 : 0
   const maiorCanal      = canalAnalise[0]
   const canalMaisRental = [...canalAnalise].sort((a, b) => b.margem - a.margem)[0]
@@ -525,12 +527,18 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
 
       {/* ── KPIs ROW 2: Gerenciais ── */}
       {canalAnalise.length > 0 && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <KPICard
             label="Margem Líquida"
             value={`${margemLiquida.toFixed(1)}%`}
             color={margemLiquida >= 15 ? 'emerald' : margemLiquida >= 5 ? 'amber' : 'red'}
             sub="Lucro Líquido ÷ Receita"
+          />
+          <KPICard
+            label="ROI"
+            value={`${roiMes.toFixed(1)}%`}
+            color={roiMes >= 15 ? 'emerald' : roiMes >= 5 ? 'amber' : 'red'}
+            sub={`Lucro Líquido ÷ Custo ${formatCurrency(custoTotalMes)}`}
           />
           <KPICard
             label="Canal Mais Rentável"
