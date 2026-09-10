@@ -27,7 +27,7 @@ export function DASPagamentoForm({ valorSugerido, jaPago, onClose, onSubmit, onR
     e.preventDefault()
     setLoading(true)
     try {
-      await onSubmit(parseFloat(valor), new Date(data))
+      await onSubmit(parseFloat(valor), (() => { const [y, m, d] = data.split('-').map(Number); return new Date(y, m - 1, d, 12, 0, 0) })())
     } finally {
       setLoading(false)
     }

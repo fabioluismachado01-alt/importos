@@ -21,7 +21,7 @@ interface MesSalvo { ano: number; mes: number; label: string; receita: number }
 interface VendasData {
   arquivo: string
   periodo: { inicio: string; fim: string; ano: number; mes: number }
-  receita_bruta: number; descontos: number; comissao_amazon: number
+  receita_bruta: number; descontos: number; outros: number; comissao_amazon: number
   pedidos: number; unidades: number; dias_com_venda: number; ticket_medio: number
   pedidos_ids?: string[]
   produtos: Array<{
@@ -307,8 +307,11 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
 
   const aliq       = parseFloat(aliquota.replace(',', '.')) / 100 || 0.08
   const pub        = parseFloat(pubManual.replace(',', '.')) || 0
-  // usa dados do TXT real; cai no embutido do CSV como fallback
+  // SKUs e receita de competência: usa dadosG quando disponível, senão geralEmbutido
   const geralEfetivo = dadosG ?? geralEmbutido
+  // Ajustes financeiros (reembolsos, ajustes, outras taxas): SEMPRE vêm do CSV embutido,
+  // pois dadosG (Relatório de Pedidos) preenche esses campos com 0 (não tem essa info).
+  const fonteAjustes = geralEmbutido ?? dadosG
 
   // Quando Relatório de Pedidos disponível: receita de competência (entregues no mês)
   // CSV de Transações serve apenas para extrair a taxa de comissão Amazon
@@ -326,15 +329,20 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const fbaFull    = geralEfetivo?.fba_fulfillment ?? 0
   const fbaArm     = geralEfetivo?.fba_armazenagem ?? 0
   const mensal     = geralEfetivo?.mensalidade ?? 0
-  const reembolso  = geralEfetivo?.reembolsos_liquido ?? 0
-  const ajuste     = geralEfetivo?.ajustes ?? 0
-  const outrasTax  = geralEfetivo?.outras_taxas_servico ?? 0
+  const reembolso  = fonteAjustes?.reembolsos_liquido ?? 0
+  const ajuste     = fonteAjustes?.ajustes ?? 0
+  const outrasTax  = fonteAjustes?.outras_taxas_servico ?? 0
   const custoProd  = geralEfetivo
     ? geralEfetivo.skus.reduce((s, sk) => s + (sk.custo_total ?? 0), 0)
     : (dadosV?.produtos.reduce((s, p) => s + (p.custo_total ?? 0), 0) ?? 0)
   const das        = rec * aliq
+  // outros: ressarcimento de promoções Amazon (positivo); descontos: cupons aplicados (subtraem)
+  // Aplicável no modo caixa (CSV-only). No modo competência, receita_total do Pedidos já é líquida.
+  const netOutros  = !usandoCompetencia
+    ? ((dadosV?.outros ?? 0) - (dadosV?.descontos ?? 0))
+    : 0
 
-  const lucro_bruto = rec - comissao - fbaFull - fbaArm - mensal - reembolso + ajuste - outrasTax - pub
+  const lucro_bruto = rec + netOutros - comissao - fbaFull - fbaArm - mensal - reembolso + ajuste - outrasTax - pub
   const lucro_liq   = lucro_bruto - custoProd - das
 
   const podeSalvar  = estV === 'ok'   // pelo menos o relatório de vendas é obrigatório
@@ -555,6 +563,7 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
                     sub={usandoCompetencia
                       ? `${dadosG!.unidades ?? '?'} un · ${dadosG!.pedidos ?? '?'} pedidos — Relatório de Pedidos (competência)`
                       : `${dadosV.unidades} un · ${dadosV.pedidos} pedidos — Relatório de Transações (caixa)`} />
+                  {!usandoCompetencia && netOutros !== 0 && <DRELinha label={netOutros > 0 ? "(+) Ressarcimento Promoções" : "(−) Descontos líquidos"} valor={netOutros} cor={netOutros > 0 ? "text-blue-500" : "text-red-500"} sub="Outros − Descontos (CSV)" indent />}
                   <DRELinha label="(−) Comissão Amazon" valor={-comissao} cor="text-red-500" indent
                     sub={usandoCompetencia
                       ? `≈ ${(taxaComissaoCSV * 100).toFixed(1)}% — rateio proporcional do CSV`
@@ -563,8 +572,8 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
                   {geralEfetivo && <DRELinha label="(−) Armazenagem FBA" valor={-fbaArm} cor="text-red-500" indent />}
                   {geralEfetivo && mensal > 0 && <DRELinha label="(−) Mensalidade Amazon" valor={-mensal} cor="text-red-500" indent />}
                   {geralEfetivo && outrasTax > 0 && <DRELinha label="(−) Outras Taxas Amazon" valor={-outrasTax} cor="text-red-500" indent />}
-                  {geralEfetivo && reembolso > 0 && <DRELinha label={`(−) Reembolsos (${geralEfetivo.reembolsos_count}x)`} valor={-reembolso} cor="text-red-500" sub="fonte: Relatório Geral" indent />}
-                  {geralEfetivo && ajuste > 0 && <DRELinha label="(+) Ajustes Financeiros" valor={ajuste} cor="text-blue-500" indent />}
+                  {reembolso > 0 && <DRELinha label={`(−) Reembolsos (${fonteAjustes?.reembolsos_count ?? 0}x)`} valor={-reembolso} cor="text-red-500" sub="fonte: CSV Transações" indent />}
+                  {ajuste > 0 && <DRELinha label="(+) Ajustes Financeiros" valor={ajuste} cor="text-blue-500" indent />}
                   {pub > 0 && <DRELinha label="(−) Publicidade Amazon Ads" valor={-pub} cor="text-red-500"
                     sub={dadosP?.success ? 'Fatura oficial' : 'Manual'} indent />}
                   <div className="flex items-center justify-between py-2">

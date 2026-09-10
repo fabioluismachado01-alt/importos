@@ -74,7 +74,7 @@ export function LancamentoModal({ ano, mes, onClose, onSuccess }: Props) {
         canal: tipo === 'RECEITA' ? cat : undefined,
         descricao: desc,
         valor: v,
-        data: new Date(data),
+        data: (() => { const [y, m, d] = data.split('-').map(Number); return new Date(y, m - 1, d, 12, 0, 0) })(),
       })
       onSuccess()
     } catch (err: unknown) {
