@@ -341,7 +341,7 @@ export async function configurarRetiradaMes(
 const lancamentoSchema = {
   descricao: (v: string) => typeof v === 'string' && v.trim().length >= 2 && v.length <= 500,
   valor:     (v: number) => typeof v === 'number' && isFinite(v) && v > 0 && v < 100_000_000,
-  tipo:      (v: string) => ['RECEITA','DESPESA','DESPESA_FIXA','IMPOSTO','TARIFA_IMPORTACAO','FRETE','ESTORNO'].includes(v),
+  tipo:      (v: string) => ['RECEITA','DESPESA','DESPESA_VARIAVEL','DESPESA_FIXA','IMPOSTO','TARIFA_IMPORTACAO','FRETE','ESTORNO'].includes(v),
 }
 
 export async function addLancamento(
