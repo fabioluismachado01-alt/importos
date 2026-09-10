@@ -833,7 +833,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
                   <div>
                     <p className="text-xs font-medium text-slate-700">{l.descricao}</p>
                     <p className="text-[9px] text-slate-400">
-                      {l.categoria} · {new Date(l.data).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+                      {l.categoria} · {new Date(l.data).toISOString().split('T')[0].split('-').reverse().join('/')}
                     </p>
                   </div>
                   <span className="text-xs font-black font-mono text-emerald-600">{formatCurrency(l.valor)}</span>
@@ -871,7 +871,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
                     <div className="min-w-0 flex-1 mr-4">
                       <p className="text-xs font-medium text-slate-700 truncate">{l.descricao}</p>
                       <p className="text-[9px] text-slate-400">
-                        {l.tipo.replace('DESPESA_', '').replace('_', ' ')} · {l.categoria} · {new Date(l.data).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+                        {l.tipo.replace('DESPESA_', '').replace('_', ' ')} · {l.categoria} · {new Date(l.data).toISOString().split('T')[0].split('-').reverse().join('/')}
                       </p>
                     </div>
                     <span className={cn('text-xs font-black font-mono shrink-0',
@@ -970,8 +970,7 @@ function GrupoLancamentos({ titulo, lancamentos, total, totalLabel, cor, fechado
   function iniciarEdicao(l: Lancamento) {
     setEditandoId(l.id)
     setNovoValor(l.valor.toFixed(2))
-    // INVARIANTE: datas são gravadas em T12:00:00Z — seguro em UTC-11..UTC+12, evita mismatch SSR/browser
-    setNovaData(format(new Date(l.data), 'yyyy-MM-dd'))
+    setNovaData(new Date(l.data).toISOString().split('T')[0])
     setNovaDescricao(l.descricao)
   }
 
@@ -1009,7 +1008,7 @@ function GrupoLancamentos({ titulo, lancamentos, total, totalLabel, cor, fechado
                   {l.e_fixo && <span className="text-[8px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold shrink-0">FIXA</span>}
                 </div>
                 <p className="text-[10px] text-slate-400 mt-0.5">
-                  {format(new Date(l.data), "dd/MM/yyyy", { locale: ptBR })}
+                  {new Date(l.data).toISOString().split('T')[0].split('-').reverse().join('/')}
                   {l.categoria && l.categoria !== l.canal && ` · ${CATEGORIA_LABELS[l.categoria] ?? l.categoria}`}
                 </p>
               </div>
