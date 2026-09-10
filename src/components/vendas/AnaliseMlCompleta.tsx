@@ -30,8 +30,15 @@ interface VendasData {
 }
 
 interface FaturamentoData {
-  arquivo: string; publicidade: number; armazenagem: number; pagina_ml: number
-  afiliados: number; estornos: number; outros: number; total_bruto: number
+  arquivo: string
+  // Campos novos (fatura como fonte de tarifas+frete+parcelamento)
+  tarifas_venda_fatura: number
+  frete_fatura: number
+  taxa_parcelamento: number
+  coleta_full_fatura: number
+  // Campos existentes
+  publicidade: number; armazenagem: number; pagina_ml: number
+  afiliados: number; outros: number; total_bruto: number
   detalhes: Array<{ categoria: string; valor: number; ocorrencias: number }>
   periodo: { mes: number; ano: number }
 }
@@ -62,7 +69,7 @@ const ABAS: Array<{ id: AbaId; label: string; icon: React.ElementType; descricao
   },
   {
     id: 'faturamento', label: '2. Faturamento ML', icon: DollarSign,
-    descricao: 'Publicidade, estornos e tarifas extras', formato: '.xlsx', obrigatorio: true,
+    descricao: 'Tarifas, frete real, parcelamento e publicidade', formato: '.xlsx', obrigatorio: true,
     caminho: ['Menu', 'Faturamento', 'Tarifas e Pagamentos', 'Ir para Detalhes', 'Relatórios', 'Selecionar Mês', 'Download Faturamento ML'],
     link: 'https://myaccount.mercadolivre.com.br/billing/detail/20260629?fromSummary=true',
   },
@@ -172,18 +179,22 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const ft = dados.full
 
   const receitaBruta     = v?.receita_bruta ?? 0
-  const tarifasVenda     = v?.tarifas_ml ?? 0
-  const freteVenda       = v?.frete_custo ?? 0
+  // Quando o Faturamento ML foi enviado, usa tarifas e frete da fatura (mais precisos).
+  // Os cancelamentos já estão embutidos como valores negativos dentro de cada categoria.
+  const usandoFatura     = !!f
+  const tarifasVenda     = usandoFatura ? (f!.tarifas_venda_fatura ?? v?.tarifas_ml ?? 0) : (v?.tarifas_ml ?? 0)
+  const freteVenda       = usandoFatura ? (f!.frete_fatura ?? v?.frete_custo ?? 0) : (v?.frete_custo ?? 0)
+  const taxaParcelamento = f?.taxa_parcelamento ?? 0
   const custosProdutos   = v?.custo_produtos ?? 0
   const publicidade      = f?.publicidade ?? 0
   const armazenagem      = (ft?.armazenagem ?? 0) || (f?.armazenagem ?? 0)
-  const coletaFull       = ft?.coleta ?? 0
-  const estornos         = f?.estornos ?? 0         // negativo = recebeu de volta
+  // Coleta: prefere Tarifas Full; usa fatura como fallback (evita dupla contagem)
+  const coletaFull       = (ft?.coleta ?? 0) || (f?.coleta_full_fatura ?? 0)
   const paginaML         = f?.pagina_ml ?? 0
   const afiliados        = f?.afiliados ?? 0
 
   const totalDespesas    = tarifasVenda + freteVenda + custosProdutos +
-                           publicidade + armazenagem + coletaFull + paginaML + afiliados + estornos
+                           publicidade + armazenagem + coletaFull + paginaML + afiliados + taxaParcelamento
   const lucroBruto       = receitaBruta - totalDespesas
   const das              = receitaBruta * aliq
   const lucroLiquido     = lucroBruto - das
@@ -198,25 +209,32 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
     setSalvando(true)
     try {
       // Consolida todos os dados dos 4 relatórios e salva no faturamento do mês correto
+      const f = dados.faturamento
+      const ft = dados.full
+      const usaFatura = !!f
+
       const resultado = await salvarAnaliseML({
         mes:  mesSel,
         ano:  anoSel,
         aliquota: parseFloat(aliquota) / 100,
-        // Do Relatório de Vendas
+        // Receita sempre do Relatório de Vendas
         vendas_receita:        dados.vendas.receita_bruta,
-        vendas_tarifas:        dados.vendas.tarifas_ml,
-        vendas_frete:          dados.vendas.frete_custo,
-        vendas_custo_produtos: dados.vendas.custo_produtos,
         vendas_unidades:       dados.vendas.unidades,
         vendas_pedidos:        dados.vendas.pedidos,
+        // Tarifas e frete: usa Faturamento ML quando disponível (mais preciso)
+        vendas_tarifas:        usaFatura ? (f!.tarifas_venda_fatura ?? dados.vendas.tarifas_ml) : dados.vendas.tarifas_ml,
+        vendas_frete:          usaFatura ? (f!.frete_fatura ?? dados.vendas.frete_custo) : dados.vendas.frete_custo,
+        vendas_custo_produtos: dados.vendas.custo_produtos,
+        // Taxa de parcelamento (nova linha, líquida de cancels)
+        taxa_parcelamento:     f?.taxa_parcelamento ?? 0,
         // Do Faturamento ML
-        publicidade:  dados.faturamento?.publicidade  ?? 0,
-        pagina_ml:    dados.faturamento?.pagina_ml    ?? 0,
-        afiliados:    dados.faturamento?.afiliados    ?? 0,
-        estornos:     dados.faturamento?.estornos     ?? 0,
-        // Das Tarifas Full
-        armazenagem_full: dados.full?.armazenagem ?? 0,
-        coleta_full:      dados.full?.coleta      ?? 0,
+        publicidade:  f?.publicidade ?? 0,
+        pagina_ml:    f?.pagina_ml   ?? 0,
+        afiliados:    f?.afiliados   ?? 0,
+        estornos:     0,   // cancelamentos já estão embutidos nas categorias acima
+        // Das Tarifas Full (prefere; fallback para fatura)
+        armazenagem_full: (ft?.armazenagem ?? 0) || (f?.armazenagem ?? 0),
+        coleta_full:      (ft?.coleta ?? 0) || (f?.coleta_full_fatura ?? 0),
       })
       setSalvo(true)
       // Redireciona para o faturamento do mês após 1.5s
@@ -253,7 +271,7 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
             </div>
             <p className="text-xs text-slate-500 ml-8">
               Selecione o mês/ano das vendas — <strong>não</strong> a data de emissão dos relatórios.
-              {' '}Ciclo ML: dia 30 ao dia 29.
+              {' '}Período: <strong>01 ao último dia do mês</strong> (mês-calendário).
             </p>
           </div>
           {periodoConfirmado && (
@@ -477,15 +495,15 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
             <div className="bg-slate-50 rounded-xl p-4 space-y-2">
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Composição das Despesas</p>
               {[
-                { label: 'Tarifas de Venda ML',      valor: tarifasVenda,    origem: 'Relatório Vendas',  show: true },
-                { label: 'Frete (envios)',             valor: freteVenda,      origem: 'Relatório Vendas',  show: true },
-                { label: 'Custo com Produtos',         valor: custosProdutos,  origem: 'Catálogo × SKUs',   show: true },
-                { label: 'Publicidade (Ads)',           valor: publicidade,     origem: 'Faturamento ML',    show: publicidade > 0 },
-                { label: 'Armazenagem Full',            valor: armazenagem,     origem: 'Tarifas Full',      show: armazenagem > 0 },
-                { label: 'Coleta Full (frete)',         valor: coletaFull,      origem: 'Tarifas Full',      show: coletaFull > 0 },
-                { label: 'Página Oficial ML',           valor: paginaML,        origem: 'Faturamento ML',    show: paginaML > 0 },
-                { label: 'Afiliados',                   valor: afiliados,       origem: 'Faturamento ML',    show: afiliados > 0 },
-                { label: 'Estornos recebidos',          valor: estornos,        origem: 'Faturamento ML',    show: estornos !== 0, estorno: true },
+                { label: 'Tarifas de Venda ML',    valor: tarifasVenda,     origem: usandoFatura ? 'Faturamento ML (líquido)' : 'Relatório Vendas', show: true },
+                { label: 'Frete (envios)',           valor: freteVenda,       origem: usandoFatura ? 'Faturamento ML (líquido)' : 'Relatório Vendas', show: true },
+                { label: 'Taxa de Parcelamento',    valor: taxaParcelamento, origem: 'Faturamento ML',    show: taxaParcelamento > 0 },
+                { label: 'Custo com Produtos',      valor: custosProdutos,   origem: 'Catálogo × SKUs',   show: true },
+                { label: 'Publicidade (Ads)',        valor: publicidade,      origem: 'Faturamento ML',    show: publicidade > 0 },
+                { label: 'Armazenagem Full',         valor: armazenagem,      origem: 'Tarifas Full',      show: armazenagem > 0 },
+                { label: 'Coleta Full (frete)',      valor: coletaFull,       origem: 'Tarifas Full',      show: coletaFull > 0 },
+                { label: 'Página Oficial ML',        valor: paginaML,         origem: 'Faturamento ML',    show: paginaML > 0 },
+                { label: 'Afiliados',                valor: afiliados,        origem: 'Faturamento ML',    show: afiliados > 0 },
               ].filter(d => d.show).map(d => (
                 <div key={d.label} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -494,8 +512,8 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
                       {d.origem}
                     </Badge>
                   </div>
-                  <span className={cn('text-xs font-mono font-bold', d.estorno ? 'text-emerald-600' : 'text-red-500')}>
-                    {d.estorno && d.valor < 0 ? '+' : '-'}{formatCurrency(Math.abs(d.valor))}
+                  <span className="text-xs font-mono font-bold text-red-500">
+                    -{formatCurrency(Math.abs(d.valor))}
                   </span>
                 </div>
               ))}
@@ -619,10 +637,11 @@ function PreviewAba({ aba, dados, aliq }: { aba: AbaId; dados: Record<string, un
     if (!f) return null
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <KPICard label="Publicidade (Ads)" value={`-${formatCurrency(f.publicidade)}`} color="red" sub="Product Ads" />
-          <KPICard label="Armazenagem"        value={`-${formatCurrency(f.armazenagem)}`} color="amber" sub="Full storage" />
-          <KPICard label="Estornos recebidos" value={formatCurrency(Math.abs(f.estornos))} color="emerald" sub="Cancelamentos de tarifas" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <KPICard label="Tarifas de Venda"   value={`-${formatCurrency(f.tarifas_venda_fatura)}`} color="amber"   sub="Custo por vender/cobrar (líquido)" />
+          <KPICard label="Frete (fatura)"      value={`-${formatCurrency(f.frete_fatura)}`}          color="amber"   sub="Envio + devolução (líquido)" />
+          <KPICard label="Parcelamento"        value={`-${formatCurrency(f.taxa_parcelamento)}`}     color="red"     sub="Taxa de parcelamento (líquida)" />
+          <KPICard label="Publicidade (Ads)"   value={`-${formatCurrency(f.publicidade)}`}           color="red"     sub="Product Ads" />
         </div>
         <div className="space-y-1.5 bg-slate-50 rounded-xl p-4">
           <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Detalhamento por categoria</p>

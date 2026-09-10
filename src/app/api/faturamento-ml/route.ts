@@ -1,37 +1,69 @@
 /**
  * API: Parser do Relatório de Faturamento do Mercado Livre
- * Extrai: Publicidade, Estornos, Página ML, Afiliados, Armazenagem
+ * Extrai: Tarifas de venda, frete, parcelamento, publicidade, armazenagem, página, afiliados.
  *
  * Estrutura do arquivo:
  * - Aba: REPORT
  * - Header linha 8 (índice 7)
+ * - Col 1: Data da tarifa
  * - Col 3: Detalhe (tipo da tarifa)
- * - Col 7: Valor da tarifa (positivo = custo, negativo = cancelamento/estorno)
+ * - Col 7: Valor da tarifa (positivo = custo, negativo = cancelamento)
+ * - Col 11: Número da venda
+ * - Col 13: Data de venda
+ *
+ * Cancelamentos são roteados para a mesma categoria que cancelam, como valores negativos.
+ * O net por categoria é o custo real líquido.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import { getAuthContext } from '@/lib/auth'
 
 export interface FaturamentoMLResult {
-  publicidade: number        // Tarifa por campanha de publicidade / Product Ads
-  armazenagem: number        // Tarifa pelo serviço de armazenamento Full
-  pagina_ml: number          // Tarifa de manutenção da Minha página
-  afiliados: number          // Tarifa de venda com afiliados
-  estornos: number           // Cancelamentos de tarifas (negativo = recebeu de volta)
-  outros: number             // Outras tarifas não categorizadas relevantes
-  total_bruto: number        // Soma de tudo
+  // Tarifas de venda líquidas da fatura (custo por vender + cobrar + recebimento, net de cancels)
+  tarifas_venda_fatura: number
+  // Frete líquido da fatura (envio + devolução frete, net de cancels — sem coleta Full)
+  frete_fatura: number
+  // Taxa de parcelamento líquida (net de cancels)
+  taxa_parcelamento: number
+  // Coleta Full da fatura (fallback quando Relatório de Tarifas Full não for enviado)
+  coleta_full_fatura: number
+  // Outros campos (fonte inalterada)
+  publicidade: number
+  armazenagem: number
+  pagina_ml: number
+  afiliados: number
+  outros: number
+  total_bruto: number
   detalhes: Array<{ categoria: string; valor: number; ocorrencias: number }>
   periodo: { mes: number; ano: number }
 }
 
+/**
+ * Classifica cada linha do faturamento.
+ * Cancelamentos são roteados à mesma categoria que cancelam (valor negativo no arquivo).
+ * Assim, somar por categoria dá o net automaticamente.
+ */
 function classificarTarifa(detalhe: string): string {
-  const d = detalhe.toLowerCase()
+  const d = detalhe.toLowerCase().trim()
+
+  // Cancelamentos: identificar primeiro e rotear para a categoria correta
+  if (d.startsWith('cancelamento')) {
+    if (d.includes('envio') || d.includes('devolução') || d.includes('devolucao')) return 'FRETE'
+    if (d.includes('vender') || d.includes('cobrar') || d.includes('recebimento')) return 'TARIFA_VENDA'
+    if (d.includes('parcelamento')) return 'PARCELAMENTO'
+    return 'OUTROS'
+  }
+
   if (d.includes('publicidade') || d.includes('campanha') || d.includes('product ads')) return 'PUBLICIDADE'
   if (d.includes('armazenamento') || d.includes('armazenagem')) return 'ARMAZENAGEM'
+  if (d.includes('coleta')) return 'COLETA_FULL'
   if (d.includes('minha página') || d.includes('minha pagina')) return 'PAGINA_ML'
   if (d.includes('afiliado')) return 'AFILIADOS'
-  if (d.includes('cancelamento') || d.includes('cancelada') || d.includes('estorno')) return 'ESTORNO'
-  if (d.includes('devolução') || d.includes('devolucao')) return 'DEVOLUCAO_FRETE'
+  if (d.includes('parcelamento')) return 'PARCELAMENTO'
+  if (d.includes('vender') || d.includes('cobrar') || d.includes('recebimento')) return 'TARIFA_VENDA'
+  // Frete: envio + devolução por envio (coleta fica em COLETA_FULL acima)
+  if (d.includes('envio') || d.includes('devolução') || d.includes('devolucao')) return 'FRETE'
+
   return 'OUTROS'
 }
 
@@ -81,14 +113,18 @@ export async function POST(req: NextRequest) {
       : new Date()
     const periodo = { mes: dataRef.getMonth() + 1, ano: dataRef.getFullYear() }
 
+    // Cada categoria já está líquida de cancels (cancelamentos foram roteados para sua categoria)
     const result: FaturamentoMLResult = {
-      publicidade:   agrupado['PUBLICIDADE']?.valor ?? 0,
-      armazenagem:   agrupado['ARMAZENAGEM']?.valor ?? 0,
-      pagina_ml:     agrupado['PAGINA_ML']?.valor ?? 0,
-      afiliados:     agrupado['AFILIADOS']?.valor ?? 0,
-      estornos:      agrupado['ESTORNO']?.valor ?? 0,   // já é negativo no arquivo
-      outros:        (agrupado['OUTROS']?.valor ?? 0) + (agrupado['DEVOLUCAO_FRETE']?.valor ?? 0),
-      total_bruto:   Object.values(agrupado).reduce((s, x) => s + x.valor, 0),
+      tarifas_venda_fatura: agrupado['TARIFA_VENDA']?.valor ?? 0,
+      frete_fatura:         agrupado['FRETE']?.valor ?? 0,
+      taxa_parcelamento:    agrupado['PARCELAMENTO']?.valor ?? 0,
+      coleta_full_fatura:   agrupado['COLETA_FULL']?.valor ?? 0,
+      publicidade:          agrupado['PUBLICIDADE']?.valor ?? 0,
+      armazenagem:          agrupado['ARMAZENAGEM']?.valor ?? 0,
+      pagina_ml:            agrupado['PAGINA_ML']?.valor ?? 0,
+      afiliados:            agrupado['AFILIADOS']?.valor ?? 0,
+      outros:               agrupado['OUTROS']?.valor ?? 0,
+      total_bruto:          Object.values(agrupado).reduce((s, x) => s + x.valor, 0),
       detalhes: Object.entries(agrupado).map(([categoria, d]) => ({
         categoria, valor: d.valor, ocorrencias: d.ocorrencias,
       })).sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor)),

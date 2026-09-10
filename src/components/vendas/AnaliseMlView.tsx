@@ -124,7 +124,7 @@ export function AnaliseMlView() {
               </p>
             </div>
             <Badge className="text-[10px] bg-amber-100 text-amber-700 border-amber-200">
-              Ciclo ML: dia 30 ao dia 29 do mês seguinte
+              Período: dia 01 ao último dia do mês
             </Badge>
           </div>
           {erro && <p className="mt-4 text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{erro}</p>}
@@ -190,7 +190,7 @@ export function AnaliseMlView() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <p className="text-xs text-slate-500">
-            Relatório: <strong>{analise.arquivo}</strong> · Ciclo ML do mês de competência
+            Relatório: <strong>{analise.arquivo}</strong> · Mês-calendário (01 ao último dia)
           </p>
           <p className="text-xs text-slate-400 mt-0.5">
             {analise.pedidos} pedidos válidos · {analise.cancelados} cancelados · {analise.devolucoes} devoluções

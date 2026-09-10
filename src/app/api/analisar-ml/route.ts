@@ -1,8 +1,7 @@
 /**
  * API: Análise de Relatório de Vendas do Mercado Livre
  * Lê o xlsx do ML, cruza com custos do catálogo de produtos e retorna análise completa.
- *
- * Ciclo ML: vendas do dia 30 ao dia 29 do mês seguinte.
+ * Período: mês-calendário (01 ao último dia do mês). Exportar o relatório com esse filtro.
  * Header real do relatório: linha 6 (índice 5).
  */
 import { NextRequest, NextResponse } from 'next/server'

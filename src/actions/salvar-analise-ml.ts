@@ -20,7 +20,8 @@ export interface DadosConsolidadosML {
   publicidade: number
   pagina_ml: number
   afiliados: number
-  estornos: number        // negativo = recebeu de volta
+  taxa_parcelamento: number  // taxa de parcelamento líquida (net de cancels)
+  estornos: number           // mantido para compatibilidade; deve ser 0 nas novas análises
   // Das Tarifas Full
   armazenagem_full: number
   coleta_full: number
@@ -118,6 +119,19 @@ export async function salvarAnaliseML(dados: DadosConsolidadosML) {
       categoria: 'CUSTO_PRODUTOS',
       descricao: 'ML Import — Custo com Produtos',
       valor: dados.vendas_custo_produtos,
+      data: primeiroDia,
+      status: 'CONFIRMADO',
+    })
+  }
+
+  // ── Taxa de parcelamento ──────────────────────────────────────────
+  if ((dados.taxa_parcelamento ?? 0) > 0) {
+    lancamentos.push({
+      faturamento_id: fat.id,
+      tipo: 'DESPESA_VARIAVEL',
+      categoria: 'TARIFAS',
+      descricao: 'ML Import — Taxa de Parcelamento',
+      valor: dados.taxa_parcelamento,
       data: primeiroDia,
       status: 'CONFIRMADO',
     })
