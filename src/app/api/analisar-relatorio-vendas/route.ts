@@ -59,13 +59,21 @@ function normalizarNomeProduto(nome: string): string {
 }
 
 // Detecta formato pelo cabeçalho
-function detectarFormato(header: string[]): 'SEM_STATUS' | 'COM_STATUS' | null {
+// Formato A — 10 cols (antiga, sem Status):  col1=Grupo de Pagamento, col2=Tipo de transação → SEM_STATUS
+// Formato B — 10 cols (nova, com Status):    col1=Status da transação, col2=Tipo de transação → STATUS_10COL
+// Formato C — 11 cols (com Status + Grupo):  col1=Status, col2=Grupo de Pagamento, col3=Tipo  → COM_STATUS
+// STATUS_10COL e SEM_STATUS têm o mesmo mapeamento de colunas de dados (TIPO=2, ORDER_ID=3...).
+function detectarFormato(header: string[]): 'SEM_STATUS' | 'COM_STATUS' | 'STATUS_10COL' | null {
   const h = header.map(c => String(c).toLowerCase().trim())
-  // Formato COM coluna "Status da transação": col 1 = "status", col 3 = "tipo"
-  if (h[1]?.includes('status') && h[3]?.includes('tipo')) return 'COM_STATUS'
-  // Formato SEM status: col 1 = "grupo de pagamento", col 2 = "tipo"
+  // 11 colunas: col1="status", col2="grupo de pagamento", col3="tipo"
+  if (h[1]?.includes('status') && h[2]?.includes('grupo') && h[3]?.includes('tipo')) return 'COM_STATUS'
+  // 10 colunas com Status: col1="status da transação", col2="tipo de transação"
+  if (h[1]?.includes('status') && h[2]?.includes('tipo')) return 'STATUS_10COL'
+  // 10 colunas sem Status: col1="grupo de pagamento", col2="tipo"
   if (h[1]?.includes('grupo') && h[2]?.includes('tipo')) return 'SEM_STATUS'
-  // Fallback: se tiver "tipo de transação" em qualquer posição
+  // Fallback: se tiver "tipo de transação" em qualquer posição e tiver col1="status" → STATUS_10COL
+  if (h[1]?.includes('status') && h.some(c => c.includes('tipo de transa'))) return 'STATUS_10COL'
+  // Último fallback: layout desconhecido com campo tipo em col 3
   if (h.some(c => c.includes('tipo de transa'))) return 'COM_STATUS'
   return null
 }
@@ -96,8 +104,10 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    // Mapeamento de colunas: COM_STATUS tem uma coluna a mais no início
-    // ID do pedido fica sempre em PRODUTO-1 (col 4 para COM_STATUS, col 3 para SEM_STATUS)
+    // Mapeamento de colunas:
+    //   COM_STATUS (11 cols): Status | Grupo | Tipo | OrderID | Produto | Receita | Desc | Com | Outros | Total
+    //   STATUS_10COL (10 cols): Status | Tipo | OrderID | Produto | Receita | Desc | Com | Outros | Total
+    //   SEM_STATUS (10 cols): Grupo | Tipo | OrderID | Produto | Receita | Desc | Com | Outros | Total
     const COL = formato === 'COM_STATUS'
       ? { DATA: 0, TIPO: 3, ORDER_ID: 4, PRODUTO: 5, RECEITA: 6, DESCONTO: 7, COMISSAO: 8, OUTROS: 9, TOTAL: 10 }
       : { DATA: 0, TIPO: 2, ORDER_ID: 3, PRODUTO: 4, RECEITA: 5, DESCONTO: 6, COMISSAO: 7, OUTROS: 8, TOTAL: 9 }
@@ -204,6 +214,14 @@ export async function POST(req: NextRequest) {
         porProduto[nomeProduto].receita  += rec
         porProduto[nomeProduto].comissao += Math.abs(com)
       }
+    }
+
+    // Zero pedidos após parsing = erro de parsing, nunca resultado válido
+    if (pedidos === 0) {
+      return NextResponse.json({
+        error: `Nenhuma venda encontrada no arquivo "${file.name}" (formato detectado: ${formato}). ` +
+          'Verifique se enviou o relatório correto: Menu → Pagamentos → Visualizar transações → exportar CSV.'
+      }, { status: 422 })
     }
 
     const diasArr = [...diasComVenda].sort()
