@@ -432,19 +432,19 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
             <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
             <div className="text-xs text-blue-800">
               <p className="font-black mb-0.5">3 arquivos para DRE completa com análise por produto</p>
-              <p className="text-blue-600">Monthly Unified Transaction (Receita + Tarifas) · Relatório de Pedidos (SKUs + Margem) · Fatura Ads (Publicidade — opcional)</p>
+              <p className="text-blue-600">Relatório de Transações (Receita + Tarifas) · Relatório de Pedidos (SKUs + Margem) · Fatura Ads (Publicidade — opcional)</p>
             </div>
           </div>
 
           {/* 3 Uploads */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-            {/* Upload 1 — Monthly Unified Transaction */}
+            {/* Upload 1 — Relatório de Transações */}
             <UploadBox
-              numero={1} titulo="Monthly Unified Transaction" subtitulo="Receita por SKU, Tarifas e FBA (.csv)"
+              numero={1} titulo="Relatório de Transações" subtitulo="Receita por pedido, Comissões e Tarifas (.csv)"
               obrigatorio aceita=".csv,.xlsx" estado={estV} cor="orange"
-              caminho={['Menu', 'Pagamentos', 'Repositório de relatórios', 'Tipo: Transações', 'Selecionar período', 'Download']}
-              link="https://sellercentral.amazon.com.br/payments/reports/custom/request?tbla_daterangereport=sort=%7B%7D;search=;pagination=%7B%22currentPageIndex%22%3A1%2C%22pageSize%22%3A25%7D;"
+              caminho={['Menu', 'Pagamentos', 'Repositório de Relatórios']}
+              link="https://sellercentral.amazon.com.br/payments/reports-repository?ref_=xx_rrepo_ttab_dash"
               onFile={handleVendas}
               onRemover={() => { setEstV('idle'); setDadosV(null); setErroV(''); setGeralEmbutido(null) }}
               criancas={estV === 'ok' && dadosV ? (
@@ -554,7 +554,7 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
                   <DRELinha label="Receita Bruta" valor={rec} cor="text-emerald-600"
                     sub={usandoCompetencia
                       ? `${dadosG!.unidades ?? '?'} un · ${dadosG!.pedidos ?? '?'} pedidos — Relatório de Pedidos (competência)`
-                      : `${dadosV.unidades} un · ${dadosV.pedidos} pedidos — Visualizar Transações (caixa)`} />
+                      : `${dadosV.unidades} un · ${dadosV.pedidos} pedidos — Relatório de Transações (caixa)`} />
                   <DRELinha label="(−) Comissão Amazon" valor={-comissao} cor="text-red-500" indent
                     sub={usandoCompetencia
                       ? `≈ ${(taxaComissaoCSV * 100).toFixed(1)}% — rateio proporcional do CSV`

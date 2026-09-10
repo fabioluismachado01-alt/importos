@@ -23,7 +23,7 @@ const MARKETPLACES = [
     bg: '#FFF8EE',
     status: 'ativo' as const,
     href: '/vendas/amazon',
-    descricao: 'Monthly Unified Transaction (.csv)',
+    descricao: 'Relatório de Transações (.csv)',
     recursos: ['Relatório unificado (vendas + taxas)', 'Taxas FBA separadas', 'Reembolsos e ajustes', 'SKU sem sufixo _FBA'],
   },
   {
