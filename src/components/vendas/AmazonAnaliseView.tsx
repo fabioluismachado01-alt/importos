@@ -100,7 +100,7 @@ function UploadBox({
           </div>
           <Badge className={cn('text-[8px] h-4 px-1.5 shrink-0',
             obrigatorio ? 'bg-red-100 text-red-700 border-red-200' : 'bg-slate-100 text-slate-500 border-slate-200')}>
-            Obrigatório
+            {obrigatorio ? 'Obrigatório' : 'Opcional'}
           </Badge>
         </div>
 

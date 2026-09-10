@@ -201,6 +201,7 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const lucroBruto       = receitaBruta - totalDespesas
   const das              = receitaBruta * aliq
   const lucroLiquido     = lucroBruto - das
+  const margemBruta      = receitaBruta > 0 ? (lucroBruto  / receitaBruta) * 100 : 0
   const margemLiquida    = receitaBruta > 0 ? (lucroLiquido / receitaBruta) * 100 : 0
 
   const temVendas   = estadosAba.vendas === 'ok'
@@ -498,7 +499,7 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
               <KPICard label="Receita Bruta"  value={formatCurrency(receitaBruta)} color="emerald" sub={acrescimoParcelamento > 0 ? `${v?.unidades ?? 0} un · +${formatCurrency(acrescimoParcelamento)} acréscimo parc.` : `${v?.unidades ?? 0} unidades`} />
               <KPICard label="Total Despesas" value={`-${formatCurrency(totalDespesas)}`} color="red" sub="Tarifas + Frete + Custos + Ads + Arm." />
-              <KPICard label="Lucro Bruto"    value={formatCurrency(lucroBruto)} color={lucroBruto >= 0 ? 'blue' : 'red'} sub={`${v?.margem_perc.toFixed(1) ?? 0}% marg. bruta`} />
+              <KPICard label="Lucro Bruto"    value={formatCurrency(lucroBruto)} color={lucroBruto >= 0 ? 'blue' : 'red'} sub={`${margemBruta.toFixed(1)}% marg. bruta`} />
               <KPICard label="Lucro Líquido"  value={formatCurrency(lucroLiquido)} color={lucroLiquido >= 0 ? 'emerald' : 'red'} sub={`${margemLiquida.toFixed(1)}% após DAS ${aliquota}%`} />
             </div>
 
