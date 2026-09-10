@@ -21,7 +21,7 @@ import { cn, formatCurrency } from '@/lib/utils'
 
 interface VendasData {
   arquivo: string; pedidos: number; cancelados: number; devolucoes: number
-  unidades: number; receita_bruta: number; tarifas_ml: number; frete_custo: number
+  unidades: number; receita_bruta: number; acrescimo_parcelamento?: number; tarifas_ml: number; frete_custo: number
   custo_produtos: number; lucro_bruto: number; margem_perc: number; ticket_medio: number
   skus: Array<{ sku: string; titulo: string; unidades: number; receita: number
     tarifas: number; frete: number; custo_total: number; lucro_bruto: number
@@ -71,19 +71,19 @@ const ABAS: Array<{ id: AbaId; label: string; icon: React.ElementType; descricao
     id: 'faturamento', label: '2. Faturamento ML', icon: DollarSign,
     descricao: 'Tarifas, frete real, parcelamento e publicidade', formato: '.xlsx', obrigatorio: true,
     caminho: ['Menu', 'Faturamento', 'Tarifas e Pagamentos', 'Ir para Detalhes', 'Relatórios', 'Selecionar Mês', 'Download Faturamento ML'],
-    link: 'https://myaccount.mercadolivre.com.br/billing/detail/20260629?fromSummary=true',
+    link: '__ML_BILLING__',
   },
   {
     id: 'full', label: '3. Tarifas Full', icon: Package,
     descricao: 'Armazenagem e coleta Full (2 abas)', formato: '.xlsx', obrigatorio: false,
     caminho: ['Menu', 'Faturamento', 'Tarifas e Pagamentos', 'Ir para Detalhes', 'Relatórios', 'Selecionar Mês', 'Download Tarifas do Full'],
-    link: 'https://myaccount.mercadolivre.com.br/billing/detail/20260629?fromSummary=true',
+    link: '__ML_BILLING__',
   },
   {
     id: 'pagamentos', label: '4. Pagamentos de Faturas', icon: Tag,
     descricao: 'Histórico de pagamentos e faturas pendentes', formato: '.xlsx', obrigatorio: false,
     caminho: ['Menu', 'Faturamento', 'Tarifas e Pagamentos', 'Ir para Detalhes', 'Relatórios', 'Selecionar Mês', 'Pagamentos de Faturas'],
-    link: 'https://myaccount.mercadolivre.com.br/billing/detail/20260629?fromSummary=true',
+    link: '__ML_BILLING__',
   },
 ]
 
@@ -152,6 +152,8 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
 
     const form = new FormData()
     form.append('file', file)
+    form.append('mes', String(mesSel))
+    form.append('ano', String(anoSel))
     if (aba === 'vendas') form.append('preview', 'true')
 
     try {
@@ -178,7 +180,8 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const f = dados.faturamento
   const ft = dados.full
 
-  const receitaBruta     = v?.receita_bruta ?? 0
+  const acrescimoParcelamento = v?.acrescimo_parcelamento ?? 0
+  const receitaBruta     = (v?.receita_bruta ?? 0) + acrescimoParcelamento
   // Quando o Faturamento ML foi enviado, usa tarifas e frete da fatura (mais precisos).
   // Os cancelamentos já estão embutidos como valores negativos dentro de cada categoria.
   const usandoFatura     = !!f
@@ -217,8 +220,9 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
         mes:  mesSel,
         ano:  anoSel,
         aliquota: parseFloat(aliquota) / 100,
-        // Receita sempre do Relatório de Vendas
+        // Receita sempre do Relatório de Vendas (+ acréscimo parcelamento pass-through)
         vendas_receita:        dados.vendas.receita_bruta,
+        acrescimo_parcelamento: dados.vendas.acrescimo_parcelamento ?? 0,
         vendas_unidades:       dados.vendas.unidades,
         vendas_pedidos:        dados.vendas.pedidos,
         // Tarifas e frete: usa Faturamento ML quando disponível (mais preciso)
@@ -270,8 +274,8 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
               </p>
             </div>
             <p className="text-xs text-slate-500 ml-8">
-              Selecione o mês/ano das vendas — <strong>não</strong> a data de emissão dos relatórios.
-              {' '}Período: <strong>01 ao último dia do mês</strong> (mês-calendário).
+              Selecione o mês/ano de competência.
+              {' '}Ciclo ML: <strong>dia 30 ao dia 29</strong> do mês seguinte.
             </p>
           </div>
           {periodoConfirmado && (
@@ -437,11 +441,18 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
                 </span>
               ))}
             </div>
-            <a href={aba.link} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-[9px] font-semibold text-emerald-600 hover:text-emerald-800 hover:underline mt-1">
-              <ArrowRight className="w-2.5 h-2.5" />
-              Abrir no Mercado Livre
-            </a>
+            {(() => {
+              const linkHref = aba.link === '__ML_BILLING__'
+                ? `https://myaccount.mercadolivre.com.br/billing/detail/${anoSel}${String(mesSel).padStart(2,'0')}29?fromSummary=true`
+                : aba.link
+              return (
+                <a href={linkHref} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[9px] font-semibold text-emerald-600 hover:text-emerald-800 hover:underline mt-1">
+                  <ArrowRight className="w-2.5 h-2.5" />
+                  Abrir no Mercado Livre
+                </a>
+              )
+            })()}
           </CardHeader>
           <CardContent>
             {estadosAba[aba.id] === 'idle' || estadosAba[aba.id] === 'erro' ? (
@@ -485,7 +496,7 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-              <KPICard label="Receita Bruta"  value={formatCurrency(receitaBruta)} color="emerald" sub={`${v?.unidades ?? 0} unidades`} />
+              <KPICard label="Receita Bruta"  value={formatCurrency(receitaBruta)} color="emerald" sub={acrescimoParcelamento > 0 ? `${v?.unidades ?? 0} un · +${formatCurrency(acrescimoParcelamento)} acréscimo parc.` : `${v?.unidades ?? 0} unidades`} />
               <KPICard label="Total Despesas" value={`-${formatCurrency(totalDespesas)}`} color="red" sub="Tarifas + Frete + Custos + Ads + Arm." />
               <KPICard label="Lucro Bruto"    value={formatCurrency(lucroBruto)} color={lucroBruto >= 0 ? 'blue' : 'red'} sub={`${v?.margem_perc.toFixed(1) ?? 0}% marg. bruta`} />
               <KPICard label="Lucro Líquido"  value={formatCurrency(lucroLiquido)} color={lucroLiquido >= 0 ? 'emerald' : 'red'} sub={`${margemLiquida.toFixed(1)}% após DAS ${aliquota}%`} />
@@ -494,6 +505,15 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
             {/* Detalhamento das despesas */}
             <div className="bg-slate-50 rounded-xl p-4 space-y-2">
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Composição das Despesas</p>
+              {acrescimoParcelamento > 0 && (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-emerald-600">Acréscimo de Parcelamento (receita pass-through)</span>
+                    <Badge className="text-[8px] bg-emerald-50 text-emerald-600 border-emerald-200 h-3.5 px-1.5 font-normal">Relatório Vendas</Badge>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-emerald-600">+{formatCurrency(acrescimoParcelamento)}</span>
+                </div>
+              )}
               {[
                 { label: 'Tarifas de Venda ML',    valor: tarifasVenda,     origem: usandoFatura ? 'Faturamento ML (líquido)' : 'Relatório Vendas', show: true },
                 { label: 'Frete (envios)',           valor: freteVenda,       origem: usandoFatura ? 'Faturamento ML (líquido)' : 'Relatório Vendas', show: true },

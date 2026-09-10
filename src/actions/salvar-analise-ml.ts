@@ -20,8 +20,9 @@ export interface DadosConsolidadosML {
   publicidade: number
   pagina_ml: number
   afiliados: number
-  taxa_parcelamento: number  // taxa de parcelamento líquida (net de cancels)
-  estornos: number           // mantido para compatibilidade; deve ser 0 nas novas análises
+  taxa_parcelamento: number        // taxa de parcelamento líquida (net de cancels)
+  acrescimo_parcelamento: number   // receita pass-through: juros pagos pelo comprador, repassados ao vendedor
+  estornos: number                 // mantido para compatibilidade; deve ser 0 nas novas análises
   // Das Tarifas Full
   armazenagem_full: number
   coleta_full: number
@@ -119,6 +120,20 @@ export async function salvarAnaliseML(dados: DadosConsolidadosML) {
       categoria: 'CUSTO_PRODUTOS',
       descricao: 'ML Import — Custo com Produtos',
       valor: dados.vendas_custo_produtos,
+      data: primeiroDia,
+      status: 'CONFIRMADO',
+    })
+  }
+
+  // ── Acréscimo de parcelamento (receita pass-through) ─────────────
+  if ((dados.acrescimo_parcelamento ?? 0) > 0) {
+    lancamentos.push({
+      faturamento_id: fat.id,
+      tipo: 'RECEITA',
+      categoria: 'MERCADO_LIVRE',
+      canal: 'MERCADO_LIVRE',
+      descricao: 'ML Import — Acréscimo de Parcelamento (pass-through)',
+      valor: dados.acrescimo_parcelamento,
       data: primeiroDia,
       status: 'CONFIRMADO',
     })

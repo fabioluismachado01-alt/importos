@@ -67,11 +67,15 @@ function classificarTarifa(detalhe: string): string {
   return 'OUTROS'
 }
 
+const MESES_NOMES_PT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
+
 export async function POST(req: NextRequest) {
   try {
     await getAuthContext()
     const formData = await req.formData()
     const file = formData.get('file') as File
+    const mesExplicito = formData.get('mes') ? parseInt(String(formData.get('mes'))) : null
+    const anoExplicito = formData.get('ano') ? parseInt(String(formData.get('ano'))) : null
     if (!file) return NextResponse.json({ error: 'Arquivo não enviado' }, { status: 400 })
 
     const buffer = Buffer.from(await file.arrayBuffer())
@@ -105,6 +109,20 @@ export async function POST(req: NextRequest) {
       if (!agrupado[cat]) agrupado[cat] = { valor: 0, ocorrencias: 0 }
       agrupado[cat].valor += valor
       agrupado[cat].ocorrencias++
+    }
+
+    // Valida que o arquivo pertence à competência selecionada (Bug A corr.2)
+    if (mesExplicito && anoExplicito && datas.length > 0) {
+      const matching = datas.filter(d => d.getMonth() + 1 === mesExplicito && d.getFullYear() === anoExplicito).length
+      if (matching / datas.length < 0.5) {
+        const contagem: Record<string, number> = {}
+        datas.forEach(d => { const k = `${d.getFullYear()}-${d.getMonth()+1}`; contagem[k] = (contagem[k] || 0) + 1 })
+        const [topKey] = Object.entries(contagem).sort((a, b) => b[1] - a[1])[0]
+        const [topAno, topMes] = topKey.split('-').map(Number)
+        return NextResponse.json({
+          error: `Este relatório é de ${MESES_NOMES_PT[topMes-1]}/${topAno}, mas a competência selecionada é ${MESES_NOMES_PT[mesExplicito-1]}/${anoExplicito}. Baixe o relatório da fatura correta.`
+        }, { status: 422 })
+      }
     }
 
     // Determina período pela data mais frequente

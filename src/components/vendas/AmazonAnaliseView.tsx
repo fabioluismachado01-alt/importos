@@ -432,19 +432,19 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
             <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
             <div className="text-xs text-blue-800">
               <p className="font-black mb-0.5">3 arquivos para DRE completa com análise por produto</p>
-              <p className="text-blue-600">Visualizar Transações (Receita + Tarifas) · Relatório de Pedidos (SKUs + Margem) · Fatura Ads (Publicidade)</p>
+              <p className="text-blue-600">Monthly Unified Transaction (Receita + Tarifas) · Relatório de Pedidos (SKUs + Margem) · Fatura Ads (Publicidade — opcional)</p>
             </div>
           </div>
 
           {/* 3 Uploads */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-            {/* Upload 1 — Visualizar Transações */}
+            {/* Upload 1 — Monthly Unified Transaction */}
             <UploadBox
-              numero={1} titulo="Visualizar Transações" subtitulo="Receita, Tarifas e Reembolsos (.csv)"
+              numero={1} titulo="Monthly Unified Transaction" subtitulo="Receita por SKU, Tarifas e FBA (.csv)"
               obrigatorio aceita=".csv,.xlsx" estado={estV} cor="orange"
-              caminho={['Menu', 'Pagamentos', 'Visualizar transações', 'Selecionar mês', 'Download CSV']}
-              link="https://sellercentral.amazon.com.br/payments/event/view?resultsPerPage=10&pageNumber=1"
+              caminho={['Menu', 'Pagamentos', 'Repositório de relatórios', 'Tipo: Transações', 'Selecionar período', 'Download']}
+              link="https://sellercentral.amazon.com.br/payments/reports/custom/request?tbla_daterangereport=sort=%7B%7D;search=;pagination=%7B%22currentPageIndex%22%3A1%2C%22pageSize%22%3A25%7D;"
               onFile={handleVendas}
               onRemover={() => { setEstV('idle'); setDadosV(null); setErroV(''); setGeralEmbutido(null) }}
               criancas={estV === 'ok' && dadosV ? (
@@ -492,10 +492,10 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
               ) : erroG ? <p className="text-xs text-red-600">{erroG}</p> : null}
             />
 
-            {/* Upload 3 — Fatura de Publicidade */}
+            {/* Upload 3 — Fatura de Publicidade (opcional) */}
             <UploadBox
-              numero={3} titulo="Fatura de Publicidade" subtitulo="Amazon Advertising — fatura mensal (.pdf)"
-              obrigatorio aceita=".pdf" estado={estP} cor="purple"
+              numero={3} titulo="Fatura de Publicidade" subtitulo="Amazon Advertising — fatura mensal (.pdf) · opcional"
+              obrigatorio={false} aceita=".pdf" estado={estP} cor="purple"
               caminho={['Menu', 'Pagamentos', 'Histórico de Fatura de Publicidade', 'Selecionar mês', 'Download PDF']}
               link="https://advertising.amazon.com.br/ads-bg/billing/history?ref_=xx_ads_ttab_dash&merchantId=A1XQ7TDW943HUF&locale=pt_BR&ref=RedirectedFromSellerCentralByRoutingService&invoiceTab=%2522paid%2522"
               onFile={handlePdf}

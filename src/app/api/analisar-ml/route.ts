@@ -36,18 +36,22 @@ function resolverColunas(headerRow: unknown[]) {
   })
   const get = (name: string, occ = 0) => idx[name]?.[occ] ?? -1
   return {
-    N_VENDA:          get('N.º de venda'),
-    DATA:             get('Data da venda'),
-    STATUS:           get('Estado'),                                        // 1ª ocorrência = status do pedido
-    UNIDADES:         get('Unidades'),
-    REC_PRODUTO:      get('Receita por produtos (BRL)'),
-    TARIFA_IMP:       get('Tarifa de venda e impostos (BRL)'),
-    TAR_ENVIO:        get('Tarifas de envio (BRL)'),
-    TOTAL:            get('Total (BRL)'),
-    SKU:              get('SKU'),
-    TITULO:           get('Título do anúncio'),
-    PRECO_UNIT:       get('Preço unitário de venda do anúncio (BRL)'),
-    ESTADO_COMPRADOR: idx['Estado']?.[1] ?? -1,                            // 2ª ocorrência = estado do comprador
+    N_VENDA:                get('N.º de venda'),
+    DATA:                   get('Data da venda'),
+    STATUS:                 get('Estado'),                                        // 1ª ocorrência = status do pedido
+    UNIDADES:               get('Unidades'),
+    REC_PRODUTO:            get('Receita por produtos (BRL)'),
+    TARIFA_IMP:             get('Tarifa de venda e impostos (BRL)'),
+    TAR_ENVIO:              get('Tarifas de envio (BRL)'),
+    TOTAL:                  get('Total (BRL)'),
+    SKU:                    get('SKU'),
+    TITULO:                 get('Título do anúncio'),
+    PRECO_UNIT:             get('Preço unitário de venda do anúncio (BRL)'),
+    ESTADO_COMPRADOR:       idx['Estado']?.[1] ?? -1,                            // 2ª ocorrência = estado do comprador
+    // Acréscimo de parcelamento (juros repassados pelo comprador ao vendedor)
+    ACRESCIMO_PARCELAMENTO: idx['Receita por acréscimo no preço (pago pelo comprador) (BRL)']?.[0]
+      ?? idx['Receita por acréscimo no preço (BRL)']?.[0]
+      ?? -1,
   }
 }
 
@@ -221,6 +225,17 @@ export async function POST(req: NextRequest) {
     // ciclo de faturamento 30→29 usado pelos outros relatórios — Faturamento,
     // Tarifas Full, Pagamentos —, que continuam no ciclo padrão).
     const periodoDetectado0 = detectarPeriodo(rows, COL)
+
+    // Valida que o arquivo pertence à competência selecionada (Bug A corr.2)
+    if (mesExplicito && anoExplicito) {
+      if (periodoDetectado0.ano !== anoExplicito || periodoDetectado0.mes !== mesExplicito) {
+        const mesesNomesPT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
+        return NextResponse.json({
+          error: `Este relatório é de ${mesesNomesPT[periodoDetectado0.mes-1]}/${periodoDetectado0.ano}, mas a competência selecionada é ${mesesNomesPT[mesExplicito-1]}/${anoExplicito}. Baixe o relatório do período correto.`
+        }, { status: 422 })
+      }
+    }
+
     const competenciaAno = anoExplicito ?? periodoDetectado0.ano
     const competenciaMes = mesExplicito ?? periodoDetectado0.mes
     const ultimoDia = diasNoMes(competenciaAno, competenciaMes)
@@ -232,7 +247,7 @@ export async function POST(req: NextRequest) {
       // Breakdown de preços — detecta quando o mesmo SKU é vendido em múltiplos preços
       precos: Record<number, { unidades: number; receita: number; tarifas: number; frete: number }>
     }> = {}
-    let totais = { receita: 0, tarifas: 0, frete: 0, pedidos: 0, cancelados: 0, devolucoes: 0, unidades: 0, fora_do_periodo: 0 }
+    let totais = { receita: 0, tarifas: 0, frete: 0, pedidos: 0, cancelados: 0, devolucoes: 0, unidades: 0, fora_do_periodo: 0, acrescimo_parcelamento: 0 }
     // Acumuladores DIFAL — agrupado por UF destino
     const difalPorEstado: Record<string, { pedidos: number; receita: number; difal: number; fcp: number }> = {}
     let totalDifal = 0
@@ -313,6 +328,10 @@ export async function POST(req: NextRequest) {
       skus[sku].precos[precoRound].frete    += fre
       skus[sku].frete    += fre
       skus[sku].pedidos++
+
+      // Acréscimo de parcelamento: receita pass-through (comprador paga, ML repassa ao vendedor)
+      const acr = COL.ACRESCIMO_PARCELAMENTO >= 0 ? (Number(r[COL.ACRESCIMO_PARCELAMENTO]) || 0) : 0
+      totais.acrescimo_parcelamento += acr
 
       totais.receita   += rec
       totais.tarifas   += tar
@@ -408,6 +427,7 @@ export async function POST(req: NextRequest) {
       fora_do_periodo: totais.fora_do_periodo,
       unidades: totais.unidades,
       receita_bruta: totais.receita,
+      acrescimo_parcelamento: totais.acrescimo_parcelamento,
       tarifas_ml: totais.tarifas,
       frete_custo: totais.frete,
       custo_produtos: custo_total,
