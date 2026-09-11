@@ -225,10 +225,14 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
     : `Reinvestimento${dlrPercentEfetivo !== null ? ` (${(100 - dlrPercentEfetivo).toFixed(0)}%)` : ''}`
 
   async function handleRemove(id: string) {
+    if (!window.confirm('Excluir este lançamento?')) return
     startTransition(async () => {
-      try { await removeLancamento(id) }
-      catch (e) { alert(e instanceof Error ? e.message : 'Erro ao remover lançamento') }
-      router.refresh()
+      try {
+        await removeLancamento(id)
+        router.refresh()
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'Erro ao remover lançamento')
+      }
     })
   }
   async function handleEditFixo(id: string, valor: number) {

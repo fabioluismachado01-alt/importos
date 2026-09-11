@@ -41,6 +41,7 @@ interface FaturamentoData {
   afiliados: number; outros: number; total_bruto: number
   detalhes: Array<{ categoria: string; valor: number; ocorrencias: number }>
   periodo: { mes: number; ano: number }
+  nao_classificadas?: Array<{ detalhe: string; valor: number }>
 }
 
 interface FullData {
@@ -180,7 +181,10 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const f = dados.faturamento
   const ft = dados.full
 
-  const acrescimoParcelamento = v?.acrescimo_parcelamento ?? 0
+  // Acréscimo de parcelamento: usa o valor LÍquido do Faturamento ML (= taxa_parcelamento),
+  // não o bruto do Relatório de Vendas. Os dois lados são pass-through e devem ser iguais.
+  // Faturamento ML já desconta cancelamentos; Relatório de Vendas traz o bruto.
+  const acrescimoParcelamento = f?.taxa_parcelamento ?? (v?.acrescimo_parcelamento ?? 0)
   const receitaBruta     = (v?.receita_bruta ?? 0) + acrescimoParcelamento
   // Quando o Faturamento ML foi enviado, usa tarifas e frete da fatura (mais precisos).
   // Os cancelamentos já estão embutidos como valores negativos dentro de cada categoria.
@@ -223,7 +227,7 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
         aliquota: parseFloat(aliquota) / 100,
         // Receita sempre do Relatório de Vendas (+ acréscimo parcelamento pass-through)
         vendas_receita:        dados.vendas.receita_bruta,
-        acrescimo_parcelamento: dados.vendas.acrescimo_parcelamento ?? 0,
+        acrescimo_parcelamento: dados.faturamento?.taxa_parcelamento ?? 0,
         vendas_unidades:       dados.vendas.unidades,
         vendas_pedidos:        dados.vendas.pedidos,
         // Tarifas e frete: usa Faturamento ML quando disponível (mais preciso)
@@ -675,6 +679,19 @@ function PreviewAba({ aba, dados, aliq }: { aba: AbaId; dados: Record<string, un
             </div>
           ))}
         </div>
+        {f.nao_classificadas && f.nao_classificadas.length > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-1.5">
+            <p className="text-xs font-black text-amber-800">
+              ⚠️ R$ {formatCurrency(f.nao_classificadas.reduce((s, x) => s + Math.abs(x.valor), 0))} em tarifas não classificadas — não estão nos totais acima
+            </p>
+            {f.nao_classificadas.map(x => (
+              <div key={x.detalhe} className="flex items-center justify-between text-xs text-amber-700">
+                <span>"{x.detalhe}"</span>
+                <span className="font-mono font-bold">{formatCurrency(Math.abs(x.valor))}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     )
   }

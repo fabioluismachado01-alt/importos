@@ -89,16 +89,22 @@ function limparTitulo(t: string): string {
   return t.replace(/\bnamave\b/gi, '').replace(/\s{2,}/g, ' ').trim().slice(0, 60)
 }
 
+// Chaves sem acentos — permite lookup após normalizar o nome do mês do arquivo
 const MESES_PT: Record<string, number> = {
-  janeiro:1,fevereiro:2,março:3,abril:4,maio:5,junho:6,
-  julho:7,agosto:8,setembro:9,outubro:10,novembro:11,dezembro:12,
+  janeiro:1, fevereiro:2, marco:3, abril:4, maio:5, junho:6,
+  julho:7, agosto:8, setembro:9, outubro:10, novembro:11, dezembro:12,
 }
 
-/** Faz parse da data da venda. Formato: "29 de maio de 2026 23:17 hs." */
+function normalizarNomeMes(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+}
+
+/** Faz parse da data da venda. Formato: "29 de março de 2026 23:33 hs." */
 function parseDataVenda(ds: unknown): { dia: number; mes: number; ano: number } | null {
-  const match = String(ds ?? '').match(/(\d+) de (\w+) de (\d{4})/)
+  // [^\s]+ em vez de \w+ para capturar meses com cedilha/acento (ex: "março")
+  const match = String(ds ?? '').match(/(\d+) de ([^\s]+) de (\d{4})/)
   if (!match) return null
-  const mes = MESES_PT[match[2].toLowerCase()]
+  const mes = MESES_PT[normalizarNomeMes(match[2])]
   if (!mes) return null
   return { dia: parseInt(match[1]), mes, ano: parseInt(match[3]) }
 }
@@ -125,11 +131,16 @@ function detectarPeriodo(rows: unknown[][], COL: ReturnType<typeof resolverColun
     contagem[chave] = (contagem[chave] || 0) + 1
   }
   datas.sort((a, b) => a.getTime() - b.getTime())
-  const inicio = datas[0] ?? new Date()
-  const fim = datas[datas.length - 1] ?? new Date()
+
+  if (datas.length === 0) {
+    throw new Error('Não foi possível interpretar nenhuma data do relatório. Verifique se o arquivo está correto.')
+  }
+
+  const inicio = datas[0]
+  const fim = datas[datas.length - 1]
 
   // Mês de competência = mês civil com mais vendas no relatório
-  const [chaveTop] = Object.entries(contagem).sort((a, b) => b[1] - a[1])[0] ?? [`${fim.getFullYear()}-${fim.getMonth() + 1}`]
+  const [chaveTop] = Object.entries(contagem).sort((a, b) => b[1] - a[1])[0]
   const [anoTop, mesTop] = chaveTop.split('-').map(Number)
   return { inicio, fim, ano: anoTop, mes: mesTop }
 }

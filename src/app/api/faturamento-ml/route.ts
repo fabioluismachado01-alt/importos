@@ -36,6 +36,8 @@ export interface FaturamentoMLResult {
   total_bruto: number
   detalhes: Array<{ categoria: string; valor: number; ocorrencias: number }>
   periodo: { mes: number; ano: number }
+  // Categorias do arquivo que não foram classificadas (valor > 0 = dinheiro não contabilizado)
+  nao_classificadas: Array<{ detalhe: string; valor: number }>
 }
 
 /**
@@ -49,18 +51,21 @@ function classificarTarifa(detalhe: string): string {
   // Cancelamentos: identificar primeiro e rotear para a categoria correta
   if (d.startsWith('cancelamento')) {
     if (d.includes('envio') || d.includes('devolução') || d.includes('devolucao')) return 'FRETE'
-    if (d.includes('vender') || d.includes('cobrar') || d.includes('recebimento')) return 'TARIFA_VENDA'
+    if (d.includes('vender') || d.includes('cobrar') || d.includes('recebimento') || d.includes('venda') || d.includes('gestão') || d.includes('gestao')) return 'TARIFA_VENDA'
     if (d.includes('parcelamento')) return 'PARCELAMENTO'
+    if (d.includes('armazenamento') || d.includes('armazenagem') || d.includes('estoque')) return 'ARMAZENAGEM'
     return 'OUTROS'
   }
 
   if (d.includes('publicidade') || d.includes('campanha') || d.includes('product ads')) return 'PUBLICIDADE'
-  if (d.includes('armazenamento') || d.includes('armazenagem')) return 'ARMAZENAGEM'
+  if (d.includes('armazenamento') || d.includes('armazenagem') || d.includes('estoque antigo')) return 'ARMAZENAGEM'
   if (d.includes('coleta')) return 'COLETA_FULL'
   if (d.includes('minha página') || d.includes('minha pagina')) return 'PAGINA_ML'
   if (d.includes('afiliado')) return 'AFILIADOS'
   if (d.includes('parcelamento')) return 'PARCELAMENTO'
   if (d.includes('vender') || d.includes('cobrar') || d.includes('recebimento')) return 'TARIFA_VENDA'
+  // "Tarifa de venda" e "Custo de gestão da venda" → comissão
+  if (d.includes('tarifa de venda') || d.includes('custo de gestão') || d.includes('custo de gestao')) return 'TARIFA_VENDA'
   // Frete: envio + devolução por envio (coleta fica em COLETA_FULL acima)
   if (d.includes('envio') || d.includes('devolução') || d.includes('devolucao')) return 'FRETE'
 
@@ -87,6 +92,8 @@ export async function POST(req: NextRequest) {
     // Detecta o período a partir das datas das tarifas
     const datas: Date[] = []
     const agrupado: Record<string, { valor: number; ocorrencias: number }> = {}
+    // Rastreia detalhes brutos que caíram em OUTROS para o assert de fechamento
+    const naoClassificadosMap: Record<string, number> = {}
 
     // Header na linha 8 (índice 7), dados a partir da linha 9 (índice 8)
     for (let i = 8; i < rows.length; i++) {
@@ -109,6 +116,10 @@ export async function POST(req: NextRequest) {
       if (!agrupado[cat]) agrupado[cat] = { valor: 0, ocorrencias: 0 }
       agrupado[cat].valor += valor
       agrupado[cat].ocorrencias++
+
+      if (cat === 'OUTROS') {
+        naoClassificadosMap[detalhe] = (naoClassificadosMap[detalhe] ?? 0) + valor
+      }
     }
 
     // Valida que o arquivo pertence à competência selecionada (Bug A corr.2)
@@ -132,6 +143,11 @@ export async function POST(req: NextRequest) {
     const periodo = { mes: dataRef.getMonth() + 1, ano: dataRef.getFullYear() }
 
     // Cada categoria já está líquida de cancels (cancelamentos foram roteados para sua categoria)
+    const naoClassificadas = Object.entries(naoClassificadosMap)
+      .map(([detalhe, valor]) => ({ detalhe, valor }))
+      .filter(x => Math.abs(x.valor) > 0.005)
+      .sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor))
+
     const result: FaturamentoMLResult = {
       tarifas_venda_fatura: agrupado['TARIFA_VENDA']?.valor ?? 0,
       frete_fatura:         agrupado['FRETE']?.valor ?? 0,
@@ -147,6 +163,7 @@ export async function POST(req: NextRequest) {
         categoria, valor: d.valor, ocorrencias: d.ocorrencias,
       })).sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor)),
       periodo,
+      nao_classificadas: naoClassificadas,
     }
 
     return NextResponse.json({ success: true, ...result, arquivo: file.name })
