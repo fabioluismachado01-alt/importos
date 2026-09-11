@@ -46,28 +46,31 @@ export interface FaturamentoMLResult {
  * Assim, somar por categoria dá o net automaticamente.
  */
 function classificarTarifa(detalhe: string): string {
-  const d = detalhe.toLowerCase().trim()
+  // Normalizar NFD para remover acentos — evita mismatch entre encodings do arquivo e dos literais
+  const d = detalhe.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
 
   // Cancelamentos: identificar primeiro e rotear para a categoria correta
   if (d.startsWith('cancelamento')) {
-    if (d.includes('envio') || d.includes('devolução') || d.includes('devolucao')) return 'FRETE'
-    if (d.includes('vender') || d.includes('cobrar') || d.includes('recebimento') || d.includes('venda') || d.includes('gestão') || d.includes('gestao')) return 'TARIFA_VENDA'
+    if (d.includes('envio') || d.includes('devolucao')) return 'FRETE'
+    if (d.includes('vender') || d.includes('cobrar') || d.includes('recebimento') || d.includes('venda') || d.includes('gestao')) return 'TARIFA_VENDA'
     if (d.includes('parcelamento')) return 'PARCELAMENTO'
-    if (d.includes('armazenamento') || d.includes('armazenagem') || d.includes('estoque')) return 'ARMAZENAGEM'
+    if (d.includes('armazenamento') || d.includes('armazenagem') || d.includes('estoque') || d.includes('manutencao')) return 'ARMAZENAGEM'
+    if (d.includes('pagina') || d.includes('page')) return 'PAGINA_ML'
     return 'OUTROS'
   }
 
   if (d.includes('publicidade') || d.includes('campanha') || d.includes('product ads')) return 'PUBLICIDADE'
   if (d.includes('armazenamento') || d.includes('armazenagem') || d.includes('estoque antigo')) return 'ARMAZENAGEM'
   if (d.includes('coleta')) return 'COLETA_FULL'
-  if (d.includes('minha página') || d.includes('minha pagina')) return 'PAGINA_ML'
+  // "Minha página" + "Tarifa de manutenção da Minha página"
+  if (d.includes('minha pagina') || d.includes('manutencao da minha') || d.includes('manutencao da pagina')) return 'PAGINA_ML'
   if (d.includes('afiliado')) return 'AFILIADOS'
   if (d.includes('parcelamento')) return 'PARCELAMENTO'
   if (d.includes('vender') || d.includes('cobrar') || d.includes('recebimento')) return 'TARIFA_VENDA'
   // "Tarifa de venda" e "Custo de gestão da venda" → comissão
-  if (d.includes('tarifa de venda') || d.includes('custo de gestão') || d.includes('custo de gestao')) return 'TARIFA_VENDA'
+  if (d.includes('tarifa de venda') || d.includes('custo de gestao')) return 'TARIFA_VENDA'
   // Frete: envio + devolução por envio (coleta fica em COLETA_FULL acima)
-  if (d.includes('envio') || d.includes('devolução') || d.includes('devolucao')) return 'FRETE'
+  if (d.includes('envio') || d.includes('devolucao')) return 'FRETE'
 
   return 'OUTROS'
 }
