@@ -139,8 +139,16 @@ function detectarPeriodo(rows: unknown[][], COL: ReturnType<typeof resolverColun
   const inicio = datas[0]
   const fim = datas[datas.length - 1]
 
-  // Mês de competência = mês civil com mais vendas no relatório
-  const [chaveTop] = Object.entries(contagem).sort((a, b) => b[1] - a[1])[0]
+  // Mês de competência = mês civil com mais vendas; exige ≥ 60% para evitar adivinhação
+  const totalLinhas = datas.length
+  const [[chaveTop, countTop]] = Object.entries(contagem).sort((a, b) => b[1] - a[1])
+  if (countTop / totalLinhas < 0.6) {
+    const dist = Object.entries(contagem)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `${k} (${Math.round(v / totalLinhas * 100)}%)`)
+      .join(', ')
+    throw new Error(`Não foi possível identificar o período deste relatório. Linhas encontradas: ${dist}. Baixe o relatório de um único mês de competência.`)
+  }
   const [anoTop, mesTop] = chaveTop.split('-').map(Number)
   return { inicio, fim, ano: anoTop, mes: mesTop }
 }

@@ -48,10 +48,11 @@ export async function salvarAnaliseML(dados: DadosConsolidadosML) {
 
   const fat = await prisma.faturamento_mes.upsert({
     where: { workspace_id_ano_mes: { workspace_id: workspaceId, ano, mes } },
-    update: { aliquota_simples: aliquotaReal },
+    update: { aliquota_simples: aliquotaReal, aliquota_origem: 'usuario' },
     create: {
       workspace_id: workspaceId, ano, mes,
       aliquota_simples: aliquotaReal,
+      aliquota_origem: 'usuario',
       dias_no_mes: diasNoMes,
       das_vencimento: vencimentoDas,
     },

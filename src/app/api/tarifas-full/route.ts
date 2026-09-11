@@ -45,9 +45,18 @@ function extrairTotal(ws: XLSX.WorkSheet, colunaValor = 5): { total: number; dat
     contagem[chave].count++
   }
 
-  // Usa o mês dominante (= maioria das linhas), igual ao validador do faturamento
+  // Exige que o mês dominante represente ≥ 60% das linhas — evita aceitar arquivo espalhado
+  const totalLinhas = Object.values(contagem).reduce((s, c) => s + c.count, 0)
   const dominante = Object.values(contagem).sort((a, b) => b.count - a.count)[0]
-  const dataRef = dominante?.dataEx ?? null
+  if (!dominante || (totalLinhas > 0 && dominante.count / totalLinhas < 0.6)) {
+    // Monta descrição da distribuição para o erro
+    const dist = Object.entries(contagem)
+      .sort((a, b) => b[1].count - a[1].count)
+      .map(([k, v]) => `${k} (${Math.round(v.count / totalLinhas * 100)}%)`)
+      .join(', ')
+    throw new Error(`Não foi possível identificar o período deste relatório. Linhas encontradas: ${dist}. Baixe o relatório de um único mês de competência.`)
+  }
+  const dataRef = dominante.dataEx
   return { total, dataRef }
 }
 

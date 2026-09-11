@@ -125,24 +125,37 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Valida que o arquivo pertence à competência selecionada (Bug A corr.2)
-    if (mesExplicito && anoExplicito && datas.length > 0) {
-      const matching = datas.filter(d => d.getMonth() + 1 === mesExplicito && d.getFullYear() === anoExplicito).length
-      if (matching / datas.length < 0.5) {
-        const contagem: Record<string, number> = {}
-        datas.forEach(d => { const k = `${d.getFullYear()}-${d.getMonth()+1}`; contagem[k] = (contagem[k] || 0) + 1 })
-        const [topKey] = Object.entries(contagem).sort((a, b) => b[1] - a[1])[0]
-        const [topAno, topMes] = topKey.split('-').map(Number)
+    // Constrói contagem por mês para usar tanto na validação quanto no período
+    const contagemMeses: Record<string, number> = {}
+    datas.forEach(d => { const k = `${d.getFullYear()}-${d.getMonth()+1}`; contagemMeses[k] = (contagemMeses[k] || 0) + 1 })
+
+    // Exige dominante ≥ 60%: arquivo espalhado entre meses é rejeitado
+    if (datas.length > 0) {
+      const totalLinhas = datas.length
+      const [[topKey, topCount]] = Object.entries(contagemMeses).sort((a, b) => b[1] - a[1])
+      if (topCount / totalLinhas < 0.6) {
+        const dist = Object.entries(contagemMeses)
+          .sort((a, b) => b[1] - a[1])
+          .map(([k, v]) => `${k} (${Math.round(v / totalLinhas * 100)}%)`)
+          .join(', ')
         return NextResponse.json({
-          error: `Este relatório é de ${MESES_NOMES_PT[topMes-1]}/${topAno}, mas a competência selecionada é ${MESES_NOMES_PT[mesExplicito-1]}/${anoExplicito}. Baixe o relatório da fatura correta.`
+          error: `Não foi possível identificar o período deste relatório. Linhas encontradas: ${dist}. Baixe o relatório de um único mês de competência.`
         }, { status: 422 })
+      }
+
+      // Valida contra competência selecionada
+      if (mesExplicito && anoExplicito) {
+        const [topAno, topMes] = topKey.split('-').map(Number)
+        if (topMes !== mesExplicito || topAno !== anoExplicito) {
+          return NextResponse.json({
+            error: `Este relatório é de ${MESES_NOMES_PT[topMes-1]}/${topAno}, mas a competência selecionada é ${MESES_NOMES_PT[mesExplicito-1]}/${anoExplicito}. Baixe o relatório da fatura correta.`
+          }, { status: 422 })
+        }
       }
     }
 
-    // Determina período pela data mais frequente
-    const dataRef = datas.length > 0
-      ? datas[Math.floor(datas.length / 2)]
-      : new Date()
+    // Período pelo mês dominante
+    const dataRef = datas.length > 0 ? datas[Math.floor(datas.length / 2)] : new Date()
     const periodo = { mes: dataRef.getMonth() + 1, ano: dataRef.getFullYear() }
 
     // Cada categoria já está líquida de cancels (cancelamentos foram roteados para sua categoria)

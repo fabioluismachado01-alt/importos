@@ -542,6 +542,16 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
         })()}
       </div>
 
+      {/* Aviso: alíquota nunca foi apurada neste mês */}
+      {(d as { aliquota_origem?: string }).aliquota_origem === 'default' && (
+        <div className="flex items-center gap-3 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3">
+          <span className="text-amber-600 text-base">⚠️</span>
+          <p className="text-xs font-bold text-amber-800">
+            Esta competência nunca teve alíquota apurada — confira o PGDAS do mês.
+          </p>
+        </div>
+      )}
+
       {/* ── KPIs ROW 2: Gerenciais ── */}
       {canalAnalise.length > 0 && (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">

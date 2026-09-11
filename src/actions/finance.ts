@@ -200,6 +200,7 @@ export async function configurarMes(
     where: { id: fat.id },
     data: {
       aliquota_simples: data.aliquota_simples,
+      aliquota_origem: 'usuario',
       meta_mes: data.meta_mes,
       dias_no_mes: getDiasNoMes(ano, mes),
     },

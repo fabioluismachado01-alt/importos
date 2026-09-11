@@ -254,6 +254,9 @@ model faturamento_mes {
   desp_outras_taxas   Float @default(0)
   desp_outras         Float @default(0)
 
+  // Alíquota Simples — origem para detectar meses sem apuração real
+  aliquota_origem     String    @default("default") // 'usuario' | 'default'
+
   // Impostos
   das_valor_calc      Float     @default(0)
   das_valor_real      Float?
