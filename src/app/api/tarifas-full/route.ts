@@ -19,45 +19,86 @@ export interface TarifasFullResult {
   arquivo: string
 }
 
-function extrairTotal(ws: XLSX.WorkSheet, colunaValor = 5): { total: number; dataRef: Date | null } {
+// Extrai total e lista de datas de uma aba — sem validação de período (feita no nível do arquivo)
+function extrairTotal(ws: XLSX.WorkSheet, colunaValor = 5): { total: number; datas: Date[] } {
   const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' }) as unknown[][]
   let total = 0
-  const contagem: Record<string, { count: number; dataEx: Date }> = {}
+  const datas: Date[] = []
 
-  // Header geralmente na linha 6 (índice 5), dados a partir do índice 6
   for (let i = 6; i < rows.length; i++) {
     const r = rows[i] as unknown[]
     if (!r?.[0] || r[0] === '') continue
 
-    // Valida que col 1 é uma data — linhas de total/imposto não têm data e devem ser ignoradas
     const dataCell = r[1]
     const isDate = dataCell instanceof Date || typeof dataCell === 'number'
     if (!isDate) continue
 
-    const valor = Number(r[colunaValor]) || 0
-    total += valor
+    total += Number(r[colunaValor]) || 0
 
     const d: Date = dataCell instanceof Date
       ? dataCell
       : new Date((dataCell as number - 25569) * 86400 * 1000)
-    const chave = `${d.getFullYear()}-${d.getMonth() + 1}`
-    if (!contagem[chave]) contagem[chave] = { count: 0, dataEx: d }
-    contagem[chave].count++
+    datas.push(d)
   }
 
-  // Exige que o mês dominante represente ≥ 60% das linhas — evita aceitar arquivo espalhado
-  const totalLinhas = Object.values(contagem).reduce((s, c) => s + c.count, 0)
-  const dominante = Object.values(contagem).sort((a, b) => b.count - a.count)[0]
-  if (!dominante || (totalLinhas > 0 && dominante.count / totalLinhas < 0.6)) {
-    // Monta descrição da distribuição para o erro
-    const dist = Object.entries(contagem)
-      .sort((a, b) => b[1].count - a[1].count)
-      .map(([k, v]) => `${k} (${Math.round(v.count / totalLinhas * 100)}%)`)
-      .join(', ')
-    throw new Error(`Não foi possível identificar o período deste relatório. Linhas encontradas: ${dist}. Baixe o relatório de um único mês de competência.`)
+  return { total, datas }
+}
+
+// Valida o período do arquivo contra a competência selecionada.
+// Agrega datas de TODAS as abas — uma aba pequena não decide o período do arquivo.
+// Regra: dominante == competência → aceita; dominante != competência → rejeita com mensagem
+//        se dominante < 60% → rejeita com distribuição (impossível identificar)
+function validarPeriodo(
+  datasAgregadas: Date[],
+  mesExplicito: number | null,
+  anoExplicito: number | null,
+  mesesNomes: string[],
+): { valid: true; dataRef: Date } | { valid: false; error: string } {
+  if (datasAgregadas.length === 0) return { valid: true, dataRef: new Date() }
+
+  const contagem: Record<string, { count: number; dataEx: Date }> = {}
+  for (const d of datasAgregadas) {
+    const k = `${d.getFullYear()}-${d.getMonth() + 1}`
+    if (!contagem[k]) contagem[k] = { count: 0, dataEx: d }
+    contagem[k].count++
   }
-  const dataRef = dominante.dataEx
-  return { total, dataRef }
+
+  const total = datasAgregadas.length
+  const sorted = Object.entries(contagem).sort((a, b) => b[1].count - a[1].count)
+  const [[topKey, topData]] = sorted
+  const [topAno, topMes] = topKey.split('-').map(Number)
+  const dominantePerc = topData.count / total
+
+  // Arquivo correto: dominante coincide com a competência → aceita sempre
+  if (mesExplicito && anoExplicito && topMes === mesExplicito && topAno === anoExplicito) {
+    return { valid: true, dataRef: topData.dataEx }
+  }
+
+  // Dominante não coincide com competência
+  if (mesExplicito && anoExplicito && (topMes !== mesExplicito || topAno !== anoExplicito)) {
+    if (dominantePerc >= 0.6) {
+      return {
+        valid: false,
+        error: `Este relatório é de ${mesesNomes[topMes-1]}/${topAno}, mas a competência selecionada é ${mesesNomes[mesExplicito-1]}/${anoExplicito}. Baixe o relatório da fatura correta.`,
+      }
+    }
+    const dist = sorted.map(([k, v]) => `${k} (${Math.round(v.count / total * 100)}%)`).join(', ')
+    return {
+      valid: false,
+      error: `Não foi possível identificar o período deste relatório. Linhas encontradas: ${dist}. Baixe o relatório de um único mês de competência.`,
+    }
+  }
+
+  // Sem competência explícita: exige dominante ≥ 60% para aceitar
+  if (dominantePerc < 0.6) {
+    const dist = sorted.map(([k, v]) => `${k} (${Math.round(v.count / total * 100)}%)`).join(', ')
+    return {
+      valid: false,
+      error: `Não foi possível identificar o período deste relatório. Linhas encontradas: ${dist}. Baixe o relatório de um único mês de competência.`,
+    }
+  }
+
+  return { valid: true, dataRef: topData.dataEx }
 }
 
 const MESES_NOMES_PT_FULL = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
@@ -74,29 +115,26 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer())
     const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true })
 
-    // Aba 1: Armazenagem
+    // Extrai totais e datas de cada aba (sem validação por aba)
     const wsArm = wb.Sheets['Tarifa de armazenamento']
-    const { total: armazenagem, dataRef: dataArm } = wsArm
+    const { total: armazenagem, datas: datasArm } = wsArm
       ? extrairTotal(wsArm)
-      : { total: 0, dataRef: null }
+      : { total: 0, datas: [] }
 
-    // Aba 2: Coleta
     const wsCol = wb.Sheets['Custo por serviço de coleta']
-    const { total: coleta } = wsCol ? extrairTotal(wsCol) : { total: 0 }
+    const { total: coleta, datas: datasCol } = wsCol
+      ? extrairTotal(wsCol)
+      : { total: 0, datas: [] }
 
-    const dataRef = dataArm ?? new Date()
-    const periodo = { mes: dataRef.getMonth() + 1, ano: dataRef.getFullYear() }
-
-    // Valida que o arquivo pertence à competência selecionada (Bug A corr.2)
-    if (mesExplicito && anoExplicito && dataArm) {
-      const mesArquivo = dataArm.getMonth() + 1
-      const anoArquivo = dataArm.getFullYear()
-      if (mesArquivo !== mesExplicito || anoArquivo !== anoExplicito) {
-        return NextResponse.json({
-          error: `Este relatório é de ${MESES_NOMES_PT_FULL[mesArquivo-1]}/${anoArquivo}, mas a competência selecionada é ${MESES_NOMES_PT_FULL[mesExplicito-1]}/${anoExplicito}. Baixe o relatório da fatura correta.`
-        }, { status: 422 })
-      }
+    // Valida período agregando datas de TODAS as abas — uma aba pequena não decide o período
+    const datasAgregadas = [...datasArm, ...datasCol]
+    const validacao = validarPeriodo(datasAgregadas, mesExplicito, anoExplicito, MESES_NOMES_PT_FULL)
+    if (!validacao.valid) {
+      return NextResponse.json({ error: validacao.error }, { status: 422 })
     }
+
+    const dataRef = datasAgregadas.length > 0 ? validacao.dataRef : new Date()
+    const periodo = { mes: dataRef.getMonth() + 1, ano: dataRef.getFullYear() }
 
     const result: TarifasFullResult = {
       armazenagem,

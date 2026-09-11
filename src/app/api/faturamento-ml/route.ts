@@ -125,32 +125,41 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Constrói contagem por mês para usar tanto na validação quanto no período
-    const contagemMeses: Record<string, number> = {}
-    datas.forEach(d => { const k = `${d.getFullYear()}-${d.getMonth()+1}`; contagemMeses[k] = (contagemMeses[k] || 0) + 1 })
+    // Constrói contagem por mês
+    const contagemMeses: Record<string, { count: number; dataEx: Date }> = {}
+    datas.forEach(d => {
+      const k = `${d.getFullYear()}-${d.getMonth()+1}`
+      if (!contagemMeses[k]) contagemMeses[k] = { count: 0, dataEx: d }
+      contagemMeses[k].count++
+    })
 
-    // Exige dominante ≥ 60%: arquivo espalhado entre meses é rejeitado
+    // Valida período com a regra correta:
+    // dominante == competência → aceita; dominante != competência → rejeita com contexto
     if (datas.length > 0) {
       const totalLinhas = datas.length
-      const [[topKey, topCount]] = Object.entries(contagemMeses).sort((a, b) => b[1] - a[1])
-      if (topCount / totalLinhas < 0.6) {
-        const dist = Object.entries(contagemMeses)
-          .sort((a, b) => b[1] - a[1])
-          .map(([k, v]) => `${k} (${Math.round(v / totalLinhas * 100)}%)`)
-          .join(', ')
-        return NextResponse.json({
-          error: `Não foi possível identificar o período deste relatório. Linhas encontradas: ${dist}. Baixe o relatório de um único mês de competência.`
-        }, { status: 422 })
-      }
+      const sorted = Object.entries(contagemMeses).sort((a, b) => b[1].count - a[1].count)
+      const [[topKey, topData]] = sorted
+      const [topAno, topMes] = topKey.split('-').map(Number)
+      const dominantePerc = topData.count / totalLinhas
 
-      // Valida contra competência selecionada
       if (mesExplicito && anoExplicito) {
-        const [topAno, topMes] = topKey.split('-').map(Number)
-        if (topMes !== mesExplicito || topAno !== anoExplicito) {
+        if (topMes === mesExplicito && topAno === anoExplicito) {
+          // Arquivo correto — aceita independente do %
+        } else if (dominantePerc >= 0.6) {
           return NextResponse.json({
             error: `Este relatório é de ${MESES_NOMES_PT[topMes-1]}/${topAno}, mas a competência selecionada é ${MESES_NOMES_PT[mesExplicito-1]}/${anoExplicito}. Baixe o relatório da fatura correta.`
           }, { status: 422 })
+        } else {
+          const dist = sorted.map(([k, v]) => `${k} (${Math.round(v.count / totalLinhas * 100)}%)`).join(', ')
+          return NextResponse.json({
+            error: `Não foi possível identificar o período deste relatório. Linhas encontradas: ${dist}. Baixe o relatório de um único mês de competência.`
+          }, { status: 422 })
         }
+      } else if (dominantePerc < 0.6) {
+        const dist = sorted.map(([k, v]) => `${k} (${Math.round(v.count / totalLinhas * 100)}%)`).join(', ')
+        return NextResponse.json({
+          error: `Não foi possível identificar o período deste relatório. Linhas encontradas: ${dist}. Baixe o relatório de um único mês de competência.`
+        }, { status: 422 })
       }
     }
 

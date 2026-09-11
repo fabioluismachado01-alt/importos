@@ -37,7 +37,7 @@ export function ConfigurarMesModal({
     (aliquotaAtual > 1 ? aliquotaAtual : aliquotaAtual * 100).toFixed(2)
   )
   const [meta, setMeta] = useState(metaAtual > 0 ? metaAtual.toFixed(2) : '')
-  const [replicarFixas, setReplicarFixas] = useState(true)
+  const [replicarFixas, setReplicarFixas] = useState(false)
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 

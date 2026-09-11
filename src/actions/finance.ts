@@ -256,17 +256,28 @@ async function _replicarFixasParaMes(fatId: string, workspaceId: string, ano: nu
     if (t.categoria === 'PREVIDENCIA_PRIVADA') continue // calculada pela engine
     if (t.valor_padrao <= 0) continue
 
-    // Busca por categoria independente de e_fixo — evita duplicar lançamentos criados
-    // pelo import do ML (e_fixo: false) quando o template teria a mesma categoria.
-    const existing = await prisma.lancamento.findFirst({
-      where: { faturamento_id: fatId, categoria: t.categoria },
-      select: { id: true, e_fixo: true },
+    // Busca apenas lançamentos fixos (e_fixo: true) para não promover nem apagar
+    // lançamentos criados por imports (e_fixo: false).
+    const existingFixo = await prisma.lancamento.findFirst({
+      where: { faturamento_id: fatId, categoria: t.categoria, e_fixo: true },
+      select: { id: true },
     })
 
+    // Se já existe um lançamento de import (e_fixo: false) para esta categoria,
+    // não criar duplicata — o import já cobre o custo.
+    if (!existingFixo) {
+      const existingImport = await prisma.lancamento.findFirst({
+        where: { faturamento_id: fatId, categoria: t.categoria, e_fixo: false },
+        select: { id: true },
+      })
+      if (existingImport) continue
+    }
+
+    const existing = existingFixo
     if (existing) {
       await prisma.lancamento.update({
         where: { id: existing.id },
-        data: { valor: t.valor_padrao, descricao: t.nome, data: primeiroDia, e_fixo: true },
+        data: { valor: t.valor_padrao, descricao: t.nome, data: primeiroDia },
       })
     } else {
       await prisma.lancamento.create({

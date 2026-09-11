@@ -118,7 +118,7 @@ function diasNoMes(ano: number, mes: number): number {
  * Detecta o mês de competência (mês civil, dia 01 ao último dia) a partir
  * da maioria das datas de venda do relatório.
  */
-function detectarPeriodo(rows: unknown[][], COL: ReturnType<typeof resolverColunas>): { inicio: Date; fim: Date; ano: number; mes: number } {
+function detectarPeriodo(rows: unknown[][], COL: ReturnType<typeof resolverColunas>): { inicio: Date; fim: Date; ano: number; mes: number; dominantePerc: number; contagemEntries: [string, number][]; totalLinhasPeriodo: number } {
   const datas: Date[] = []
   const contagem: Record<string, number> = {}
   for (let i = 6; i < rows.length; i++) {
@@ -139,18 +139,14 @@ function detectarPeriodo(rows: unknown[][], COL: ReturnType<typeof resolverColun
   const inicio = datas[0]
   const fim = datas[datas.length - 1]
 
-  // Mês de competência = mês civil com mais vendas; exige ≥ 60% para evitar adivinhação
+  // Mês de competência = mês civil com mais vendas
   const totalLinhas = datas.length
-  const [[chaveTop, countTop]] = Object.entries(contagem).sort((a, b) => b[1] - a[1])
-  if (countTop / totalLinhas < 0.6) {
-    const dist = Object.entries(contagem)
-      .sort((a, b) => b[1] - a[1])
-      .map(([k, v]) => `${k} (${Math.round(v / totalLinhas * 100)}%)`)
-      .join(', ')
-    throw new Error(`Não foi possível identificar o período deste relatório. Linhas encontradas: ${dist}. Baixe o relatório de um único mês de competência.`)
-  }
+  const sorted = Object.entries(contagem).sort((a, b) => b[1] - a[1])
+  const [[chaveTop, countTop]] = sorted
   const [anoTop, mesTop] = chaveTop.split('-').map(Number)
-  return { inicio, fim, ano: anoTop, mes: mesTop }
+  const dominantePerc = countTop / totalLinhas
+  const contagemEntries = sorted.map(([k, v]): [string, number] => [k, v])
+  return { inicio, fim, ano: anoTop, mes: mesTop, dominantePerc, contagemEntries, totalLinhasPeriodo: totalLinhas }
 }
 
 export async function POST(req: NextRequest) {
@@ -245,14 +241,31 @@ export async function POST(req: NextRequest) {
     // Tarifas Full, Pagamentos —, que continuam no ciclo padrão).
     const periodoDetectado0 = detectarPeriodo(rows, COL)
 
-    // Valida que o arquivo pertence à competência selecionada (Bug A corr.2)
+    // Valida período com a regra correta:
+    // dominante == competência → aceita; dominante != competência → rejeita com contexto
+    const mesesNomesPT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
     if (mesExplicito && anoExplicito) {
-      if (periodoDetectado0.ano !== anoExplicito || periodoDetectado0.mes !== mesExplicito) {
-        const mesesNomesPT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
+      if (periodoDetectado0.ano === anoExplicito && periodoDetectado0.mes === mesExplicito) {
+        // Arquivo correto — aceita independente do %
+      } else if (periodoDetectado0.dominantePerc >= 0.6) {
         return NextResponse.json({
           error: `Este relatório é de ${mesesNomesPT[periodoDetectado0.mes-1]}/${periodoDetectado0.ano}, mas a competência selecionada é ${mesesNomesPT[mesExplicito-1]}/${anoExplicito}. Baixe o relatório do período correto.`
         }, { status: 422 })
+      } else {
+        const totalL = periodoDetectado0.totalLinhasPeriodo
+        const dist = periodoDetectado0.contagemEntries
+          .map(([k, v]) => `${k} (${Math.round(v / totalL * 100)}%)`).join(', ')
+        return NextResponse.json({
+          error: `Não foi possível identificar o período deste relatório. Linhas encontradas: ${dist}. Baixe o relatório de um único mês de competência.`
+        }, { status: 422 })
       }
+    } else if (periodoDetectado0.dominantePerc < 0.6) {
+      const totalL = periodoDetectado0.totalLinhasPeriodo
+      const dist = periodoDetectado0.contagemEntries
+        .map(([k, v]) => `${k} (${Math.round(v / totalL * 100)}%)`).join(', ')
+      return NextResponse.json({
+        error: `Não foi possível identificar o período deste relatório. Linhas encontradas: ${dist}. Baixe o relatório de um único mês de competência.`
+      }, { status: 422 })
     }
 
     const competenciaAno = anoExplicito ?? periodoDetectado0.ano
