@@ -524,8 +524,22 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
         <KPICard label="Faturamento Bruto" value={formatCurrency(d.receita_total)} color="emerald" big />
         <KPICard label="Lucro Bruto" value={formatCurrency(d.lucro_bruto)} color={d.lucro_bruto >= 0 ? 'blue' : 'red'} big />
         <KPICard label="Lucro Líquido" value={formatCurrency(d.lucro_liquido)} color={d.lucro_liquido >= 0 ? 'emerald' : 'red'} big />
-        <KPICard label={`DAS (${(d.aliquota_simples > 1 ? d.aliquota_simples : d.aliquota_simples * 100).toFixed(2)}%)`} value={formatCurrency(d.das_valor_calc)} color="amber"
-          sub={d.das_status === 'PAGO' ? `Pago: ${formatCurrency(d.das_valor_real ?? 0)} em ${format(new Date(d.das_data_pagamento ?? d.updated_at), 'dd/MM/yyyy', { locale: ptBR })}` : undefined} big />
+        {(() => {
+          const dasPago = d.das_status === 'PAGO' && (d.das_valor_real ?? 0) > 0
+          const aliqNominal = (d.aliquota_simples > 1 ? d.aliquota_simples : d.aliquota_simples * 100).toFixed(2)
+          const aliqEfetiva = dasPago && d.receita_total > 0
+            ? ((d.das_valor_real! / d.receita_total) * 100).toFixed(2)
+            : null
+          const label = dasPago
+            ? aliqEfetiva
+              ? `DAS (${aliqEfetiva}% ef.)`
+              : 'DAS (pago)'
+            : `DAS (${aliqNominal}%)`
+          const sub = dasPago
+            ? `Pago: ${formatCurrency(d.das_valor_real ?? 0)} em ${format(new Date(d.das_data_pagamento ?? d.updated_at), 'dd/MM/yyyy', { locale: ptBR })}`
+            : undefined
+          return <KPICard label={label} value={formatCurrency(d.das_valor_calc)} color="amber" sub={sub} big />
+        })()}
       </div>
 
       {/* ── KPIs ROW 2: Gerenciais ── */}
