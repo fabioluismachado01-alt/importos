@@ -22,7 +22,7 @@ export interface TarifasFullResult {
 function extrairTotal(ws: XLSX.WorkSheet, colunaValor = 5): { total: number; dataRef: Date | null } {
   const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' }) as unknown[][]
   let total = 0
-  let dataRef: Date | null = null
+  const contagem: Record<string, { count: number; dataEx: Date }> = {}
 
   // Header geralmente na linha 6 (índice 5), dados a partir do índice 6
   for (let i = 6; i < rows.length; i++) {
@@ -37,11 +37,17 @@ function extrairTotal(ws: XLSX.WorkSheet, colunaValor = 5): { total: number; dat
     const valor = Number(r[colunaValor]) || 0
     total += valor
 
-    if (!dataRef) {
-      if (dataCell instanceof Date) dataRef = dataCell
-      else dataRef = new Date((dataCell as number - 25569) * 86400 * 1000)
-    }
+    const d: Date = dataCell instanceof Date
+      ? dataCell
+      : new Date((dataCell as number - 25569) * 86400 * 1000)
+    const chave = `${d.getFullYear()}-${d.getMonth() + 1}`
+    if (!contagem[chave]) contagem[chave] = { count: 0, dataEx: d }
+    contagem[chave].count++
   }
+
+  // Usa o mês dominante (= maioria das linhas), igual ao validador do faturamento
+  const dominante = Object.values(contagem).sort((a, b) => b.count - a.count)[0]
+  const dataRef = dominante?.dataEx ?? null
   return { total, dataRef }
 }
 

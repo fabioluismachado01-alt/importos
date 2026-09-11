@@ -122,6 +122,9 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const [salvo, setSalvo] = useState(false)
   const [excluindo, setExcluindo] = useState<string | null>(null)
 
+  const mesRef = useRef<HTMLSelectElement>(null)
+  const anoRef = useRef<HTMLSelectElement>(null)
+
   const inputRefs = {
     vendas:      useRef<HTMLInputElement>(null),
     faturamento: useRef<HTMLInputElement>(null),
@@ -296,6 +299,7 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
         {!periodoConfirmado ? (
           <div className="flex items-center gap-3 mt-4 ml-8">
             <select
+              ref={mesRef}
               value={mesSel}
               onChange={e => setMesSel(Number(e.target.value))}
               className="h-10 px-3 rounded-xl border-2 border-blue-300 text-sm font-bold bg-white focus:outline-none focus:border-blue-500"
@@ -305,6 +309,7 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
               ))}
             </select>
             <select
+              ref={anoRef}
               value={anoSel}
               onChange={e => setAnoSel(Number(e.target.value))}
               className="h-10 px-3 rounded-xl border-2 border-blue-300 text-sm font-bold bg-white focus:outline-none focus:border-blue-500"
@@ -314,7 +319,14 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
               ))}
             </select>
             <Button
-              onClick={() => setPeriodoConfirmado(true)}
+              onClick={() => {
+                // Lê o valor do DOM no momento do clique para evitar race com onChange
+                const m = mesRef.current ? Number(mesRef.current.value) : mesSel
+                const a = anoRef.current ? Number(anoRef.current.value) : anoSel
+                setMesSel(m)
+                setAnoSel(a)
+                setPeriodoConfirmado(true)
+              }}
               className="bg-blue-500 hover:bg-blue-600 h-10"
             >
               Confirmar mês
@@ -376,14 +388,21 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
       {periodoConfirmado && (
       <>
       {/* ─── CONFIGURAÇÃO ALÍQUOTA ── */}
-      <div className="flex items-center gap-3 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3">
-        <Info className="w-4 h-4 text-orange-600 shrink-0" />
-        <p className="text-xs font-bold text-orange-800">Alíquota Simples — {MESES_NOMES[mesSel-1]} {anoSel}:</p>
+      <div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${parseFloat(aliquota) === 8 ? 'bg-amber-50 border border-amber-300' : 'bg-orange-50 border border-orange-200'}`}>
+        <Info className={`w-4 h-4 shrink-0 ${parseFloat(aliquota) === 8 ? 'text-amber-600' : 'text-orange-600'}`} />
+        <div className="flex flex-col gap-0.5">
+          <p className={`text-xs font-bold ${parseFloat(aliquota) === 8 ? 'text-amber-800' : 'text-orange-800'}`}>
+            Alíquota Simples — {MESES_NOMES[mesSel-1]} {anoSel}:
+          </p>
+          {parseFloat(aliquota) === 8 && (
+            <p className="text-[10px] text-amber-700">⚠️ 8,00% é o valor padrão — verifique a alíquota real apurada para este mês</p>
+          )}
+        </div>
         <div className="flex items-center gap-1.5 ml-auto">
           <Input type="number" step="0.01" value={aliquota}
             onChange={e => setAliquota(e.target.value)}
-            className="w-20 h-8 text-sm font-mono text-center border-orange-300" />
-          <span className="text-xs text-orange-700 font-bold">%</span>
+            className={`w-20 h-8 text-sm font-mono text-center ${parseFloat(aliquota) === 8 ? 'border-amber-400' : 'border-orange-300'}`} />
+          <span className={`text-xs font-bold ${parseFloat(aliquota) === 8 ? 'text-amber-700' : 'text-orange-700'}`}>%</span>
         </div>
       </div>
 
@@ -430,7 +449,12 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
         <Card key={aba.id} className="border-0 shadow-sm">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-black text-slate-700">{aba.label}</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-sm font-black text-slate-700">{aba.label}</CardTitle>
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 rounded px-1.5 py-0.5">
+                  {MESES_NOMES[mesSel-1]} {anoSel}
+                </span>
+              </div>
               {estadosAba[aba.id] === 'ok' && (
                 <button onClick={() => resetAba(aba.id)} className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1">
                   <X className="w-3.5 h-3.5" /> Remover
