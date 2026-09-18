@@ -241,11 +241,13 @@ export function calcularKPIs(
   kpis.lucro_liquido = kpis.lucro_bruto - kpis.desp_previdencia_privada
 
   // ── 7. KPIs derivados ──────────────────────────────────────────────
-  kpis.margem_contribuicao = kpis.receita_total > 0
-    ? (kpis.lucro_bruto / kpis.receita_total) * 100 : 0
-
-  const margemDecimal = kpis.receita_total > 0 ? kpis.lucro_bruto / kpis.receita_total : 0
-  kpis.break_even = margemDecimal > 0 ? kpis.total_despesas_fixas / margemDecimal : 0
+  // MC = (Receita − despesas variáveis) / Receita — não usa lucro_bruto (que já absorveu fixas)
+  const receitaMenosVariaveis = kpis.receita_total - kpis.total_despesas_variaveis
+  const margemDecimal = kpis.receita_total > 0 ? receitaMenosVariaveis / kpis.receita_total : 0
+  kpis.margem_contribuicao = margemDecimal * 100
+  // Break-even: ponto em que a MC cobre todas as fixas, incluindo previdência privada
+  kpis.break_even = margemDecimal > 0
+    ? (kpis.total_despesas_fixas + kpis.desp_previdencia_privada) / margemDecimal : 0
 
   const totalAds = kpis.desp_ads_ml + kpis.desp_ads_outros
   kpis.roas_atual = totalAds > 0 ? kpis.receita_total / totalAds : 0
@@ -262,13 +264,13 @@ export function calcularKPIs(
     kpis.dlr_socio = Math.max(0, Math.min(config.dlr_valor_fixo, Math.max(0, kpis.lucro_liquido)))
     kpis.reinvestimento = kpis.lucro_liquido - kpis.dlr_socio
   } else if (config.dlr_percentual_custom != null) {
-    // Percentual customizado para o mês — reinvestimento absorve o restante
+    // Percentual customizado para o mês — reinvestimento absorve o restante (evita erro de arredondamento)
     const percentual = config.dlr_percentual_custom
-    kpis.dlr_socio    = kpis.lucro_liquido * percentual
-    kpis.reinvestimento = kpis.lucro_liquido * (1 - percentual)
+    kpis.dlr_socio      = Math.round(kpis.lucro_liquido * percentual * 100) / 100
+    kpis.reinvestimento = Math.round((kpis.lucro_liquido - kpis.dlr_socio) * 100) / 100
   } else {
-    kpis.dlr_socio    = kpis.lucro_liquido * config.percentual_dlr_socio
-    kpis.reinvestimento = kpis.lucro_liquido * config.percentual_reinvestimento
+    kpis.dlr_socio      = Math.round(kpis.lucro_liquido * config.percentual_dlr_socio * 100) / 100
+    kpis.reinvestimento = Math.round((kpis.lucro_liquido - kpis.dlr_socio) * 100) / 100
   }
 
   // ── 8. Projeções ────────────────────────────────────────────────────

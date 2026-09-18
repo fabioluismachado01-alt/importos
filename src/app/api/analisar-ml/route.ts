@@ -9,6 +9,7 @@ import * as XLSX from 'xlsx'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/auth'
 import { calcularDIFAL, TABELA_UF, type UF } from '@/engines/difal'
+import { classificarStatus } from '@/lib/ml-status'
 
 // Mapeamento nome completo do estado → sigla UF
 const ESTADO_PARA_UF: Record<string, UF> = {
@@ -35,10 +36,18 @@ function resolverColunas(headerRow: unknown[]) {
     if (k) { if (!idx[k]) idx[k] = []; idx[k].push(i) }
   })
   const get = (name: string, occ = 0) => idx[name]?.[occ] ?? -1
+
+  // Novo formato: coluna 'Descrição do status' contém o status legível
+  // Formato antigo: primeira ocorrência de 'Estado' era o status do pedido
+  const hasDescricaoStatus = (idx['Descrição do status']?.length ?? 0) > 0
   return {
     N_VENDA:                get('N.º de venda'),
     DATA:                   get('Data da venda'),
-    STATUS:                 get('Estado'),                                        // 1ª ocorrência = status do pedido
+    // Novo formato: 'Descrição do status' (ex: "Chegou em 4 de agosto")
+    // Formato antigo: primeira 'Estado' era o status do pedido (ex: "entregue")
+    STATUS: hasDescricaoStatus
+      ? idx['Descrição do status']![0]
+      : idx['Estado']?.[0] ?? -1,
     UNIDADES:               get('Unidades'),
     REC_PRODUTO:            get('Receita por produtos (BRL)'),
     TARIFA_IMP:             get('Tarifa de venda e impostos (BRL)'),
@@ -47,43 +56,20 @@ function resolverColunas(headerRow: unknown[]) {
     SKU:                    get('SKU'),
     TITULO:                 get('Título do anúncio'),
     PRECO_UNIT:             get('Preço unitário de venda do anúncio (BRL)'),
-    ESTADO_COMPRADOR:       idx['Estado']?.[1] ?? -1,                            // 2ª ocorrência = estado do comprador
+    // Novo formato: única 'Estado' é o estado do comprador
+    // Formato antigo: segunda 'Estado' era o estado do comprador
+    ESTADO_COMPRADOR: hasDescricaoStatus
+      ? idx['Estado']?.[0] ?? -1
+      : idx['Estado']?.[1] ?? -1,
     // Acréscimo de parcelamento (juros repassados pelo comprador ao vendedor)
     ACRESCIMO_PARCELAMENTO: idx['Receita por acréscimo no preço (pago pelo comprador) (BRL)']?.[0]
       ?? idx['Receita por acréscimo no preço (BRL)']?.[0]
       ?? -1,
+    // Taxa de parcelamento cobrada do vendedor (custo, presente no Rel.Vendas novo formato)
+    TAXA_PARCELAMENTO: idx['Taxa de parcelamento equivalente ao acréscimo']?.[0] ?? -1,
   }
 }
 
-// Padrões que EXCLUEM a venda (usar substrings específicas, não palavras soltas)
-const EXCLUIR_PATTERNS = [
-  'cancelad',                            // cancelada pelo comprador / pelo ml
-  'reembolso para o comprador',          // mediação finalizada com reembolso ao comprador
-  'colocamos o produto',                 // devolução finalizada/revisada — produto recolocado à venda
-  'estamos analisando o que aconteceu',  // ml analisando devolução
-  'pacote cancelado',                    // pacote cancelado pelo ml
-  'pacote não entregue',                 // pacote não entregue
-  'troca entregue',                      // troca entregue + devolução finalizada
-]
-
-// Status exatos que indicam venda válida
-const STATUS_VALIDOS = new Set([
-  'entregue','no ponto de retirada','a caminho','vamos enviar',
-  'processando','envio atrasado','envio reagendado','venda entregue',
-])
-
-// Substrings que também indicam venda válida
-const INCLUIR_PATTERNS = [
-  'pacote de ',                          // "pacote de 2 produtos" — entrega multi-produto
-  'reclamação',                          // reclamação aberta — venda ativa com disputa
-  'mediação para responder',             // mediação em aberto — vendedor ainda não perdeu
-  'mediação com devolução habilitada',   // comprador pode devolver mas ainda não devolveu
-  'descartamos o produto',               // devolução descartada — ml reembolsou o vendedor
-  'liberamos o valor',                   // ml liberou o valor ao vendedor
-  'te demos o dinheiro',                 // ml deu o dinheiro ao vendedor (perdeu o produto etc.)
-  'dinheiro liberado',                   // dinheiro liberado ao vendedor
-  'venda com solicitação de alteração',  // venda com alteração solicitada pelo comprador
-]
 
 function limparTitulo(t: string): string {
   return t.replace(/\bnamave\b/gi, '').replace(/\s{2,}/g, ' ').trim().slice(0, 60)
@@ -276,10 +262,11 @@ export async function POST(req: NextRequest) {
     const skus: Record<string, {
       sku: string; titulo: string; unidades: number; receita: number
       tarifas: number; frete: number; custo_unit: number; pedidos: number
+      cmv_ausente: boolean  // true se SKU não tem custo cadastrado
       // Breakdown de preços — detecta quando o mesmo SKU é vendido em múltiplos preços
       precos: Record<number, { unidades: number; receita: number; tarifas: number; frete: number }>
     }> = {}
-    let totais = { receita: 0, tarifas: 0, frete: 0, pedidos: 0, cancelados: 0, devolucoes: 0, unidades: 0, fora_do_periodo: 0, acrescimo_parcelamento: 0 }
+    let totais = { receita: 0, tarifas: 0, frete: 0, pedidos: 0, cancelados: 0, devolucoes: 0, unidades: 0, fora_do_periodo: 0, acrescimo_parcelamento: 0, taxa_parcelamento: 0, desconhecidos_incluidos: 0, desconhecidos_excluidos: 0 }
     // Acumuladores DIFAL — agrupado por UF destino
     const difalPorEstado: Record<string, { pedidos: number; receita: number; difal: number; fcp: number }> = {}
     let totalDifal = 0
@@ -301,14 +288,24 @@ export async function POST(req: NextRequest) {
         if (!dentroDoPeriodo) { totais.fora_do_periodo++; continue }
       }
 
-      const status = String(r[COL.STATUS] ?? '').toLowerCase()
+      const statusRaw = String(r[COL.STATUS] ?? '').trim()
+      const grupo = classificarStatus(statusRaw)
 
-      // Exclusões específicas (substrings precisas — não palavras soltas como "devolu" ou "reembolso")
-      if (EXCLUIR_PATTERNS.some(p => status.includes(p))) { totais.cancelados++; continue }
+      if (grupo === 'CANCELADA') { totais.cancelados++; continue }
+      if (grupo === 'DEVOLUCAO') { totais.devolucoes++; continue }
 
-      // Venda válida: status exato ou substring de inclusão
-      const isValido = STATUS_VALIDOS.has(status) || INCLUIR_PATTERNS.some(p => status.includes(p))
-      if (!isValido) continue
+      if (grupo === 'DESCONHECIDO') {
+        // Fallback financeiro: Total > 0 → pagamento confirmado → incluir com alerta
+        const totalFallback = Number(r[COL.TOTAL]) || 0
+        if (totalFallback > 0) {
+          totais.desconhecidos_incluidos++
+          // Continua o processamento como venda (não dá continue)
+        } else {
+          totais.desconhecidos_excluidos++
+          totais.cancelados++
+          continue
+        }
+      }
 
       const sku = String(r[COL.SKU] ?? '').trim() || 'SEM-SKU'
       const uni = Number(r[COL.UNIDADES]) || 0
@@ -347,7 +344,7 @@ export async function POST(req: NextRequest) {
       const precoUnit = Number(r[COL.PRECO_UNIT]) || (uni > 0 ? Number(r[COL.REC_PRODUTO]) / uni : 0)
       const precoRound = Math.round(precoUnit * 100) / 100
 
-      if (!skus[sku]) skus[sku] = { sku, titulo, unidades: 0, receita: 0, tarifas: 0, frete: 0, custo_unit: custoPorSku[sku] ?? 0, pedidos: 0, precos: {} }
+      if (!skus[sku]) skus[sku] = { sku, titulo, unidades: 0, receita: 0, tarifas: 0, frete: 0, custo_unit: custoPorSku[sku] ?? 0, pedidos: 0, precos: {}, cmv_ausente: !(sku in custoPorSku) || custoPorSku[sku] === 0 }
       skus[sku].unidades += uni
       skus[sku].receita  += rec
       skus[sku].tarifas  += tar
@@ -364,6 +361,9 @@ export async function POST(req: NextRequest) {
       // Acréscimo de parcelamento: receita pass-through (comprador paga, ML repassa ao vendedor)
       const acr = COL.ACRESCIMO_PARCELAMENTO >= 0 ? (Number(r[COL.ACRESCIMO_PARCELAMENTO]) || 0) : 0
       totais.acrescimo_parcelamento += acr
+      // Taxa de parcelamento: custo cobrado do vendedor (novo formato — coluna presente no Rel.Vendas)
+      const taxaParc = COL.TAXA_PARCELAMENTO >= 0 ? (Number(r[COL.TAXA_PARCELAMENTO]) || 0) : 0
+      totais.taxa_parcelamento += Math.abs(taxaParc)
 
       totais.receita   += rec
       totais.tarifas   += tar
@@ -425,7 +425,7 @@ export async function POST(req: NextRequest) {
         margem_perc: s.receita > 0 ? (lucro_bruto / s.receita) * 100 : 0,
         ticket_medio: s.unidades > 0 ? s.receita / s.unidades : 0,
         lucro_unit: s.unidades > 0 ? lucro_bruto / s.unidades : 0,
-        sem_custo: s.custo_unit === 0,
+        sem_custo: s.cmv_ausente,
         multiplos_precos,
         tem_preco_prejuizo,
         precos_breakdown,
@@ -460,6 +460,7 @@ export async function POST(req: NextRequest) {
       unidades: totais.unidades,
       receita_bruta: totais.receita,
       acrescimo_parcelamento: totais.acrescimo_parcelamento,
+      taxa_parcelamento: totais.taxa_parcelamento,
       tarifas_ml: totais.tarifas,
       frete_custo: totais.frete,
       custo_produtos: custo_total,
@@ -476,16 +477,33 @@ export async function POST(req: NextRequest) {
         top_estados: topEstados,
       },
       skus: skusArray,
+      // cmv_incompleto: true se qualquer SKU com vendas não tem custo cadastrado
+      cmv_incompleto: skusArray.some(s => s.sem_custo && s.unidades > 0),
       alertas: {
-        sem_custo: skusArray.filter(s => s.sem_custo).map(s => s.sku),
+        // SKUs sem custo: a análise de CMV é INCOMPLETA enquanto existirem entradas aqui
+        sem_custo: skusArray.filter(s => s.sem_custo).map(s => ({
+          sku: s.sku, pedidos: s.pedidos, unidades: s.unidades, receita: s.receita
+        })),
         margem_negativa: skusArray.filter(s => s.margem_perc < 0).map(s => ({ sku: s.sku, margem: s.margem_perc.toFixed(1) })),
         margem_critica: skusArray.filter(s => s.margem_perc >= 0 && s.margem_perc < 10).map(s => ({ sku: s.sku, margem: s.margem_perc.toFixed(1) })),
+        // Status desconhecidos incluídos via fallback financeiro (Total > 0)
+        status_desconhecido_incluido: totais.desconhecidos_incluidos,
+        status_desconhecido_excluido: totais.desconhecidos_excluidos,
       }
     }
 
     if (modoPreview) return NextResponse.json({ preview: true, ...resumo })
 
-    // Salvar no banco
+    // Salvar no banco — idempotência simples: deletar análise existente do mesmo período antes de criar
+    const existente = await prisma.ml_analise_relatorio.findFirst({
+      where: { workspace_id: workspaceId, ano: periodo.ano, mes: periodo.mes },
+      select: { id: true },
+    })
+    if (existente) {
+      await prisma.ml_analise_relatorio.delete({ where: { id: existente.id } })
+    }
+
+    const competenciaStr = `${periodo.ano}-${String(periodo.mes).padStart(2, '0')}`
     const analise = await prisma.ml_analise_relatorio.create({
       data: {
         workspace_id: workspaceId,
@@ -500,12 +518,15 @@ export async function POST(req: NextRequest) {
         total_devolucoes: totais.devolucoes,
         total_unidades: totais.unidades,
         receita_bruta: totais.receita,
+        acrescimo_parcelamento: totais.acrescimo_parcelamento,
+        taxa_parcelamento: totais.taxa_parcelamento,
         tarifas_ml: totais.tarifas,
         frete_custo: totais.frete,
         custo_produtos: custo_total,
         lucro_bruto,
         margem_perc: resumo.margem_perc,
         ticket_medio: resumo.ticket_medio,
+        cmv_incompleto: resumo.cmv_incompleto,
         receita_interestadual: receitaInterestadual,
         difal_estimado: totalDifal,
         pedidos_interestaduais: pedidosInterestaduais,
@@ -521,6 +542,27 @@ export async function POST(req: NextRequest) {
         }
       }
     })
+
+    // Salvar trilha de auditoria de CMV por SKU
+    const cmvAuditRows = skusArray.map(s => ({
+      id: `${analise.id}-${s.sku}`,
+      workspace_id: workspaceId,
+      relatorio_id: analise.id,
+      competencia: competenciaStr,
+      numero_venda: 'AGREGADO',  // agrupado por SKU no relatório; detalhe por pedido requer expansão futura
+      sku: s.sku,
+      quantidade: s.unidades,
+      custo_unitario: s.custo_unit,
+      cmv_total: s.custo_total,
+      status_original: 'VENDA_EFETIVA',
+      grupo_status: 'VENDA',
+      incluido_cmv: true,
+      motivo_exclusao: null as string | null,
+      cmv_ausente: s.cmv_ausente,
+    }))
+    if (cmvAuditRows.length > 0) {
+      await prisma.ml_cmv_auditoria.createMany({ data: cmvAuditRows })
+    }
 
     return NextResponse.json({ success: true, analise_id: analise.id, ...resumo })
   } catch (err) {

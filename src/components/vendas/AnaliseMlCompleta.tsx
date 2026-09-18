@@ -21,11 +21,18 @@ import { cn, formatCurrency } from '@/lib/utils'
 
 interface VendasData {
   arquivo: string; pedidos: number; cancelados: number; devolucoes: number
-  unidades: number; receita_bruta: number; acrescimo_parcelamento?: number; tarifas_ml: number; frete_custo: number
+  unidades: number; receita_bruta: number; acrescimo_parcelamento?: number
+  taxa_parcelamento?: number  // taxa de parcelamento do Rel.Vendas (novo formato)
+  tarifas_ml: number; frete_custo: number
   custo_produtos: number; lucro_bruto: number; margem_perc: number; ticket_medio: number
+  cmv_incompleto?: boolean  // true se algum SKU com vendas não tem custo cadastrado
   skus: Array<{ sku: string; titulo: string; unidades: number; receita: number
     tarifas: number; frete: number; custo_total: number; lucro_bruto: number
     margem_perc: number; ticket_medio: number; lucro_unit: number; sem_custo: boolean }>
+  alertas?: {
+    sem_custo?: Array<{ sku: string; pedidos: number; unidades: number; receita: number }>
+    [key: string]: unknown
+  }
   periodo: { mes: number; ano: number }
 }
 
@@ -184,17 +191,16 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const f = dados.faturamento
   const ft = dados.full
 
-  // Acréscimo de parcelamento: usa o valor LÍquido do Faturamento ML (= taxa_parcelamento),
-  // não o bruto do Relatório de Vendas. Os dois lados são pass-through e devem ser iguais.
-  // Faturamento ML já desconta cancelamentos; Relatório de Vendas traz o bruto.
-  const acrescimoParcelamento = f?.taxa_parcelamento ?? (v?.acrescimo_parcelamento ?? 0)
+  // Acréscimo de parcelamento e taxa: fonte primária = Rel.Vendas (acrescimo_parcelamento e
+  // taxa_parcelamento retornados pela API analisar-ml). Fallback para Faturamento ML.
+  const acrescimoParcelamento = v?.acrescimo_parcelamento ?? (f?.taxa_parcelamento ?? 0)
   const receitaBruta     = (v?.receita_bruta ?? 0) + acrescimoParcelamento
-  // Quando o Faturamento ML foi enviado, usa tarifas e frete da fatura (mais precisos).
-  // Os cancelamentos já estão embutidos como valores negativos dentro de cada categoria.
+  // Tarifas e frete: SEMPRE do Relatório de Vendas (analisar-ml).
+  // Faturamento ML não é mais fonte para esses itens (evita dupla contagem).
   const usandoFatura     = !!f
-  const tarifasVenda     = usandoFatura ? (f!.tarifas_venda_fatura ?? v?.tarifas_ml ?? 0) : (v?.tarifas_ml ?? 0)
-  const freteVenda       = usandoFatura ? (f!.frete_fatura ?? v?.frete_custo ?? 0) : (v?.frete_custo ?? 0)
-  const taxaParcelamento = f?.taxa_parcelamento ?? 0
+  const tarifasVenda     = v?.tarifas_ml ?? 0
+  const freteVenda       = v?.frete_custo ?? 0
+  const taxaParcelamento = v?.taxa_parcelamento ?? f?.taxa_parcelamento ?? 0
   const custosProdutos   = v?.custo_produtos ?? 0
   const publicidade      = f?.publicidade ?? 0
   const armazenagem      = (ft?.armazenagem ?? 0) || (f?.armazenagem ?? 0)
@@ -214,6 +220,9 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const temVendas   = estadosAba.vendas === 'ok'
   const temFaturam  = estadosAba.faturamento === 'ok'
   const podeSalvar  = temVendas && temFaturam
+  // cmv_incompleto: há SKUs com vendas sem custo cadastrado — CMV não é confiável
+  const cmvIncompleto = !!(dados.vendas?.cmv_incompleto)
+  const skusSemCusto  = (dados.vendas?.alertas?.sem_custo as { sku: string; pedidos: number; unidades: number }[] | undefined) ?? []
 
   async function handleSalvar() {
     if (!dados.vendas) return
@@ -230,15 +239,15 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
         aliquota: parseFloat(aliquota) / 100,
         // Receita sempre do Relatório de Vendas (+ acréscimo parcelamento pass-through)
         vendas_receita:        dados.vendas.receita_bruta,
-        acrescimo_parcelamento: dados.faturamento?.taxa_parcelamento ?? 0,
+        acrescimo_parcelamento: dados.vendas.acrescimo_parcelamento ?? 0,
         vendas_unidades:       dados.vendas.unidades,
         vendas_pedidos:        dados.vendas.pedidos,
-        // Tarifas e frete: usa Faturamento ML quando disponível (mais preciso)
-        vendas_tarifas:        usaFatura ? (f!.tarifas_venda_fatura ?? dados.vendas.tarifas_ml) : dados.vendas.tarifas_ml,
-        vendas_frete:          usaFatura ? (f!.frete_fatura ?? dados.vendas.frete_custo) : dados.vendas.frete_custo,
+        // Tarifas e frete: SEMPRE do Relatório de Vendas (não do Faturamento ML)
+        vendas_tarifas:        dados.vendas.tarifas_ml,
+        vendas_frete:          dados.vendas.frete_custo,
         vendas_custo_produtos: dados.vendas.custo_produtos,
-        // Taxa de parcelamento (nova linha, líquida de cancels)
-        taxa_parcelamento:     f?.taxa_parcelamento ?? 0,
+        // Taxa de parcelamento: Rel.Vendas primeiro; fallback para Faturamento ML
+        taxa_parcelamento:     dados.vendas.taxa_parcelamento ?? f?.taxa_parcelamento ?? 0,
         // Do Faturamento ML
         publicidade:  f?.publicidade ?? 0,
         pagina_ml:    f?.pagina_ml   ?? 0,
@@ -585,6 +594,21 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
               </div>
             )}
 
+            {cmvIncompleto && skusSemCusto.length > 0 && (
+              <div className="mt-3 border border-red-300 bg-red-50 rounded-lg px-3 py-2 text-xs text-red-700">
+                <div className="flex items-center gap-2 font-semibold mb-1">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  CMV INCOMPLETO — {skusSemCusto.length} SKU{skusSemCusto.length > 1 ? 's' : ''} sem custo cadastrado
+                </div>
+                <div className="space-y-0.5">
+                  {skusSemCusto.map(s => (
+                    <div key={s.sku} className="font-mono">{s.sku} — {s.pedidos} pedidos, {s.unidades} un.</div>
+                  ))}
+                </div>
+                <div className="mt-1 text-red-600">Cadastre os custos no catálogo antes de fechar o período.</div>
+              </div>
+            )}
+
             {podeSalvar && !salvo && (
               <div className="flex gap-3 mt-4">
                 <Button
@@ -594,7 +618,9 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
                 >
                   {salvando
                     ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando análise...</>
-                    : <>Salvar análise completa <ArrowRight className="w-4 h-4" /></>
+                    : cmvIncompleto
+                      ? <>Salvar com CMV incompleto <AlertTriangle className="w-4 h-4" /></>
+                      : <>Salvar análise completa <ArrowRight className="w-4 h-4" /></>
                   }
                 </Button>
               </div>

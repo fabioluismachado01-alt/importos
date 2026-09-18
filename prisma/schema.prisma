@@ -714,6 +714,13 @@ model ml_analise_relatorio {
   margem_perc      Float    @default(0)
   ticket_medio     Float    @default(0)
 
+  // Parcelamento — separados para rastrear origem (Rel.Vendas é a fonte correta)
+  acrescimo_parcelamento Float   @default(0)  // receita pass-through do comprador
+  taxa_parcelamento      Float   @default(0)  // custo da taxa de parcelamento
+
+  // CMV — flag de integridade: true se algum SKU válido ficou sem custo cadastrado
+  cmv_incompleto         Boolean @default(false)
+
   // DIFAL — calculado a partir do estado do comprador (somente ML tem esse dado)
   receita_interestadual Float    @default(0)
   difal_estimado        Float    @default(0)
@@ -722,10 +729,34 @@ model ml_analise_relatorio {
 
   created_at       DateTime @default(now())
 
-  workspace workspace          @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
-  skus      ml_analise_sku[]
+  workspace  workspace            @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  skus       ml_analise_sku[]
+  cmv_audit  ml_cmv_auditoria[]
 
   @@index([workspace_id, ano, mes])
+}
+
+model ml_cmv_auditoria {
+  id              String   @id @default(cuid())
+  workspace_id    String
+  relatorio_id    String
+  competencia     String   // "YYYY-MM"
+  numero_venda    String
+  sku             String
+  quantidade      Int
+  custo_unitario  Float
+  cmv_total       Float
+  status_original String
+  grupo_status    String   // VENDA | CANCELADA | DEVOLUCAO | DESCONHECIDO
+  incluido_cmv    Boolean
+  motivo_exclusao String?
+  cmv_ausente     Boolean  @default(false)  // SKU sem custo cadastrado
+  created_at      DateTime @default(now())
+
+  relatorio ml_analise_relatorio @relation(fields: [relatorio_id], references: [id], onDelete: Cascade)
+
+  @@index([workspace_id, relatorio_id])
+  @@index([workspace_id, competencia])
 }
 
 model ml_analise_sku {

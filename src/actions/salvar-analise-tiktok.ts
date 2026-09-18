@@ -73,7 +73,7 @@ export async function salvarAnaliseTiktok(dados: DadosTiktok) {
 
   // ─── Comissão de Afiliados (separado para visibilidade na DRE) ────
   if (dados.com_afiliados > 0)
-    lancamentos.push(add('DESPESA_VARIAVEL', 'ADS_OUTROS',
+    lancamentos.push(add('DESPESA_VARIAVEL', 'TARIFAS',
       'Comissão de Afiliados / Criadores TikTok',
       dados.com_afiliados))
 
