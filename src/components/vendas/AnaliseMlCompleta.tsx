@@ -292,7 +292,7 @@ export function AnaliseMlCompleta({ salvas = [] }: { salvas?: MesSalvo[] }) {
             </div>
             <p className="text-xs text-slate-500 ml-8">
               Selecione o mês/ano de competência.
-              {' '}Ciclo ML: <strong>dia 30 ao dia 29</strong> do mês seguinte.
+              {' '}O ML usa o mês civil (dia 01 ao último dia do mês).
             </p>
           </div>
           {periodoConfirmado && (

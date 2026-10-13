@@ -48,10 +48,35 @@ function parseBRL(v: unknown): number {
   return isNaN(n) ? 0 : n
 }
 
+// Converte valores BR ("16,90" / "1.234,56") para número — usado no formato MTU-PT
+function parseBRDecimal(v: unknown): number {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0
+  const s = String(v ?? '').trim()
+  if (!s) return 0
+  const normalizado = s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s
+  const n = parseFloat(normalizado.replace(/[^\d.\-]/g, ''))
+  return Number.isFinite(n) ? n : 0
+}
+
 function parseDateBR(str: string): Date | null {
   const m = str.match(/(\d{2})\/(\d{2})\/(\d{4})/)
   if (!m) return null
   return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]))
+}
+
+// Parses MTU date: Excel serial, ISO string, or US date string ("Sep 1, 2026 4:17:58 AM PDT")
+function parseMTUDate(v: unknown): Date | null {
+  if (typeof v === 'number' && Number.isFinite(v) && v > 40000) {
+    return new Date(Math.round((v - 25569) * 86400 * 1000))
+  }
+  const s = String(v ?? '').trim()
+  if (!s) return null
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) return new Date(parseInt(iso[1]), parseInt(iso[2]) - 1, parseInt(iso[3]))
+  const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+  if (br) return new Date(parseInt(br[3]), parseInt(br[2]) - 1, parseInt(br[1]))
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? null : d
 }
 
 function normalizarNomeProduto(nome: string): string {
@@ -78,6 +103,172 @@ function detectarFormato(header: string[]): 'SEM_STATUS' | 'COM_STATUS' | 'STATU
   return null
 }
 
+// ─── Formato MTU-PT — Monthly Unified Transactions (exportação em português) ──
+// Header na linha de índice 9, col 0 = "data/hora" ou "date/time"
+// Valores em formato BR: "16,90" (não em centavos)
+function isMTU(rows: unknown[][]): boolean {
+  const r9 = rows[9]
+  if (!Array.isArray(r9) || r9.length === 0) return false
+  const h0 = String(r9[0] ?? '').toLowerCase().trim()
+  return h0 === 'data/hora' || h0 === 'date/time'
+}
+
+function resolverColunasMTU(headerRow: unknown[]): Record<string, number> {
+  const h = headerRow.map(c => String(c ?? '').toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g, ''))
+  const find = (...kws: string[]) => {
+    for (const kw of kws) { const i = h.findIndex(c => c.includes(kw)); if (i !== -1) return i }
+    return -1
+  }
+  return {
+    DATA:     0,
+    TIPO:     find('tipo'),
+    ORDER_ID: find('id do pedido', 'order id', 'order-id'),
+    SKU:      find('sku'),
+    QTY:      find('quantidade', 'quantity'),
+    RECEITA:  find('vendas do produto', 'product sales'),
+    ENVIO:    find('creditos de remessa', 'shipping credits'),
+    DESCONTO: find('descontos promocionais', 'promotional rebates'),
+    COMISSAO: find('tarifas de venda', 'selling fees'),
+    FBA:      find('taxas fba', 'fba fees'),
+    TOTAL:    find('total'),
+  }
+}
+
+const MTU_TIPO_VENDA    = 'pedido'
+const MTU_TIPO_FBA      = 'taxa de estoque fba'
+const MTU_TIPO_AJUSTE   = 'ajuste'
+
+async function parsearMTU(
+  rows: unknown[][], file: File,
+  mesExplicito: number | null, anoExplicito: number | null,
+  workspaceId: string,
+): Promise<Response> {
+  const COL = resolverColunasMTU(rows[9] as unknown[])
+
+  const produtos = await prisma.produto_catalogo.findMany({
+    where: { workspace_id: workspaceId },
+    select: { nome: true, custo_brl: true, sku_interno: true, sku_alias: true },
+  })
+  const custoPorSku: Record<string, number> = {}
+  produtos.forEach(p => {
+    if (p.custo_brl) {
+      if (p.sku_interno) custoPorSku[p.sku_interno.toUpperCase()] = p.custo_brl
+      if (p.sku_alias) p.sku_alias.split(',').forEach(a => { const s = a.trim().toUpperCase(); if (s) custoPorSku[s] = p.custo_brl! })
+    }
+  })
+
+  let receita_bruta = 0, comissao_amazon = 0, descontos = 0, outros = 0
+  let tarifas_servico = 0, ajustes = 0
+  let unidades_total = 0
+  const pedidos_ids = new Set<string>()
+  const diasComVenda = new Set<string>()
+  const porProduto: Record<string, { nome: string; unidades: number; pedidos: number; receita: number; comissao: number; custo_unit: number; sem_custo: boolean }> = {}
+
+  for (let i = 10; i < rows.length; i++) {
+    const r = rows[i] as unknown[]
+    if (!r || !r[COL.TIPO]) continue
+
+    const tipo = String(r[COL.TIPO]).trim().toLowerCase()
+    const orderId = String(r[COL.ORDER_ID] ?? '').trim()
+    if (orderId && orderId !== '---') pedidos_ids.add(orderId)
+
+    if (tipo === MTU_TIPO_FBA) {
+      tarifas_servico += Math.abs(parseBRDecimal(r[COL.FBA]))
+      continue
+    }
+    if (tipo !== MTU_TIPO_VENDA) {
+      ajustes += Math.abs(parseBRDecimal(r[COL.TOTAL] ?? 0))
+      continue
+    }
+
+    const rec  = parseBRDecimal(r[COL.RECEITA])
+    const desc = parseBRDecimal(r[COL.DESCONTO])
+    const com  = parseBRDecimal(r[COL.COMISSAO])
+    const env  = parseBRDecimal(r[COL.ENVIO])
+    const fba  = parseBRDecimal(r[COL.FBA])
+    const qty  = Math.max(1, Number(r[COL.QTY]) || 1)
+
+    receita_bruta   += rec
+    comissao_amazon += Math.abs(com)
+    descontos       += Math.abs(desc)
+    outros          += env
+    tarifas_servico += Math.abs(fba)
+    unidades_total  += qty
+
+    const d = parseMTUDate(r[COL.DATA])
+    if (d) diasComVenda.add(d.toISOString().split('T')[0])
+
+    const skuRaw = String(r[COL.SKU] ?? '').trim()
+    const sku = skuRaw.replace(/_fba/gi, '').trim().toUpperCase()
+    if (sku) {
+      const custo = custoPorSku[sku] ?? 0
+      if (!porProduto[sku]) {
+        porProduto[sku] = { nome: sku, unidades: 0, pedidos: 0, receita: 0, comissao: 0, custo_unit: custo, sem_custo: !custo }
+      }
+      porProduto[sku].unidades  += qty
+      porProduto[sku].pedidos++
+      porProduto[sku].receita   += rec
+      porProduto[sku].comissao  += Math.abs(com)
+    }
+  }
+
+  const pedidos = pedidos_ids.size
+
+  if (pedidos === 0) {
+    return NextResponse.json({
+      error: `Nenhuma venda encontrada no arquivo "${file.name}" (formato MTU-PT detectado). Verifique o arquivo.`
+    }, { status: 422 })
+  }
+
+  const diasArr = [...diasComVenda].sort()
+  const dataFim = diasArr[diasArr.length - 1] ?? ''
+  const ano = anoExplicito ?? parseInt(dataFim.split('-')[0])
+  const mes = mesExplicito ?? parseInt(dataFim.split('-')[1])
+
+  const produtosArray = Object.values(porProduto)
+    .map(p => ({
+      ...p,
+      ticket_medio: p.unidades > 0 ? p.receita / p.unidades : 0,
+      custo_total:  p.custo_unit * p.unidades,
+      margem_perc:  p.receita > 0 ? ((p.receita - p.comissao - p.custo_unit * p.unidades) / p.receita) * 100 : 0,
+    }))
+    .sort((a, b) => b.receita - a.receita)
+
+  const geral_embutido = {
+    fba_fulfillment: tarifas_servico,
+    fba_armazenagem: 0,
+    mensalidade: 0,
+    outras_taxas_servico: 0,
+    reembolsos_count: 0,
+    reembolsos_bruto: 0,
+    reembolsos_comissao: 0,
+    reembolsos_fba: 0,
+    reembolsos_liquido: 0,
+    ajustes,
+    publicidade_interno: 0,
+    skus: [],
+    arquivo: file.name,
+    fonte: 'MTU_EMBUTIDO',
+  }
+
+  return NextResponse.json({
+    arquivo: file.name,
+    fonte: 'MTU',
+    periodo: { inicio: diasArr[0] ?? '', fim: dataFim, ano, mes },
+    receita_bruta,
+    descontos,
+    comissao_amazon,
+    outros,
+    pedidos,
+    unidades: unidades_total,
+    dias_com_venda: diasComVenda.size,
+    ticket_medio: unidades_total > 0 ? receita_bruta / unidades_total : 0,
+    produtos: produtosArray,
+    pedidos_ids: [...pedidos_ids],
+    geral_embutido,
+  })
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { workspaceId } = await getAuthContext()
@@ -99,6 +290,10 @@ export async function POST(req: NextRequest) {
     const formato = detectarFormato(headerRaw)
 
     if (!formato) {
+      // Tenta formato MTU-PT (header na linha 9, "data/hora" na col 0)
+      if (isMTU(rows)) {
+        return await parsearMTU(rows, file, mesExplicito, anoExplicito, workspaceId)
+      }
       return NextResponse.json({
         error: 'Formato não reconhecido. Envie o relatório "Visualizar Transações" (Menu → Pagamentos → Visualizar transações).'
       }, { status: 400 })

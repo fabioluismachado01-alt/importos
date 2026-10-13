@@ -25,15 +25,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/auth'
+import { detectarFormato, parseAmazonVT, limparSkuAmazon, parseRelatorioPedidosAmazon } from '@/lib/amazon-formato'
 
 const COL = {
   DATA: 0, TIPO: 2, PEDIDO: 3, SKU: 4, DESC: 5, QTD: 6,
   VENDA: 13, REMESSA: 14, DESCONTO: 16,
   TARIFA_VENDA: 18, TAXA_FBA: 19, OUTRAS_TAXAS: 20, OUTRO: 21, TOTAL: 22,
-}
-
-function limparSku(sku: string): string {
-  return sku.replace(/_fba/gi, '').replace(/\s/g, '').trim().toUpperCase()
 }
 
 function parseDateBR(str: string): Date | null {
@@ -54,6 +51,7 @@ export async function POST(req: NextRequest) {
     const { workspaceId } = await getAuthContext()
     const formData = await req.formData()
     const file = formData.get('file') as File
+    const fileRelatorioPedidos = formData.get('relatorio_pedidos') as File | null
     const mesExplicito  = formData.get('mes')  ? parseInt(String(formData.get('mes')))  : null
     const anoExplicito  = formData.get('ano')  ? parseInt(String(formData.get('ano')))  : null
     const modoPreview   = formData.get('preview') === 'true'
@@ -65,6 +63,134 @@ export async function POST(req: NextRequest) {
     const ws = wb.Sheets[wb.SheetNames[0]]
     const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' }) as unknown[][]
 
+    // ─── Detecção de formato (bugs AMZ-1/2/3) ───────────────────────────
+    // A Amazon exporta dois layouts incompatíveis. O parser antigo assumia MTU
+    // (9 linhas de header, valores em centavos) e produzia lixo silencioso ao
+    // receber o extrato "Visualizar Transações". Agora o formato é detectado.
+    const formato = detectarFormato(rows)
+
+    if (formato === 'DESCONHECIDO') {
+      return NextResponse.json({
+        error: 'Formato de arquivo Amazon não reconhecido. Envie o relatório "Visualizar Transações" (.csv) ou o "Monthly Unified Transaction".'
+      }, { status: 400 })
+    }
+
+    if (formato === 'VT') {
+      const vt = parseAmazonVT(rows)
+
+      // ─── Join VT × Relatório de Pedidos (CMV por SKU) ──────────────────
+      // O VT não tem SKU/quantidade. O Relatório de Pedidos complementa esses dados.
+      // Join por amazon-order-id; itens sem correspondência → cmv_incompleto.
+      let pedidosMap: ReturnType<typeof parseRelatorioPedidosAmazon> | null = null
+      if (fileRelatorioPedidos) {
+        const rpBuf = Buffer.from(await fileRelatorioPedidos.arrayBuffer())
+        // Tentar UTF-8; a Amazon usa latin1 em algumas regiões — normalizar acima do ASCII é seguro
+        const rpText = rpBuf.toString('utf8')
+        pedidosMap = parseRelatorioPedidosAmazon(rpText)
+      }
+
+      // Busca custos do catálogo (só necessário se temos o Relatório de Pedidos)
+      type SkuAmazon = { sku: string; titulo: string; unidades: number; pedidos: number; custo_unit: number; sem_custo: boolean; cmv: number }
+      const skusVT: Record<string, SkuAmazon> = {}
+      let pedidosSemCorrespondencia = 0
+      let pedidosComCmv = 0
+
+      if (pedidosMap && pedidosMap.size > 0) {
+        const produtos = await prisma.produto_catalogo.findMany({
+          where: { workspace_id: workspaceId },
+          select: { sku_interno: true, custo_brl: true, sku_alias: true },
+        })
+        const custoPorSku: Record<string, number> = {}
+        produtos.forEach(p => {
+          if (!p.custo_brl) return
+          if (p.sku_interno) custoPorSku[p.sku_interno.toUpperCase()] = p.custo_brl
+          if (p.sku_alias) p.sku_alias.split(',').forEach(a => {
+            const s = a.trim().toUpperCase(); if (s && !custoPorSku[s]) custoPorSku[s] = p.custo_brl!
+          })
+        })
+
+        // Para cada linha VT do tipo pagamento, buscar SKU no mapa de pedidos
+        for (const linha of vt.linhas) {
+          const tipoRaw = linha.tipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+          if (tipoRaw !== 'pagamento do pedido') continue
+          const orderId = linha.pedido
+          const itensPedido = pedidosMap.get(orderId)
+          if (!itensPedido || itensPedido.length === 0) {
+            pedidosSemCorrespondencia++
+            continue
+          }
+          pedidosComCmv++
+          for (const item of itensPedido) {
+            const { sku, quantidade } = item
+            const custo_unit = custoPorSku[sku] ?? 0
+            const sem_custo = !custoPorSku[sku]
+            const cmv = custo_unit * quantidade
+            if (!skusVT[sku]) {
+              skusVT[sku] = {
+                sku, titulo: sku, unidades: 0, pedidos: 0,
+                custo_unit, sem_custo, cmv: 0,
+              }
+            }
+            skusVT[sku].unidades += quantidade
+            skusVT[sku].pedidos++
+            skusVT[sku].cmv += cmv
+          }
+        }
+      }
+
+      const skusVTArray = Object.values(skusVT).sort((a, b) => b.cmv - a.cmv)
+      const cmv_total_vt = skusVTArray.reduce((s, x) => s + x.cmv, 0)
+      const temRelatorio = !!pedidosMap
+      const cmv_incompleto = !temRelatorio || pedidosSemCorrespondencia > 0 || skusVTArray.some(s => s.sem_custo)
+
+      return NextResponse.json({
+        preview: modoPreview,
+        arquivo: file.name,
+        marketplace: 'AMAZON',
+        formato: 'VT',
+        periodo: {
+          inicio: vt.periodo.inicio,
+          fim: vt.periodo.fim,
+          ano: anoExplicito ?? vt.periodo.ano,
+          mes: mesExplicito ?? vt.periodo.mes,
+        },
+        pedidos: vt.pedidos,
+        // Receitas e taxas (já em R$ — o formato VT não usa centavos)
+        venda_bruta:   vt.venda_bruta,
+        desconto:      vt.desconto,
+        tarifa_venda:  Math.abs(vt.tarifas),
+        outros:        vt.outros,
+        receita_total: vt.venda_bruta + vt.desconto,
+        // Linha de fechamento
+        total_liquido: vt.total_liquido,
+        reembolsos:    vt.reembolsos,
+        taxas_servico: vt.taxas_servico,
+        reembolso_inventario: vt.reembolso_inventario,
+        outros_tipos:  vt.outros_tipos,
+        tipos:         vt.tipos,
+        linhas:        vt.linhas,
+        // CMV via Relatório de Pedidos (D1)
+        cmv_disponivel: temRelatorio && !cmv_incompleto,
+        cmv_incompleto,
+        cmv_total: cmv_total_vt,
+        relatorio_pedidos_presente: temRelatorio,
+        pedidos_com_cmv: pedidosComCmv,
+        pedidos_sem_correspondencia: pedidosSemCorrespondencia,
+        skus: skusVTArray,
+        alertas: {
+          cmv_indisponivel: temRelatorio
+            ? (cmv_incompleto ? 'CMV parcial: alguns pedidos ou SKUs não foram reconciliados com o Relatório de Pedidos.' : null)
+            : 'O extrato "Visualizar Transações" não contém SKU nem quantidade. Importe o Relatório de Pedidos para apurar o CMV da Amazon.',
+          sem_custo: skusVTArray.filter(s => s.sem_custo).map(s => s.sku),
+          margem_negativa: [],
+          pedidos_sem_correspondencia: pedidosSemCorrespondencia > 0
+            ? `${pedidosSemCorrespondencia} pedidos do VT não encontrados no Relatório de Pedidos.`
+            : null,
+        },
+      })
+    }
+
+    // ─── Formato MTU (legado) — parser original, preservado ──────────────
     if (rows.length < 12) return NextResponse.json({ error: 'Arquivo vazio ou formato incorreto' }, { status: 400 })
 
     // Busca custos do catálogo por SKU
@@ -114,7 +240,7 @@ export async function POST(req: NextRequest) {
       if (tipo !== 'Pedido') continue
 
       const skuRaw = String(r[COL.SKU] ?? '').trim()
-      const sku    = limparSku(skuRaw)
+      const sku    = limparSkuAmazon(skuRaw)
       if (!sku) continue
 
       const titulo = String(r[COL.DESC] ?? '').slice(0, 60)
@@ -194,6 +320,8 @@ export async function POST(req: NextRequest) {
     const resultado = {
       arquivo:      file.name,
       marketplace:  'AMAZON',
+      formato:      'MTU' as const,
+      cmv_disponivel: true,
       periodo:      { inicio: dataInicio, fim: dataFim, ano, mes },
       pedidos:      totais.pedidos,
       unidades:     totais.unidades,

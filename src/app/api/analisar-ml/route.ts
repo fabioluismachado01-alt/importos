@@ -10,6 +10,8 @@ import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/auth'
 import { calcularDIFAL, TABELA_UF, type UF } from '@/engines/difal'
 import { classificarStatus } from '@/lib/ml-status'
+import { resolverColunas, assertColunasObrigatorias, calcularParcelamento, reconciliarTotal } from '@/lib/ml-parcelamento'
+import { classificarRetornoCMV } from '@/lib/ml-cmv-devolucao'
 
 // Mapeamento nome completo do estado → sigla UF
 const ESTADO_PARA_UF: Record<string, UF> = {
@@ -25,51 +27,6 @@ const ESTADO_PARA_UF: Record<string, UF> = {
 function nomeParaUF(nome: string): UF | null {
   return ESTADO_PARA_UF[String(nome ?? '').toLowerCase().trim()] ?? null
 }
-
-// Índices das colunas resolvidos dinamicamente a partir do header (linha 5 do xlsx)
-// O relatório ML pode ter formatos diferentes dependendo da data de exportação.
-// A detecção por nome de coluna é robusta a colunas extras inseridas pelo ML.
-function resolverColunas(headerRow: unknown[]) {
-  const idx: Record<string, number[]> = {}
-  headerRow.forEach((h, i) => {
-    const k = String(h ?? '').trim()
-    if (k) { if (!idx[k]) idx[k] = []; idx[k].push(i) }
-  })
-  const get = (name: string, occ = 0) => idx[name]?.[occ] ?? -1
-
-  // Novo formato: coluna 'Descrição do status' contém o status legível
-  // Formato antigo: primeira ocorrência de 'Estado' era o status do pedido
-  const hasDescricaoStatus = (idx['Descrição do status']?.length ?? 0) > 0
-  return {
-    N_VENDA:                get('N.º de venda'),
-    DATA:                   get('Data da venda'),
-    // Novo formato: 'Descrição do status' (ex: "Chegou em 4 de agosto")
-    // Formato antigo: primeira 'Estado' era o status do pedido (ex: "entregue")
-    STATUS: hasDescricaoStatus
-      ? idx['Descrição do status']![0]
-      : idx['Estado']?.[0] ?? -1,
-    UNIDADES:               get('Unidades'),
-    REC_PRODUTO:            get('Receita por produtos (BRL)'),
-    TARIFA_IMP:             get('Tarifa de venda e impostos (BRL)'),
-    TAR_ENVIO:              get('Tarifas de envio (BRL)'),
-    TOTAL:                  get('Total (BRL)'),
-    SKU:                    get('SKU'),
-    TITULO:                 get('Título do anúncio'),
-    PRECO_UNIT:             get('Preço unitário de venda do anúncio (BRL)'),
-    // Novo formato: única 'Estado' é o estado do comprador
-    // Formato antigo: segunda 'Estado' era o estado do comprador
-    ESTADO_COMPRADOR: hasDescricaoStatus
-      ? idx['Estado']?.[0] ?? -1
-      : idx['Estado']?.[1] ?? -1,
-    // Acréscimo de parcelamento (juros repassados pelo comprador ao vendedor)
-    ACRESCIMO_PARCELAMENTO: idx['Receita por acréscimo no preço (pago pelo comprador) (BRL)']?.[0]
-      ?? idx['Receita por acréscimo no preço (BRL)']?.[0]
-      ?? -1,
-    // Taxa de parcelamento cobrada do vendedor (custo, presente no Rel.Vendas novo formato)
-    TAXA_PARCELAMENTO: idx['Taxa de parcelamento equivalente ao acréscimo']?.[0] ?? -1,
-  }
-}
-
 
 function limparTitulo(t: string): string {
   return t.replace(/\bnamave\b/gi, '').replace(/\s{2,}/g, ' ').trim().slice(0, 60)
@@ -158,6 +115,11 @@ export async function POST(req: NextRequest) {
 
     // Header real do ML está na linha 5 (índice 5); dados a partir da linha 6
     const COL = resolverColunas(rows[5] as unknown[])
+    try {
+      assertColunasObrigatorias(COL, rows[5] as unknown[])
+    } catch (e) {
+      return NextResponse.json({ error: String(e) }, { status: 422 })
+    }
 
     // Busca custos do catálogo de produtos, histórico de vigência e UF da empresa
     const competenciaData = new Date(Date.UTC(
@@ -267,6 +229,35 @@ export async function POST(req: NextRequest) {
       precos: Record<number, { unidades: number; receita: number; tarifas: number; frete: number }>
     }> = {}
     let totais = { receita: 0, tarifas: 0, frete: 0, pedidos: 0, cancelados: 0, devolucoes: 0, unidades: 0, fora_do_periodo: 0, acrescimo_parcelamento: 0, taxa_parcelamento: 0, desconhecidos_incluidos: 0, desconhecidos_excluidos: 0 }
+
+    // ─── Auditoria de CMV por PEDIDO (bug ML-3) ──────────────────────────
+    // Antes era gravada uma única linha agregada por SKU com numero_venda
+    // 'AGREGADO' e status_original 'VENDA_EFETIVA'. Agora cada linha do
+    // relatório vira uma linha de auditoria com o número de venda e o status
+    // realmente lidos do arquivo — é isso que torna a trilha auditável.
+    type CmvAuditRow = {
+      numero_venda: string; sku: string; quantidade: number
+      custo_unitario: number; cmv_total: number
+      status_original: string; grupo_status: string
+      incluido_cmv: boolean; motivo_exclusao: string | null; cmv_ausente: boolean
+    }
+    const cmvAudit: CmvAuditRow[] = []
+
+    // Reconciliação do Total (BRL) — resíduo ≠ 0 vira alerta, nunca lançamento
+    let residuo_total = 0
+    const linhas_residuo: Array<{ numero_venda: string; residuo: number }> = []
+
+    // CMV de devoluções: retido (sem estorno) vs. estornado (retorno confirmado)
+    let cmv_devolucao_retido = 0
+    let cmv_devolucao_estornado = 0
+    const devolucoes_retorno_incerto: Array<{ numero_venda: string; sku: string; status: string; cmv: number }> = []
+    // CMV de mediações em aberto (DEVOLUCAO_EM_ANALISE): produto pode não ter sido
+    // enviado — rastreado separadamente, NÃO somado ao custo_produtos.
+    let cmv_mediacao_incerto = 0
+    const pendencias_mediacao: Array<{ numero_venda: string; sku: string; status: string; cmv: number }> = []
+    let total_mediacao_em_analise = 0
+    // Operações pendentes: VENDA_EM_ANDAMENTO e NAO_ENTREGUE — rastreadas separadamente.
+    const pendencias_operacionais: Array<{ numero_venda: string; sku: string; status: string; estado: string; grupo: string; cmv: number }> = []
     // Acumuladores DIFAL — agrupado por UF destino
     const difalPorEstado: Record<string, { pedidos: number; receita: number; difal: number; fcp: number }> = {}
     let totalDifal = 0
@@ -289,10 +280,116 @@ export async function POST(req: NextRequest) {
       }
 
       const statusRaw = String(r[COL.STATUS] ?? '').trim()
-      const grupo = classificarStatus(statusRaw)
+      const estadoRaw = String(r[COL.ESTADO_COMPRADOR] ?? '').trim()
+      const grupo = classificarStatus(statusRaw, estadoRaw)
 
-      if (grupo === 'CANCELADA') { totais.cancelados++; continue }
-      if (grupo === 'DEVOLUCAO') { totais.devolucoes++; continue }
+      // Dados da linha usados tanto pela auditoria quanto pelo cálculo de receita
+      const numeroVenda = String(r[COL.N_VENDA] ?? '').trim()
+      const skuLinha = String(r[COL.SKU] ?? '').trim() || 'SEM-SKU'
+      const uniLinha = Number(r[COL.UNIDADES]) || 0
+      const custoUnitLinha = custoPorSku[skuLinha] ?? 0
+      const cmvAusenteLinha = !(skuLinha in custoPorSku) || custoPorSku[skuLinha] === 0
+
+      if (grupo === 'CANCELADA') {
+        totais.cancelados++
+        // Cancelamento: sem evidência de que o produto saiu do estoque.
+        // CMV = 0 — não reconhecido. Se houver evidência futura de saída,
+        // reclassificar manualmente.
+        cmvAudit.push({
+          numero_venda: numeroVenda, sku: skuLinha, quantidade: uniLinha,
+          custo_unitario: custoUnitLinha, cmv_total: 0,
+          status_original: statusRaw, grupo_status: 'CANCELADA',
+          incluido_cmv: false, motivo_exclusao: 'VENDA_CANCELADA_SEM_EVIDENCIA_SAIDA',
+          cmv_ausente: cmvAusenteLinha,
+        })
+        continue
+      }
+
+      if (grupo === 'DEVOLUCAO_EM_ANALISE') {
+        // Mediação/reclamação ativa: produto pode ou não ter sido enviado.
+        // Receita NÃO elegível; CMV incerto — rastreado separadamente.
+        total_mediacao_em_analise++
+        const cmvLinha = custoUnitLinha * uniLinha
+        cmv_mediacao_incerto += cmvLinha
+        pendencias_mediacao.push({
+          numero_venda: numeroVenda, sku: skuLinha, status: statusRaw, cmv: cmvLinha,
+        })
+        cmvAudit.push({
+          numero_venda: numeroVenda, sku: skuLinha, quantidade: uniLinha,
+          custo_unitario: custoUnitLinha, cmv_total: 0,
+          status_original: statusRaw, grupo_status: 'DEVOLUCAO_EM_ANALISE',
+          incluido_cmv: false, motivo_exclusao: 'MEDIACAO_EM_ABERTO_CMV_INCERTO',
+          cmv_ausente: cmvAusenteLinha,
+        })
+        continue
+      }
+
+      if (grupo === 'VENDA_EM_ANDAMENTO') {
+        // Envio em curso, comprador ainda pode cancelar. Receita NÃO reconhecida.
+        // CMV incerto — produto pode ter saído do estoque mas não houve confirmação.
+        const cmvLinha = custoUnitLinha * uniLinha
+        pendencias_operacionais.push({
+          numero_venda: numeroVenda, sku: skuLinha, status: statusRaw,
+          estado: estadoRaw, grupo: 'VENDA_EM_ANDAMENTO', cmv: cmvLinha,
+        })
+        cmvAudit.push({
+          numero_venda: numeroVenda, sku: skuLinha, quantidade: uniLinha,
+          custo_unitario: custoUnitLinha, cmv_total: 0,
+          status_original: statusRaw, grupo_status: 'VENDA_EM_ANDAMENTO',
+          incluido_cmv: false, motivo_exclusao: 'VENDA_EM_ANDAMENTO_CMV_PENDENTE',
+          cmv_ausente: cmvAusenteLinha,
+        })
+        continue
+      }
+
+      if (grupo === 'NAO_ENTREGUE') {
+        // Falha logística: produto não entregue ao comprador. Receita NÃO reconhecida.
+        // CMV retido/pendente até confirmação de retorno físico ao vendedor.
+        const cmvLinha = custoUnitLinha * uniLinha
+        pendencias_operacionais.push({
+          numero_venda: numeroVenda, sku: skuLinha, status: statusRaw,
+          estado: estadoRaw, grupo: 'NAO_ENTREGUE', cmv: cmvLinha,
+        })
+        cmvAudit.push({
+          numero_venda: numeroVenda, sku: skuLinha, quantidade: uniLinha,
+          custo_unitario: custoUnitLinha, cmv_total: 0,
+          status_original: statusRaw, grupo_status: 'NAO_ENTREGUE',
+          incluido_cmv: false, motivo_exclusao: 'NAO_ENTREGUE_RETORNO_FISICO_PENDENTE',
+          cmv_ausente: cmvAusenteLinha,
+        })
+        continue
+      }
+
+      if (grupo === 'DEVOLUCAO') {
+        totais.devolucoes++
+        // Produto já saiu do estoque (ML processou devolução/reembolso ao comprador).
+        // CMV retido por padrão (B2: saída econômica confirmada); estornado APENAS
+        // quando o texto confirma retorno físico ao vendedor.
+        const decisao = classificarRetornoCMV(statusRaw, estadoRaw)
+        const cmvLinha = custoUnitLinha * uniLinha
+        if (decisao.cmv_retorno) {
+          // Produto voltou ao vendedor → custo estornado (produto voltou ao estoque)
+          cmv_devolucao_estornado += cmvLinha
+        } else {
+          // Produto não voltou ou incerto → custo retido no CMV (B2)
+          cmv_devolucao_retido += cmvLinha
+          devolucoes_retorno_incerto.push({
+            numero_venda: numeroVenda, sku: skuLinha, status: statusRaw, cmv: cmvLinha,
+          })
+        }
+        cmvAudit.push({
+          numero_venda: numeroVenda, sku: skuLinha, quantidade: uniLinha,
+          custo_unitario: custoUnitLinha,
+          cmv_total: decisao.cmv_retorno ? 0 : cmvLinha,
+          status_original: statusRaw, grupo_status: 'DEVOLUCAO',
+          incluido_cmv: !decisao.cmv_retorno,
+          motivo_exclusao: decisao.cmv_retorno
+            ? 'DEVOLUCAO_RETORNO_CONFIRMADO_CMV_ESTORNADO'
+            : null,
+          cmv_ausente: cmvAusenteLinha,
+        })
+        continue
+      }
 
       if (grupo === 'DESCONHECIDO') {
         // Fallback financeiro: Total > 0 → pagamento confirmado → incluir com alerta
@@ -303,12 +400,19 @@ export async function POST(req: NextRequest) {
         } else {
           totais.desconhecidos_excluidos++
           totais.cancelados++
+          cmvAudit.push({
+            numero_venda: numeroVenda, sku: skuLinha, quantidade: uniLinha,
+            custo_unitario: custoUnitLinha, cmv_total: 0,
+            status_original: statusRaw, grupo_status: 'DESCONHECIDO',
+            incluido_cmv: false, motivo_exclusao: 'STATUS_DESCONHECIDO_SEM_PAGAMENTO',
+            cmv_ausente: cmvAusenteLinha,
+          })
           continue
         }
       }
 
-      const sku = String(r[COL.SKU] ?? '').trim() || 'SEM-SKU'
-      const uni = Number(r[COL.UNIDADES]) || 0
+      const sku = skuLinha
+      const uni = uniLinha
       // ─── RECEITA REAL: todos os valores que ENTRAM para o vendedor ────────
       // Col 7: Receita do produto (preço pago pelo comprador pelo produto)
       // Col 8: Receita por acréscimo (ex: juros de parcelamento repassados)
@@ -371,6 +475,39 @@ export async function POST(req: NextRequest) {
       totais.unidades  += uni
       totais.pedidos++
 
+      // ─── Auditoria de CMV desta venda (por pedido real, bug ML-3) ───────
+      cmvAudit.push({
+        numero_venda: numeroVenda, sku, quantidade: uni,
+        custo_unitario: custoUnitLinha, cmv_total: custoUnitLinha * uni,
+        status_original: statusRaw || '(vazio)',
+        grupo_status: grupo === 'DESCONHECIDO' ? 'DESCONHECIDO' : 'VENDA',
+        incluido_cmv: true,
+        motivo_exclusao: null,
+        cmv_ausente: cmvAusenteLinha,
+      })
+
+      // ─── Reconciliação do Total (BRL) ───────────────────────────────────
+      // Total (BRL) é campo de conferência: não gera lançamento próprio.
+      // Só conciliamos quando todas as colunas componentes existem no arquivo.
+      if (c17 !== null && COL.REC_ENVIO >= 0 && COL.DESCONTOS >= 0 && COL.CANCELAMENTOS >= 0) {
+        const rec0 = reconciliarTotal({
+          receita_produto:   Number(r[COL.REC_PRODUTO]) || 0,
+          acrescimo:         acr,
+          taxa_parcelamento: taxaParc,
+          tarifa_venda:      Number(r[COL.TARIFA_IMP]) || 0,
+          receita_envio:     Number(r[COL.REC_ENVIO]) || 0,
+          tarifa_envio:      Number(r[COL.TAR_ENVIO]) || 0,
+          descontos:         Number(r[COL.DESCONTOS]) || 0,
+          cancelamentos:     Number(r[COL.CANCELAMENTOS]) || 0,
+        }, c17)
+        if (!rec0.reconciliado) {
+          residuo_total += rec0.residuo
+          if (linhas_residuo.length < 50) {
+            linhas_residuo.push({ numero_venda: numeroVenda, residuo: rec0.residuo })
+          }
+        }
+      }
+
       // DIFAL — somente se venda interestadual (estado comprador ≠ UF origem)
       const estadoNome = String(r[COL.ESTADO_COMPRADOR] ?? '').trim()
       const ufDestino = nomeParaUF(estadoNome)
@@ -388,6 +525,18 @@ export async function POST(req: NextRequest) {
           difalPorEstado[ufDestino].fcp     += res.fcpValor
         }
       }
+    }
+
+    // Assert: arquivo com dados mas zero linhas aceitas = erro de parsing, não mês vazio
+    const totalLinhasAceitas = totais.pedidos + totais.cancelados + totais.devolucoes +
+      total_mediacao_em_analise + pendencias_operacionais.length
+    const linhasComNVenda = rows.slice(6).filter(r => (r as unknown[])[COL.N_VENDA]).length
+    if (linhasComNVenda > 0 && totalLinhasAceitas === 0) {
+      const presentes = (rows[5] as unknown[]).map(h => String(h ?? '').trim()).filter(Boolean).join(', ')
+      return NextResponse.json({
+        error: `O arquivo tem ${linhasComNVenda} linhas de dados mas nenhuma pôde ser lida.\n` +
+          `Colunas presentes: ${presentes}`
+      }, { status: 422 })
     }
 
     // Calcular lucros por SKU + breakdown de preços
@@ -432,7 +581,11 @@ export async function POST(req: NextRequest) {
       }
     }).sort((a, b) => b.lucro_bruto - a.lucro_bruto)
 
-    const custo_total = skusArray.reduce((s, x) => s + x.custo_total, 0)
+    // custo_total: CMV das vendas confirmadas + CMV retido de devoluções sem retorno
+    // físico (B2: produto saiu do estoque, custo não desaparece até retorno confirmado).
+    // NÃO inclui cmv_mediacao_incerto (produto pode não ter saído).
+    const cmv_vendas = skusArray.reduce((s, x) => s + x.custo_total, 0)
+    const custo_total = cmv_vendas + cmv_devolucao_retido
     const lucro_bruto = totais.receita - totais.tarifas - totais.frete - custo_total
 
     // Período: mês civil de competência (já usado para filtrar as vendas acima)
@@ -449,6 +602,15 @@ export async function POST(req: NextRequest) {
       .sort((a, b) => b.difal - a.difal)
       .slice(0, 5)
 
+    // ─── Parcelamento: acréscimo e taxa são auditados sempre ────────────
+    // Quando o par se anula (líquido = 0), NADA entra na DRE — lançar os dois
+    // lados infla receita e despesa sem mudar o resultado. Quando sobra
+    // resíduo, o valor é exposto como alerta para conferência manual.
+    const parcelamento = calcularParcelamento({
+      acrescimo: totais.acrescimo_parcelamento,
+      taxa: totais.taxa_parcelamento,
+    })
+
     const resumo = {
       arquivo: file.name,
       marketplace: 'MERCADO_LIVRE',
@@ -461,6 +623,34 @@ export async function POST(req: NextRequest) {
       receita_bruta: totais.receita,
       acrescimo_parcelamento: totais.acrescimo_parcelamento,
       taxa_parcelamento: totais.taxa_parcelamento,
+      // Parcelamento — o que a DRE deve consumir
+      parcelamento: {
+        acrescimo: parcelamento.acrescimo,
+        taxa: parcelamento.taxa,
+        parcelamento_liquido: parcelamento.parcelamento_liquido,
+        neutro: parcelamento.neutro,
+        // Valores a lançar na DRE: zerados quando o par se anula
+        acrescimo_dre: parcelamento.neutro ? 0 : parcelamento.acrescimo,
+        taxa_dre:      parcelamento.neutro ? 0 : parcelamento.taxa,
+      },
+      // Reconciliação do Total (BRL) — campo de conferência, não vira lançamento
+      reconciliacao_total: {
+        residuo: Math.round(residuo_total * 100) / 100,
+        reconciliado: Math.abs(residuo_total) <= 0.005,
+        linhas_com_residuo: linhas_residuo.length,
+        exemplos: linhas_residuo.slice(0, 10),
+      },
+      // CMV de devoluções (B2): retido = somado a custo_produtos; estornado = excluído
+      cmv_devolucao: {
+        estornado: cmv_devolucao_estornado,
+        retido: cmv_devolucao_retido,
+        retorno_incerto_count: devolucoes_retorno_incerto.length,
+      },
+      // CMV de mediações em aberto — incerto, rastreado separadamente
+      cmv_mediacao_em_analise: {
+        total: cmv_mediacao_incerto,
+        pedidos_count: total_mediacao_em_analise,
+      },
       tarifas_ml: totais.tarifas,
       frete_custo: totais.frete,
       custo_produtos: custo_total,
@@ -489,80 +679,101 @@ export async function POST(req: NextRequest) {
         // Status desconhecidos incluídos via fallback financeiro (Total > 0)
         status_desconhecido_incluido: totais.desconhecidos_incluidos,
         status_desconhecido_excluido: totais.desconhecidos_excluidos,
+        // Par de parcelamento descasado: exige conferência antes de lançar
+        parcelamento_descasado: parcelamento.alerta
+          ? { liquido: parcelamento.parcelamento_liquido, acrescimo: parcelamento.acrescimo, taxa: parcelamento.taxa }
+          : null,
+        // Total (BRL) não bateu com a soma dos componentes em alguma linha
+        total_nao_reconciliado: Math.abs(residuo_total) > 0.005
+          ? { residuo: residuo_total, linhas: linhas_residuo.length }
+          : null,
+        // Devoluções sem confirmação de retorno físico — CMV retido (B2)
+        devolucao_retorno_incerto: devolucoes_retorno_incerto.slice(0, 50),
+        // Mediações em aberto — receita e CMV incertos, aguardam resolução
+        mediacao_em_analise: pendencias_mediacao.slice(0, 50),
+        // Operações pendentes: envio em andamento ou falha de entrega
+        // Receita e CMV não reconhecidos — revisar quando status for resolvido
+        operacionais_pendentes: pendencias_operacionais.slice(0, 50),
       }
     }
 
     if (modoPreview) return NextResponse.json({ preview: true, ...resumo })
 
-    // Salvar no banco — idempotência simples: deletar análise existente do mesmo período antes de criar
-    const existente = await prisma.ml_analise_relatorio.findFirst({
-      where: { workspace_id: workspaceId, ano: periodo.ano, mes: periodo.mes },
-      select: { id: true },
-    })
-    if (existente) {
-      await prisma.ml_analise_relatorio.delete({ where: { id: existente.id } })
-    }
-
     const competenciaStr = `${periodo.ano}-${String(periodo.mes).padStart(2, '0')}`
-    const analise = await prisma.ml_analise_relatorio.create({
-      data: {
-        workspace_id: workspaceId,
-        marketplace: 'MERCADO_LIVRE',
-        arquivo_nome: file.name,
-        periodo_inicio: periodo.inicio,
-        periodo_fim: periodo.fim,
-        ano: periodo.ano,
-        mes: periodo.mes,
-        total_pedidos: totais.pedidos,
-        total_cancelados: totais.cancelados,
-        total_devolucoes: totais.devolucoes,
-        total_unidades: totais.unidades,
-        receita_bruta: totais.receita,
-        acrescimo_parcelamento: totais.acrescimo_parcelamento,
-        taxa_parcelamento: totais.taxa_parcelamento,
-        tarifas_ml: totais.tarifas,
-        frete_custo: totais.frete,
-        custo_produtos: custo_total,
-        lucro_bruto,
-        margem_perc: resumo.margem_perc,
-        ticket_medio: resumo.ticket_medio,
-        cmv_incompleto: resumo.cmv_incompleto,
-        receita_interestadual: receitaInterestadual,
-        difal_estimado: totalDifal,
-        pedidos_interestaduais: pedidosInterestaduais,
-        difal_por_estado: JSON.stringify(difalPorEstado),
-        skus: {
-          create: skusArray.map(s => ({
-            sku: s.sku, titulo: s.titulo, unidades: s.unidades, pedidos: s.pedidos,
-            receita_bruta: s.receita, tarifas_ml: s.tarifas, frete_custo: s.frete,
-            custo_unitario: s.custo_unit, custo_total: s.custo_total,
-            lucro_bruto: s.lucro_bruto, margem_perc: s.margem_perc,
-            ticket_medio: s.ticket_medio, lucro_unit: s.lucro_unit,
-          }))
-        }
-      }
-    })
 
-    // Salvar trilha de auditoria de CMV por SKU
-    const cmvAuditRows = skusArray.map(s => ({
-      id: `${analise.id}-${s.sku}`,
-      workspace_id: workspaceId,
-      relatorio_id: analise.id,
-      competencia: competenciaStr,
-      numero_venda: 'AGREGADO',  // agrupado por SKU no relatório; detalhe por pedido requer expansão futura
-      sku: s.sku,
-      quantidade: s.unidades,
-      custo_unitario: s.custo_unit,
-      cmv_total: s.custo_total,
-      status_original: 'VENDA_EFETIVA',
-      grupo_status: 'VENDA',
-      incluido_cmv: true,
-      motivo_exclusao: null as string | null,
-      cmv_ausente: s.cmv_ausente,
-    }))
-    if (cmvAuditRows.length > 0) {
-      await prisma.ml_cmv_auditoria.createMany({ data: cmvAuditRows })
-    }
+    // Substituição atômica: delete (se existir) + create dentro da mesma transação.
+    // Se qualquer etapa falhar, o Prisma faz rollback integral — a análise anterior
+    // permanece intacta e nenhuma competência fica parcialmente importada.
+    const analise = await prisma.$transaction(async (tx) => {
+      // 1. Remove análise anterior do período (FK CASCADE limpa skus e cmv_auditoria)
+      await tx.ml_analise_relatorio.deleteMany({
+        where: { workspace_id: workspaceId, ano: periodo.ano, mes: periodo.mes },
+      })
+
+      // 2. Cria nova análise com SKUs aninhados
+      const novaAnalise = await tx.ml_analise_relatorio.create({
+        data: {
+          workspace_id: workspaceId,
+          marketplace: 'MERCADO_LIVRE',
+          arquivo_nome: file.name,
+          periodo_inicio: periodo.inicio,
+          periodo_fim: periodo.fim,
+          ano: periodo.ano,
+          mes: periodo.mes,
+          total_pedidos: totais.pedidos,
+          total_cancelados: totais.cancelados,
+          total_devolucoes: totais.devolucoes,
+          total_unidades: totais.unidades,
+          receita_bruta: totais.receita,
+          acrescimo_parcelamento: totais.acrescimo_parcelamento,
+          taxa_parcelamento: totais.taxa_parcelamento,
+          tarifas_ml: totais.tarifas,
+          frete_custo: totais.frete,
+          custo_produtos: custo_total,
+          lucro_bruto,
+          margem_perc: resumo.margem_perc,
+          ticket_medio: resumo.ticket_medio,
+          cmv_incompleto: resumo.cmv_incompleto,
+          receita_interestadual: receitaInterestadual,
+          difal_estimado: totalDifal,
+          pedidos_interestaduais: pedidosInterestaduais,
+          difal_por_estado: JSON.stringify(difalPorEstado),
+          skus: {
+            create: skusArray.map(s => ({
+              sku: s.sku, titulo: s.titulo, unidades: s.unidades, pedidos: s.pedidos,
+              receita_bruta: s.receita, tarifas_ml: s.tarifas, frete_custo: s.frete,
+              custo_unitario: s.custo_unit, custo_total: s.custo_total,
+              lucro_bruto: s.lucro_bruto, margem_perc: s.margem_perc,
+              ticket_medio: s.ticket_medio, lucro_unit: s.lucro_unit,
+            }))
+          }
+        }
+      })
+
+      // 3. Cria trilha de auditoria de CMV — UMA LINHA POR PEDIDO (bug ML-3).
+      // numero_venda e status_original vêm do arquivo; não há mais 'AGREGADO'.
+      const cmvAuditRows = cmvAudit.map((row, i) => ({
+        id: `${novaAnalise.id}-${i}`,
+        workspace_id: workspaceId,
+        relatorio_id: novaAnalise.id,
+        competencia: competenciaStr,
+        numero_venda: row.numero_venda || 'SEM-NUMERO',
+        sku: row.sku,
+        quantidade: row.quantidade,
+        custo_unitario: row.custo_unitario,
+        cmv_total: row.cmv_total,
+        status_original: row.status_original,
+        grupo_status: row.grupo_status,
+        incluido_cmv: row.incluido_cmv,
+        motivo_exclusao: row.motivo_exclusao,
+        cmv_ausente: row.cmv_ausente,
+      }))
+      if (cmvAuditRows.length > 0) {
+        await tx.ml_cmv_auditoria.createMany({ data: cmvAuditRows })
+      }
+
+      return novaAnalise
+    })
 
     return NextResponse.json({ success: true, analise_id: analise.id, ...resumo })
   } catch (err) {
