@@ -161,18 +161,22 @@ export async function POST(req: NextRequest) {
       // pedidos com devolução cujo Valor Total ainda não tinha sido zerado
       // pela Shopee entravam na receita. Agora a decisão é explícita.
       if (statusDev || returnedQty > 0) {
+        const qty0 = n(r[COL.QTD])
+        // Devolução total: todas as unidades foram devolvidas → excluir receita independente do status texto
+        const forcaExcluir = returnedQty > 0 && qty0 > 0 && returnedQty >= qty0
         const decisao = avaliarDevolucaoShopee({ statusDev, valorTotal })
+        const excluirReceita = decisao.excluir_receita || forcaExcluir
         devolucoes.push({
           sku: skuRaw,
           status_dev: statusDev,
           returned_qty: returnedQty,
           valor: n(r[COL.SUBTOTAL]),
           valor_total: valorTotal,
-          excluido_receita: decisao.excluir_receita,
-          incerto: decisao.incerto,
-          motivo: decisao.motivo,
+          excluido_receita: excluirReceita,
+          incerto: decisao.incerto && !forcaExcluir,
+          motivo: forcaExcluir ? `retorno_total:returned=${returnedQty}>=qty=${qty0}` : decisao.motivo,
         })
-        if (decisao.incerto) {
+        if (decisao.incerto && !forcaExcluir) {
           devolucoes_incertas.push({
             id_pedido: String(r[COL.ID] ?? '').trim(),
             sku: skuRaw,
@@ -182,7 +186,7 @@ export async function POST(req: NextRequest) {
         }
         // Devolução finalizada: a venda não compõe a receita do mês.
         // O CMV da unidade continua acumulado — ela foi fisicamente movimentada.
-        if (decisao.excluir_receita) {
+        if (excluirReceita) {
           receita_excluida_devolucao += valorTotal
           continue
         }
@@ -203,7 +207,10 @@ export async function POST(req: NextRequest) {
       frete_estimado += freteEst
       desconto_vendedor += n(r[COL.AJUSTE_PIX])
       pedidos_validos++
-      unidades_total += qty
+      // Devolução parcial: Shopee já abate o valor da unidade devolvida em valorTotal;
+      // as unidades também devem refletir só o que ficou com o cliente.
+      const unidadesEfetivas = returnedQty > 0 && returnedQty < qty ? qty - returnedQty : qty
+      unidades_total += unidadesEfetivas
 
       const custo_unit = custoPorSku[sku] ?? 0
       const nome_produto = String(r[COL.NOME_PRODUTO] ?? '').slice(0, 80)

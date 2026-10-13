@@ -705,10 +705,6 @@ model ml_analise_relatorio {
   periodo_fim      DateTime
   ano              Int
   mes              Int      // mês de competência (ciclo ML: 30→29)
-  // CONFIRMADO | RASCUNHO — permite salvar uma análise para conferência
-  // antes de ela alimentar a DRE. Default preserva o comportamento atual.
-  status           String   @default("CONFIRMADO")
-
   // Totais do relatório
   total_pedidos    Int      @default(0)
   total_cancelados Int      @default(0)
