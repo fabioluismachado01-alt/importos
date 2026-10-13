@@ -131,18 +131,25 @@ function resolverColunasMTU(headerRow: unknown[]): Record<string, number> {
     COMISSAO: find('tarifas de venda', 'selling fees'),
     FBA:      find('taxas fba', 'fba fees'),
     TOTAL:    find('total'),
+    OUTRO:    find('outro'),
   }
 }
 
-const MTU_TIPO_VENDA    = 'pedido'
-const MTU_TIPO_FBA      = 'taxa de estoque fba'
-const MTU_TIPO_AJUSTE   = 'ajuste'
+const MTU_TIPO_VENDA  = 'pedido'
+const MTU_TIPO_AJUSTE = 'ajuste'
 
 async function parsearMTU(
-  rows: unknown[][], file: File,
+  _rows: unknown[][], file: File,
   mesExplicito: number | null, anoExplicito: number | null,
   workspaceId: string,
 ): Promise<Response> {
+  // Re-ler com raw:false para obter strings BR ("16,90") em vez de inteiros (1690)
+  // XLSX por padrão converte "16,90" → 1690 (remove vírgula), causando valores ×100
+  const buf2 = Buffer.from(await file.arrayBuffer())
+  const wb2 = XLSX.read(buf2, { type: 'buffer' })
+  const ws2 = wb2.Sheets[wb2.SheetNames[0]]
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(ws2, { header: 1, defval: '', raw: false }) as unknown[][]
+
   const COL = resolverColunasMTU(rows[9] as unknown[])
 
   const produtos = await prisma.produto_catalogo.findMany({
@@ -159,6 +166,7 @@ async function parsearMTU(
 
   let receita_bruta = 0, comissao_amazon = 0, descontos = 0, outros = 0
   let tarifas_servico = 0, ajustes = 0
+  let fba_armazenagem = 0, outras_taxas_servico = 0, fba_frete_estoque = 0
   // Reembolsos (devoluções): acumulados separadamente para dedução da receita
   let reembolsos_bruto = 0, reembolsos_comissao = 0, reembolsos_fba = 0
   let unidades_total = 0
@@ -173,25 +181,43 @@ async function parsearMTU(
     const tipo = String(r[COL.TIPO]).trim().toLowerCase()
     const orderId = String(r[COL.ORDER_ID] ?? '').trim()
 
-    if (tipo === MTU_TIPO_FBA) {
-      tarifas_servico += Math.abs(parseBRDecimal(r[COL.FBA]))
-      continue
-    }
-
     // Reembolso/devolução: deduz da receita e credita tarifas — NÃO vai para ajustes
     if (tipo.startsWith('reembolso')) {
       reembolsos_bruto    += Math.abs(parseBRDecimal(r[COL.RECEITA]))
       reembolsos_comissao += parseBRDecimal(r[COL.COMISSAO]) > 0
-        ? parseBRDecimal(r[COL.COMISSAO])            // crédito positivo retornado pela Amazon
-        : Math.abs(parseBRDecimal(r[COL.COMISSAO]))  // negativo = ainda cobrado (raro)
+        ? parseBRDecimal(r[COL.COMISSAO])
+        : Math.abs(parseBRDecimal(r[COL.COMISSAO]))
       reembolsos_fba += Math.abs(parseBRDecimal(r[COL.FBA]))
-      // Reembolso não conta como venda nem adiciona ao set de pedidos
+      continue
+    }
+
+    // Tipos não-Pedido: classificados explicitamente por coluna correta
+    if (tipo === 'taxa de estoque fba') {
+      // Frete transportadora FBA: col 21 (outro), não col 19 (fba=0 neste tipo)
+      fba_frete_estoque += Math.abs(parseBRDecimal(r[COL.OUTRO]))
+      continue
+    }
+    if (tipo.startsWith('tarifas de transação com fba') || tipo.startsWith('tarifas de transa')) {
+      // Armazenagem FBA: col 19 (fba)
+      fba_armazenagem += Math.abs(parseBRDecimal(r[COL.FBA]))
+      continue
+    }
+    if (tipo === 'taxa de serviço') {
+      // Taxa cadastro/serviço: col 21 (outro)
+      outras_taxas_servico += Math.abs(parseBRDecimal(r[COL.OUTRO]))
+      continue
+    }
+    if (tipo === 'transferir') {
+      continue  // repasse bancário — fora do cálculo
+    }
+    if (tipo === MTU_TIPO_AJUSTE) {
+      // Ajuste net (reembolso de estoque FBA etc.): signed — não usar Math.abs
+      ajustes += parseBRDecimal(r[COL.OUTRO])
       continue
     }
 
     if (tipo !== MTU_TIPO_VENDA) {
-      ajustes += Math.abs(parseBRDecimal(r[COL.TOTAL] ?? 0))
-      continue
+      continue  // tipo desconhecido: ignorar
     }
 
     // Somente "Pedido" conta como venda — adiciona ao set de pedidos
@@ -252,9 +278,10 @@ async function parsearMTU(
 
   const geral_embutido = {
     fba_fulfillment: tarifas_servico,
-    fba_armazenagem: 0,
+    fba_armazenagem,
+    fba_frete: fba_frete_estoque,
     mensalidade: 0,
-    outras_taxas_servico: 0,
+    outras_taxas_servico,
     reembolsos_count: 0,
     reembolsos_bruto,
     reembolsos_comissao,

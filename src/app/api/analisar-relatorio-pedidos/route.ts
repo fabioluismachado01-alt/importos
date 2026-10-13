@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
 
       skus[sku].unidades += qty
       skus[sku].pedidos++
-      skus[sku].venda    += preco * qty
+      skus[sku].venda    += preco  // item-price é total da linha (já inclui qty)
       skus[sku].frete    += frete
       skus[sku].desconto += desc
     }

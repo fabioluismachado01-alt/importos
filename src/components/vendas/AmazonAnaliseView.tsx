@@ -274,7 +274,7 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
     try {
       await salvarAnaliseAmazon({
         mes, ano, aliquota: aliq,
-        // Receita de competência quando Relatório de Pedidos disponível; senão caixa (CSV)
+        // Receita e comissão: sempre do CSV de Transações (caixa)
         receita_bruta:     rec,
         comissao_amazon:   comissao,
         descontos:         dadosV.descontos,
@@ -284,6 +284,7 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
         // Relatório Geral (TXT real ou fallback embutido do CSV)
         fba_fulfillment:       geralEfetivo?.fba_fulfillment       ?? 0,
         fba_armazenagem:       geralEfetivo?.fba_armazenagem       ?? 0,
+        fba_frete:             geralEfetivo?.fba_frete              ?? 0,
         mensalidade:           geralEfetivo?.mensalidade            ?? 0,
         reembolsos_bruto:      geralEfetivo?.reembolsos_bruto       ?? 0,
         reembolsos_comissao:   geralEfetivo?.reembolsos_comissao    ?? 0,
@@ -313,36 +314,26 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
   // pois dadosG (Relatório de Pedidos) preenche esses campos com 0 (não tem essa info).
   const fonteAjustes = geralEmbutido ?? dadosG
 
-  // Quando Relatório de Pedidos disponível: receita de competência (entregues no mês)
-  // CSV de Transações serve apenas para extrair a taxa de comissão Amazon
+  // Receita e comissão: SEMPRE do CSV de Transações (caixa — valores efetivamente cobrados pela Amazon)
+  // O Relatório de Pedidos serve apenas para pedidos/unidades/SKU/CMV, não para receita do DRE
   const usandoCompetencia = !!dadosG && (dadosG.receita_total ?? 0) > 0
-  const rec = usandoCompetencia
-    ? (dadosG!.receita_total ?? dadosV?.receita_bruta ?? 0)
-    : (dadosV?.receita_bruta ?? 0)
-  // Taxa efetiva do CSV aplicada proporcionalmente à receita de competência
-  const taxaComissaoCSV = dadosV && dadosV.receita_bruta > 0
-    ? dadosV.comissao_amazon / dadosV.receita_bruta
-    : 0
-  const comissao = usandoCompetencia && dadosV
-    ? taxaComissaoCSV * rec
-    : (dadosV?.comissao_amazon ?? 0)
+  const rec      = dadosV?.receita_bruta   ?? 0
+  const comissao = dadosV?.comissao_amazon ?? 0
   const fbaFull    = geralEfetivo?.fba_fulfillment ?? 0
   const fbaArm     = geralEfetivo?.fba_armazenagem ?? 0
   const mensal     = geralEfetivo?.mensalidade ?? 0
   const reembolso  = fonteAjustes?.reembolsos_liquido ?? 0
   const ajuste     = fonteAjustes?.ajustes ?? 0
+  const fbaFrete   = geralEfetivo?.fba_frete ?? 0
   const outrasTax  = fonteAjustes?.outras_taxas_servico ?? 0
   const custoProd  = geralEfetivo
     ? geralEfetivo.skus.reduce((s, sk) => s + (sk.custo_total ?? 0), 0)
     : (dadosV?.produtos.reduce((s, p) => s + (p.custo_total ?? 0), 0) ?? 0)
   const das        = rec * aliq
   // outros: ressarcimento de promoções Amazon (positivo); descontos: cupons aplicados (subtraem)
-  // Aplicável no modo caixa (CSV-only). No modo competência, receita_total do Pedidos já é líquida.
-  const netOutros  = !usandoCompetencia
-    ? ((dadosV?.outros ?? 0) - (dadosV?.descontos ?? 0))
-    : 0
+  const netOutros  = (dadosV?.outros ?? 0) - (dadosV?.descontos ?? 0)
 
-  const lucro_bruto = rec + netOutros - comissao - fbaFull - fbaArm - mensal - reembolso + ajuste - outrasTax - pub
+  const lucro_bruto = rec + netOutros - comissao - fbaFull - fbaArm - fbaFrete - mensal - reembolso + ajuste - outrasTax - pub
   const lucro_liq   = lucro_bruto - custoProd - das
 
   const podeSalvar  = estV === 'ok'   // pelo menos o relatório de vendas é obrigatório

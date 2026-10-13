@@ -17,6 +17,7 @@ export interface DadosAmazon {
   // === do Relatório Geral ===
   fba_fulfillment: number
   fba_armazenagem: number
+  fba_frete: number
   mensalidade: number
   reembolsos_bruto: number
   reembolsos_comissao: number
@@ -92,7 +93,11 @@ export async function salvarAnaliseAmazon(dados: DadosAmazon) {
 
   if (dados.fba_armazenagem > 0)
     lancamentos.push(add('DESPESA_VARIAVEL', 'ARMAZENAGEM',
-      'Armazenagem FBA (taxa de estoque)', dados.fba_armazenagem))
+      'Armazenagem FBA (Logística — armazenamento de inventário)', dados.fba_armazenagem))
+
+  if (dados.fba_frete > 0)
+    lancamentos.push(add('DESPESA_VARIAVEL', 'ARMAZENAGEM',
+      'Frete Estoque FBA (Taxa de Estoque FBA — transportadora)', dados.fba_frete))
 
   if (dados.mensalidade > 0)
     lancamentos.push(add('DESPESA_FIXA', 'PLATAFORMA',
