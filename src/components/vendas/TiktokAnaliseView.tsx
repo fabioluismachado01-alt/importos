@@ -267,10 +267,8 @@ export function TiktokAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
     const aliq = parseFloat(aliquota.replace(',', '.')) / 100 || 0.08
     setSalvando(true); setErroSalvar('')
     try {
-      const recSalvar = usandoCompetencia ? dadosP!.receita_bruta : dadosD.receita_bruta
-      const taxasSalvar = usandoCompetencia
-        ? (dadosD.receita_bruta > 0 ? dadosD.taxas_plataforma_servico / dadosD.receita_bruta * recSalvar : dadosD.taxas_plataforma_servico)
-        : dadosD.taxas_plataforma_servico
+      const recSalvar = dadosD.receita_bruta
+      const taxasSalvar = dadosD.taxas_plataforma_servico
       const cmvSalvar = dadosP
         ? dadosP.skus.reduce((s, x) => s + x.custo_total, 0)
         : dadosD.cmv_estimado
@@ -296,18 +294,11 @@ export function TiktokAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
 
   // Receita: usa Relatório de Pedidos (competência) quando disponível;
   // evita misturar liquidações de um mês com pedidos de outro.
+  // usandoCompetencia: controla apenas CMV/unidades (Pedidos = por SKU; senão heurística)
   const usandoCompetencia = !!(dadosP && dadosP.receita_bruta > 0)
-  const rec = usandoCompetencia
-    ? dadosP!.receita_bruta
-    : (dadosD?.receita_bruta ?? 0)
-
-  // Taxas: quando em competência, aplica alíquota efetiva do Demonstrativo
-  const taxaEfetiva = dadosD && dadosD.receita_bruta > 0
-    ? dadosD.taxas_plataforma_servico / dadosD.receita_bruta
-    : 0
-  const taxas = usandoCompetencia
-    ? taxaEfetiva * rec
-    : (dadosD?.taxas_plataforma_servico ?? 0)
+  // Receita e taxas: sempre do Demonstrativo (01-30 do mês, sem misturar liquidações)
+  const rec  = dadosD?.receita_bruta ?? 0
+  const taxas = dadosD?.taxas_plataforma_servico ?? 0
 
   const afiliados = dadosD?.com_afiliados ?? 0
   // CMV: usa pedidos (exato) quando disponível, senão heurística do demonstrativo

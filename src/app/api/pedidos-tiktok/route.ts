@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
       // Linha totalmente vazia → fim do arquivo
       if (!r || r.every(c => c === '' || c == null)) continue
 
-      const rawOrderId = String(r[COL.ORDER_ID] ?? '').trim()
+      const rawOrderId = String(r[COL.ORDER_ID] ?? '').replace(/\t/g, '').trim()
       const orderId = rawOrderId || lastOrderId
       if (!orderId) continue  // sem nenhum Order ID conhecido ainda
       if (rawOrderId) lastOrderId = rawOrderId

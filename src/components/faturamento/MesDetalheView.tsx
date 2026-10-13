@@ -784,7 +784,7 @@ export function MesDetalheView({ dados: d, ano, mes, templates, abrirConfigAuto,
                 sub="Desp.Fixas ÷ Margem Bruta" />
               {/* Margem — renomeada para evitar ambiguidade */}
               <PainelInfo label="Margem Bruta"
-                value={`${d.margem_contribuicao.toFixed(1)}%`}
+                value={receitaTotal > 0 ? `${((d.lucro_bruto / receitaTotal) * 100).toFixed(1)}%` : '—'}
                 sub="Lucro Bruto ÷ Receita" />
               <PainelInfo label="Margem Líquida"
                 value={receitaTotal > 0 ? `${((d.lucro_liquido / receitaTotal) * 100).toFixed(1)}%` : '—'}
