@@ -159,6 +159,8 @@ async function parsearMTU(
 
   let receita_bruta = 0, comissao_amazon = 0, descontos = 0, outros = 0
   let tarifas_servico = 0, ajustes = 0
+  // Reembolsos (devoluções): acumulados separadamente para dedução da receita
+  let reembolsos_bruto = 0, reembolsos_comissao = 0, reembolsos_fba = 0
   let unidades_total = 0
   const pedidos_ids = new Set<string>()
   const diasComVenda = new Set<string>()
@@ -170,23 +172,37 @@ async function parsearMTU(
 
     const tipo = String(r[COL.TIPO]).trim().toLowerCase()
     const orderId = String(r[COL.ORDER_ID] ?? '').trim()
-    if (orderId && orderId !== '---') pedidos_ids.add(orderId)
 
     if (tipo === MTU_TIPO_FBA) {
       tarifas_servico += Math.abs(parseBRDecimal(r[COL.FBA]))
       continue
     }
+
+    // Reembolso/devolução: deduz da receita e credita tarifas — NÃO vai para ajustes
+    if (tipo.startsWith('reembolso')) {
+      reembolsos_bruto    += Math.abs(parseBRDecimal(r[COL.RECEITA]))
+      reembolsos_comissao += parseBRDecimal(r[COL.COMISSAO]) > 0
+        ? parseBRDecimal(r[COL.COMISSAO])            // crédito positivo retornado pela Amazon
+        : Math.abs(parseBRDecimal(r[COL.COMISSAO]))  // negativo = ainda cobrado (raro)
+      reembolsos_fba += Math.abs(parseBRDecimal(r[COL.FBA]))
+      // Reembolso não conta como venda nem adiciona ao set de pedidos
+      continue
+    }
+
     if (tipo !== MTU_TIPO_VENDA) {
       ajustes += Math.abs(parseBRDecimal(r[COL.TOTAL] ?? 0))
       continue
     }
+
+    // Somente "Pedido" conta como venda — adiciona ao set de pedidos
+    if (orderId && orderId !== '---') pedidos_ids.add(orderId)
 
     const rec  = parseBRDecimal(r[COL.RECEITA])
     const desc = parseBRDecimal(r[COL.DESCONTO])
     const com  = parseBRDecimal(r[COL.COMISSAO])
     const env  = parseBRDecimal(r[COL.ENVIO])
     const fba  = parseBRDecimal(r[COL.FBA])
-    const qty  = Math.max(1, Number(r[COL.QTY]) || 1)
+    const qty  = Number(r[COL.QTY]) || 0
 
     receita_bruta   += rec
     comissao_amazon += Math.abs(com)
@@ -240,10 +256,10 @@ async function parsearMTU(
     mensalidade: 0,
     outras_taxas_servico: 0,
     reembolsos_count: 0,
-    reembolsos_bruto: 0,
-    reembolsos_comissao: 0,
-    reembolsos_fba: 0,
-    reembolsos_liquido: 0,
+    reembolsos_bruto,
+    reembolsos_comissao,
+    reembolsos_fba,
+    reembolsos_liquido: reembolsos_bruto - reembolsos_comissao - reembolsos_fba,
     ajustes,
     publicidade_interno: 0,
     skus: [],

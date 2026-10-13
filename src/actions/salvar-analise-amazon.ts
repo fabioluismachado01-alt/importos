@@ -52,17 +52,18 @@ export async function salvarAnaliseAmazon(dados: DadosAmazon) {
 
   if (fat.fechado) throw new Error(`${mes}/${ano} está fechado. Reabra antes de importar.`)
 
-  // Remove lançamentos Amazon anteriores deste mês
+  // Remove lançamentos Amazon anteriores deste mês (e_automatico=true via tela)
   await prisma.lancamento.deleteMany({
-    where: { faturamento_id: fat.id, descricao: { contains: '[Amazon]' } }
+    where: { faturamento_id: fat.id, canal: 'AMAZON', e_automatico: true }
   })
 
-  // canal: 'AMAZON' obrigatório na receita → finance engine mapeia para receita_amazon
+  // canal: 'AMAZON' obrigatório em todas as despesas → finance engine atribui ao canal
   const add = (tipo: string, cat: string, desc: string, valor: number, canal?: string | null) => ({
     faturamento_id: fat.id, tipo, categoria: cat,
-    canal: canal ?? null,
+    canal: canal === undefined ? 'AMAZON' : canal,
     descricao: `[Amazon] ${desc}`,
     valor, data: primeiroDia, status: 'CONFIRMADO',
+    e_automatico: true,
   })
 
   const lancamentos = []
