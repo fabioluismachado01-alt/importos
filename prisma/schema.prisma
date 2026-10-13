@@ -316,6 +316,10 @@ model lancamento {
   valor          Float    // sempre positivo — tipo define o sinal
   data           DateTime
   e_fixo         Boolean  @default(false)
+  // true = criado por importação automática de marketplace; false = lançado à mão.
+  // Reimportações só podem apagar/substituir lançamentos com e_automatico = true —
+  // é o que protege os lançamentos manuais do usuário.
+  e_automatico   Boolean  @default(false)
   status         String   @default("CONFIRMADO")
   comprovante_url String?
   observacoes    String?
@@ -326,6 +330,7 @@ model lancamento {
   @@index([faturamento_id])
   @@index([tipo])
   @@index([canal])
+  @@index([faturamento_id, canal, e_automatico])
   @@index([data])
 }
 
@@ -700,6 +705,9 @@ model ml_analise_relatorio {
   periodo_fim      DateTime
   ano              Int
   mes              Int      // mês de competência (ciclo ML: 30→29)
+  // CONFIRMADO | RASCUNHO — permite salvar uma análise para conferência
+  // antes de ela alimentar a DRE. Default preserva o comportamento atual.
+  status           String   @default("CONFIRMADO")
 
   // Totais do relatório
   total_pedidos    Int      @default(0)
