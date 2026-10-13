@@ -13,11 +13,15 @@
  * - "Free Ads Credit"             → crédito concedido pela Shopee
  * - "ROAS Protection Free Ads..." → crédito de proteção ROAS
  *
- * Regra DRE: usar apenas a soma das deduções como despesa real de Ads.
- * Créditos são demonstrados separadamente (não reduzem a despesa oficial).
+ * Regra DRE: a despesa real de Ads é o CUSTO ECONÔMICO
+ *   custo_economico = deduções − créditos concedidos pela Shopee
+ * Créditos da Shopee (Free Ads Credit, ROAS Protection) não saem do caixa do
+ * vendedor. Recarga não entra na conta: é dinheiro do próprio vendedor.
+ * `deducoes_total` continua exposto para conferência com o extrato da carteira.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
+import { classificarLinhaAds, calcularCustoEconomicoAds } from '@/lib/shopee-ads'
 
 function parseBRL(v: unknown): number {
   return parseFloat(String(v ?? '').replace(',', '.')) || 0
@@ -72,16 +76,13 @@ export async function POST(req: NextRequest) {
 
       const descLow = desc.toLowerCase()
 
-      let tipo = 'OUTRO'
-      if (descLow.includes('deduction') || descLow.includes('dedução')) {
-        tipo = 'DEDUCAO'
+      const tipo = classificarLinhaAds(descLow)
+      if (tipo === 'DEDUCAO') {
         deducoes_total += Math.abs(valor)   // valor já vem negativo no arquivo
         count_deducoes++
-      } else if (descLow.includes('recarga') || descLow.includes('recharge') || descLow.includes('crédito de recarga')) {
-        tipo = 'RECARGA'
+      } else if (tipo === 'RECARGA') {
         recargas += valor
-      } else if (descLow.includes('free ads') || descLow.includes('roas protection')) {
-        tipo = 'CREDITO_SHOPEE'
+      } else if (tipo === 'CREDITO_SHOPEE') {
         creditos_shopee += valor
       }
 
@@ -91,13 +92,22 @@ export async function POST(req: NextRequest) {
     const creditos_total = recargas + creditos_shopee
     const saldo_liquido = creditos_total - deducoes_total  // será negativo se gastou mais do que recebeu
 
+    // ─── Custo econômico de Ads (bug SHP-3) ────────────────────────────
+    // Deduções são o débito bruto da carteira. A parte paga com crédito
+    // concedido pela Shopee (Free Ads Credit, ROAS Protection) não sai do
+    // caixa do vendedor e não pode ser lançada como despesa.
+    // Recarga NÃO reduz custo: é dinheiro do próprio vendedor.
+    const custo_economico = calcularCustoEconomicoAds({ deducoes_total, creditos_shopee })
+
     return NextResponse.json({
       arquivo: file.name,
       periodo,
       usuario,
-      // Despesa oficial de Ads (só deduções)
+      // Débito bruto da carteira (mantido para conferência com o extrato)
       deducoes_total,
       count_deducoes,
+      // Custo real de Ads para a DRE = deduções − créditos Shopee
+      custo_economico,
       // Créditos (demonstrados separadamente)
       recargas,
       creditos_shopee,

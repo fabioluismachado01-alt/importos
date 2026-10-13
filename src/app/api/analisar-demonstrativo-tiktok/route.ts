@@ -130,7 +130,13 @@ export async function POST(req: NextRequest) {
     // ─── STEP 1: Totais financeiros da aba Relatórios ────────────────────
     const totais = wsRelat ? lerRelatorios(wsRelat) : {}
 
-    const receita_bruta     = totais['Vendas líquidas dos produtos'] ?? 0
+    // Estrutura de receita TikTok (correção nomenclatura):
+    // subtotal_bruto = "Subtotal do item antes dos descontos"  → R$3.255,90
+    // desconto_vendedor, reembolsos já deduziram → vendas_liquidas = R$1.567,20
+    // receita_bruta é ALIAS de vendas_liquidas (mantido para backward compat na DRE)
+    const subtotal_bruto    = totais['Subtotal do item antes dos descontos'] ?? 0
+    const vendas_liquidas   = totais['Vendas líquidas dos produtos'] ?? 0
+    const receita_bruta     = vendas_liquidas   // receita reconhecida = já líq. de descontos+reembolsos
     const liquidado         = totais['Valor total a ser liquidado']  ?? 0
     const frete_bruto       = Math.abs(totais['Custo do frete'] ?? 0)
     const frete_coberto_tts = Math.abs(totais['Custo de frete coberto pelo TikTok Shop'] ?? 0)
@@ -148,6 +154,16 @@ export async function POST(req: NextRequest) {
 
     // Taxas sem afiliados (para DRE separada)
     const taxas_plataforma_servico = taxas_total - com_afiliados
+
+    // ─── Bug TKT-1: comissão de afiliados é TARIFA, não ADS ─────────────
+    // A comissão paga ao afiliado/criador é custo variável de canal: só existe
+    // quando há venda e é proporcional a ela, igual à comissão da plataforma.
+    // ADS é gasto de mídia, incorrido independentemente de venda — no TikTok,
+    // a "Taxa de anúncio de GMV Max". Somar afiliados em ADS distorce o ROAS
+    // (denominador inflado) e a margem de contribuição. O resultado financeiro
+    // é idêntico — ambas são DESPESA_VARIAVEL —, muda a categoria.
+    const tarifas_canal = taxas_plataforma_servico + com_afiliados
+    const ads_total = gmv_max
 
     // ─── STEP 2: Extratos — todas as 9 liquidações ───────────────────────
     const rowsExt = wsExt
@@ -228,9 +244,12 @@ export async function POST(req: NextRequest) {
         nomeVar    = det.nomeVar
         fonte      = 'detalhes'
       } else {
-        // Heurística de preço
+        // Heurística de preço — só aplicar se houver receita
+        // Liquidações com receita zero não têm evidência de produto vendido:
+        // atribuir CMV heurístico seria inventar custo sem base.
+        if (vendas === 0) return
         const h = heuristicaSku(vendas)
-        skuInterno = h.tipo === 'descascador' ? 'INV02' : 'INV073' // usa INV073 como default pazinha
+        skuInterno = h.tipo === 'descascador' ? 'INV02' : 'INV073'
         qty        = h.qty
         nomeVar    = h.tipo === 'descascador' ? 'Padrão' : 'Heurística'
         fonte      = 'heuristica'
@@ -272,8 +291,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       arquivo: file.name,
       periodo: { ano: anoExplicito ?? 2026, mes: mesExplicito ?? 5 },
-      // Totais oficiais (fonte: aba Relatórios)
-      receita_bruta,
+      // Receita estruturada (fonte: aba Relatórios)
+      subtotal_bruto,        // R$3.255,90 — bruto antes descontos e reembolsos
+      desconto_vendedor,     // R$1.516,00 — descontos financiados pelo vendedor
+      reembolsos,            // R$ 172,70 — reembolsos de produtos
+      vendas_liquidas,       // R$1.567,20 — receita reconhecida (subtotal − descontos − reembolsos)
+      receita_bruta,         // alias de vendas_liquidas (compatibilidade)
       liquidado,
       frete_bruto,
       frete_coberto_tts,
@@ -288,8 +311,16 @@ export async function POST(req: NextRequest) {
       com_criadores,
       com_shop_ads,
       gmv_max,
-      desconto_vendedor,
-      reembolsos,
+      // ─── Classificação explícita para a DRE (bug TKT-1) ───────────────
+      // comissao_afiliados vai para TARIFA (custo variável de canal).
+      // ADS contém apenas gasto de mídia (GMV Max).
+      tarifas_canal,
+      ads_total,
+      classificacao_dre: {
+        comissao_afiliados: { valor: com_afiliados, categoria: 'TARIFAS' as const },
+        taxas_plataforma:   { valor: taxas_plataforma_servico, categoria: 'TARIFAS' as const },
+        anuncios_gmv_max:   { valor: gmv_max, categoria: 'ADS_TIKTOK' as const },
+      },
       // Extratos
       pedidos_count,
       pedidos_pagos,

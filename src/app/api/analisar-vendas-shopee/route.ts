@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/auth'
+import { avaliarDevolucaoShopee } from '@/lib/shopee-devolucao'
 
 // Detecta índice de coluna pelo nome (busca substring, case-insensitive)
 function colIdx(header: string[], nome: string): number {
@@ -111,7 +112,13 @@ export async function POST(req: NextRequest) {
 
     // Cancelados e devoluções (para exibição)
     const cancelados: Array<{ sku: string; motivo: string; valor: number }> = []
-    const devolucoes: Array<{ sku: string; status_dev: string; returned_qty: number; valor: number }> = []
+    const devolucoes: Array<{
+      sku: string; status_dev: string; returned_qty: number; valor: number
+      valor_total: number; excluido_receita: boolean; incerto: boolean; motivo: string
+    }> = []
+    // Devoluções cujo valor pode ainda ser zerado pela Shopee — o UI exibe aviso
+    const devolucoes_incertas: Array<{ id_pedido: string; sku: string; status_dev: string; valor_total: number }> = []
+    let receita_excluida_devolucao = 0
 
     const skus: Record<string, {
       sku: string; nome_produto: string; nome_catalogo: string; variacao: string
@@ -149,15 +156,36 @@ export async function POST(req: NextRequest) {
         continue
       }
 
-      // Devoluções — rastrear separado, excluir da receita (ValorTotal = 0)
+      // ─── Devoluções (bug SHP-1) ────────────────────────────────────────
+      // Antes a linha era só registrada em `devolucoes[]` e seguia adiante:
+      // pedidos com devolução cujo Valor Total ainda não tinha sido zerado
+      // pela Shopee entravam na receita. Agora a decisão é explícita.
       if (statusDev || returnedQty > 0) {
+        const decisao = avaliarDevolucaoShopee({ statusDev, valorTotal })
         devolucoes.push({
           sku: skuRaw,
           status_dev: statusDev,
           returned_qty: returnedQty,
           valor: n(r[COL.SUBTOTAL]),
+          valor_total: valorTotal,
+          excluido_receita: decisao.excluir_receita,
+          incerto: decisao.incerto,
+          motivo: decisao.motivo,
         })
-        // Ainda inclui na contagem de unidades mas valor total = 0, então não entra na receita
+        if (decisao.incerto) {
+          devolucoes_incertas.push({
+            id_pedido: String(r[COL.ID] ?? '').trim(),
+            sku: skuRaw,
+            status_dev: statusDev,
+            valor_total: valorTotal,
+          })
+        }
+        // Devolução finalizada: a venda não compõe a receita do mês.
+        // O CMV da unidade continua acumulado — ela foi fisicamente movimentada.
+        if (decisao.excluir_receita) {
+          receita_excluida_devolucao += valorTotal
+          continue
+        }
       }
 
       // Status válidos para receita
@@ -238,6 +266,11 @@ export async function POST(req: NextRequest) {
       cancelados,
       devolucoes_count: devolucoes.length,
       devolucoes,
+      // Devolução concluída: valor retirado da receita do mês
+      receita_excluida_devolucao,
+      // Valores que a Shopee ainda pode zerar — mantidos na receita, com aviso
+      devolucoes_incertas,
+      devolucoes_incertas_count: devolucoes_incertas.length,
       // SKUs
       skus: skusArray,
       alertas: { sku_sem_custo },

@@ -4,6 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/auth'
 import { recalcularMes } from '@/actions/finance'
+import { calcularParcelamento } from '@/lib/ml-parcelamento'
+
+/** Canal usado para identificar os lançamentos automáticos desta importação. */
+const CANAL_ML = 'MERCADO_LIVRE'
 
 export interface DadosConsolidadosML {
   mes: number
@@ -62,16 +66,13 @@ export async function salvarAnaliseML(dados: DadosConsolidadosML) {
     throw new Error(`${mes}/${ano} está fechado. Reabra o mês antes de importar.`)
   }
 
-  // 2. Remove lançamentos ML anteriores do mesmo mês (evita duplicação)
-  await prisma.lancamento.deleteMany({
-    where: {
-      faturamento_id: fat.id,
-      descricao: { contains: 'ML Import' },
-    },
-  })
-
-  // 3. Cria todos os lançamentos do mês
-  const lancamentos = []
+  // 3. Monta todos os lançamentos do mês (persistidos na transação do passo 4)
+  // Todo lançamento gerado aqui carrega canal + e_automatico = true: é o que
+  // permite apagá-los na reimportação sem tocar em lançamento manual algum.
+  const lancamentos: Array<{
+    faturamento_id: string; tipo: string; categoria: string; canal?: string
+    descricao: string; valor: number; data: Date; status: string; e_automatico?: boolean
+  }> = []
 
   // ── Receita de Vendas ──────────────────────────────────────────────
   if (dados.vendas_receita > 0) {
@@ -126,31 +127,39 @@ export async function salvarAnaliseML(dados: DadosConsolidadosML) {
     })
   }
 
-  // ── Acréscimo de parcelamento (receita pass-through) ─────────────
-  if ((dados.acrescimo_parcelamento ?? 0) > 0) {
-    lancamentos.push({
-      faturamento_id: fat.id,
-      tipo: 'RECEITA',
-      categoria: 'MERCADO_LIVRE',
-      canal: 'MERCADO_LIVRE',
-      descricao: 'ML Import — Acréscimo de Parcelamento (pass-through)',
-      valor: dados.acrescimo_parcelamento,
-      data: primeiroDia,
-      status: 'CONFIRMADO',
-    })
-  }
+  // ── Parcelamento: acréscimo (receita) + taxa (despesa) ───────────
+  // Quando os dois lados se anulam (líquido = 0) nenhum entra na DRE: lançar
+  // ambos infla receita e despesa sem alterar o resultado — e distorce a base
+  // de cálculo de qualquer indicador percentual. Só entram se houver resíduo.
+  const parcelamento = calcularParcelamento({
+    acrescimo: dados.acrescimo_parcelamento ?? 0,
+    taxa: dados.taxa_parcelamento ?? 0,
+  })
 
-  // ── Taxa de parcelamento ──────────────────────────────────────────
-  if ((dados.taxa_parcelamento ?? 0) > 0) {
-    lancamentos.push({
-      faturamento_id: fat.id,
-      tipo: 'DESPESA_VARIAVEL',
-      categoria: 'TARIFAS',
-      descricao: 'ML Import — Taxa de Parcelamento',
-      valor: dados.taxa_parcelamento,
-      data: primeiroDia,
-      status: 'CONFIRMADO',
-    })
+  if (!parcelamento.neutro) {
+    if (parcelamento.acrescimo > 0) {
+      lancamentos.push({
+        faturamento_id: fat.id,
+        tipo: 'RECEITA',
+        categoria: 'MERCADO_LIVRE',
+        canal: 'MERCADO_LIVRE',
+        descricao: 'ML Import — Acréscimo de Parcelamento (pass-through)',
+        valor: parcelamento.acrescimo,
+        data: primeiroDia,
+        status: 'CONFIRMADO',
+      })
+    }
+    if (parcelamento.taxa > 0) {
+      lancamentos.push({
+        faturamento_id: fat.id,
+        tipo: 'DESPESA_VARIAVEL',
+        categoria: 'TARIFAS',
+        descricao: 'ML Import — Taxa de Parcelamento',
+        valor: parcelamento.taxa,
+        data: primeiroDia,
+        status: 'CONFIRMADO',
+      })
+    }
   }
 
   // ── Publicidade ───────────────────────────────────────────────────
@@ -192,27 +201,6 @@ export async function salvarAnaliseML(dados: DadosConsolidadosML) {
     })
   }
 
-  // ── Página ML ─────────────────────────────────────────────────────
-  // Só importa se o mês ainda não tem um lançamento PAGINA_ML (fixo ou variável).
-  // Meses que já têm a despesa fixa cadastrada manualmente não são duplicados.
-  if (dados.pagina_ml > 0) {
-    const jaTemPaginaML = await prisma.lancamento.findFirst({
-      where: { faturamento_id: fat.id, categoria: 'PAGINA_ML' },
-      select: { id: true },
-    })
-    if (!jaTemPaginaML) {
-      lancamentos.push({
-        faturamento_id: fat.id,
-        tipo: 'DESPESA_FIXA',
-        categoria: 'PAGINA_ML',
-        descricao: 'ML Import — Página Oficial ML',
-        valor: dados.pagina_ml,
-        data: primeiroDia,
-        status: 'CONFIRMADO',
-      })
-    }
-  }
-
   // ── Afiliados ─────────────────────────────────────────────────────
   if (dados.afiliados > 0) {
     lancamentos.push({
@@ -241,13 +229,61 @@ export async function salvarAnaliseML(dados: DadosConsolidadosML) {
     })
   }
 
-  // 4. Persiste todos os lançamentos
-  await prisma.lancamento.createMany({ data: lancamentos })
+  // 4. Substituição atômica dos lançamentos automáticos do ML.
+  // Tudo numa única $transaction: delete + create + update de alíquota.
+  // Se qualquer etapa falhar, o Prisma reverte — o mês nunca fica com os
+  // lançamentos antigos apagados e os novos ausentes.
+  const totalCriados = await prisma.$transaction(async (tx) => {
+    // 4a. Remove SOMENTE os lançamentos automáticos deste canal neste mês.
+    // Identificação estruturada (canal + e_automatico + faturamento_id) no
+    // lugar do frágil `descricao contains 'ML Import'`: um lançamento manual
+    // que por acaso cite "ML Import" na descrição deixa de ser apagado, e
+    // renomear as descrições deixa de quebrar a reimportação.
+    await tx.lancamento.deleteMany({
+      where: {
+        faturamento_id: fat.id,
+        canal: CANAL_ML,
+        e_automatico: true,
+      },
+    })
 
-  // 5. Garante alíquota correta no mês antes de recalcular
-  await prisma.faturamento_mes.update({
-    where: { id: fat.id },
-    data: { aliquota_simples: aliquotaReal, das_vencimento: vencimentoDas },
+    // 4b. Página ML: só lança se o mês não tiver a despesa cadastrada à mão.
+    // A checagem roda DEPOIS do delete para não considerar a importação anterior.
+    if (dados.pagina_ml > 0) {
+      const jaTemPaginaML = await tx.lancamento.findFirst({
+        where: { faturamento_id: fat.id, categoria: 'PAGINA_ML' },
+        select: { id: true },
+      })
+      if (!jaTemPaginaML) {
+        lancamentos.push({
+          faturamento_id: fat.id,
+          tipo: 'DESPESA_FIXA',
+          categoria: 'PAGINA_ML',
+          descricao: 'ML Import — Página Oficial ML',
+          valor: dados.pagina_ml,
+          data: primeiroDia,
+          status: 'CONFIRMADO',
+        })
+      }
+    }
+
+    // 4c. Persiste marcando canal e origem automática em TODOS os lançamentos.
+    const dadosFinais = lancamentos.map(l => ({
+      ...l,
+      canal: l.canal ?? CANAL_ML,
+      e_automatico: true,
+    }))
+    if (dadosFinais.length > 0) {
+      await tx.lancamento.createMany({ data: dadosFinais })
+    }
+
+    // 4d. Garante alíquota correta no mês antes de recalcular
+    await tx.faturamento_mes.update({
+      where: { id: fat.id },
+      data: { aliquota_simples: aliquotaReal, das_vencimento: vencimentoDas },
+    })
+
+    return dadosFinais.length
   })
 
   // 6. Recalcula TODOS os KPIs usando a engine completa do Finance
@@ -259,5 +295,5 @@ export async function salvarAnaliseML(dados: DadosConsolidadosML) {
   revalidatePath('/faturamento')
   revalidatePath('/dashboard')
 
-  return { ok: true, mes, ano, lancamentos: lancamentos.length }
+  return { ok: true, mes, ano, lancamentos: totalCriados, parcelamento_neutro: parcelamento.neutro }
 }
