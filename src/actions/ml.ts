@@ -252,15 +252,18 @@ async function _gravarPedidosPagos(
     select: { ml_order_id: true },
     distinct: ['ml_order_id'],
   })
+  const diag: Record<string, number> = {}
   for (let i = 0; i < orfaos.length; i += 10) {
     await Promise.all(orfaos.slice(i, i + 10).map(async ({ ml_order_id }) => {
       try {
         const res = await fetch(`https://api.mercadolibre.com/orders/${ml_order_id}`, {
           headers: { Authorization: `Bearer ${token}` },
         })
+        diag[`http_${res.status}`] = (diag[`http_${res.status}`] ?? 0) + 1
         if (!res.ok) return
         const o: MLOrder = await res.json()
         const statusML = o.status ?? 'desconhecido'
+        diag[statusML] = (diag[statusML] ?? 0) + 1
         await prisma.ml_pedido.updateMany({
           where: { workspace_id: conn.workspace_id, ml_order_id },
           data: {
@@ -272,6 +275,7 @@ async function _gravarPedidosPagos(
       } catch { erros++ }
     }))
   }
+  console.log(`[sync-ml] janela desde ${dateFrom.toISOString()}: busca=${pedidos.length} orfaos=${orfaos.length}`, JSON.stringify(diag))
 
   // Pedidos que ainda não têm custo (SKU cadastrado depois da venda) recebem o custo atual do catálogo
   const produtosComCusto = Array.from(skuMap.values()).filter(p => p.custo_brl != null)
