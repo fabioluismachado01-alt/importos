@@ -3,6 +3,7 @@ import {
   sanitizeSaleFee, custoTotalLinha, alocarFretePorEnvio, metricasAds,
   classificarDevolucao, devolucaoConcluida, perdaDevolucao, statusNormalizado,
 } from '../src/lib/ml-calculos'
+import { agregarPorDia } from '../src/lib/ml-ads'
 
 describe('sanitizeSaleFee', () => {
   it('multiplica a tarifa unitária pela quantidade', () => {
@@ -104,5 +105,20 @@ describe('statusNormalizado', () => {
     expect(statusNormalizado('invalid')).toBe('cancelled')
     expect(statusNormalizado('partially_refunded')).toBe('paid')
     expect(statusNormalizado('paid')).toBe('paid')
+  })
+})
+
+
+describe('agregarPorDia (Product Ads)', () => {
+  it('soma campanhas do mesmo dia e ignora linhas sem data', () => {
+    const r = agregarPorDia([
+      { date: '2026-10-01', cost: 2.5, total_amount: 30, direct_amount: 20, units_quantity: 1, clicks: 10, prints: 100 },
+      { date: '2026-10-01', cost: 1.5, total_amount: 10, direct_amount: 10, units_quantity: 1, clicks: 5, prints: 50 },
+      { date: '2026-10-02', cost: 3, total_amount: 0 },
+      { cost: 99 },
+    ])
+    expect(r).toHaveLength(2)
+    expect(r[0]).toMatchObject({ data: '2026-10-01', custo: 4, receita: 40, receita_direta: 30, unidades: 2, cliques: 15, impressoes: 150 })
+    expect(r[1].custo).toBe(3)
   })
 })

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Search, RefreshCw, Download, Pencil, Check, X, TrendingUp, TrendingDown, Eye, EyeOff, ShoppingBag, CheckCircle2 } from 'lucide-react'
 import { sincronizarMLPedidos, editarCustoPedido } from '@/actions/ml'
-import type { MLPedidoRow, AdsMes, AliquotaMes } from '@/actions/ml'
+import type { MLPedidoRow, AdsMes, AdsDiaRow, AliquotaMes } from '@/actions/ml'
 import { custoTotalLinha, metricasAds, devolucaoConcluida, perdaDevolucao } from '@/lib/ml-calculos'
 import { PageTitle } from '@/components/layout/PageTitle'
 
@@ -26,6 +26,7 @@ interface Props {
   conexoes: { id: string; nickname: string }[]
   aliquotaSimples: number
   adsMensais: AdsMes[]
+  adsDiarios: AdsDiaRow[]
   aliquotasHistorico?: { historico: AliquotaMes[]; padrao: number }
 }
 
@@ -136,7 +137,7 @@ function periodoParaDias(periodo: Periodo): number {
   return 90
 }
 
-export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, aliquotasHistorico }: Props) {
+export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, adsDiarios, aliquotasHistorico }: Props) {
   // Helper: retorna a alíquota correta para a data do pedido (como decimal, ex: 0.08)
   function getAliquotaParaData(dataPedido: string | Date): number {
     const d = new Date(dataPedido)
@@ -244,23 +245,27 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     return matchConta && (!q || p.titulo.toLowerCase().includes(q) || (p.sku ?? '').toLowerCase().includes(q))
   })
 
-  // Ads
-  const totalAds = (() => {
-    if (!adsMensais.length) return 0
+  // Ads — período selecionado
+  const periodoAds = ((): { inicio: Date; fim: Date } | null => {
     const agora = new Date()
     const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate())
     const amanha = new Date(hoje); amanha.setDate(hoje.getDate() + 1)
-    let inicio: Date, fim: Date
-    if (periodo === 'hoje')   { inicio = hoje; fim = new Date(amanha.getTime() - 1) }
-    else if (periodo === 'ontem') { const o = new Date(hoje); o.setDate(hoje.getDate() - 1); inicio = o; fim = new Date(hoje.getTime() - 1) }
-    else if (periodo === '7d')    { inicio = new Date(hoje); inicio.setDate(hoje.getDate() - 7); fim = new Date(amanha.getTime() - 1) }
-    else if (periodo === '30d')   { inicio = new Date(hoje); inicio.setDate(hoje.getDate() - 30); fim = new Date(amanha.getTime() - 1) }
-    else if (periodo === 'mes')   { inicio = new Date(agora.getFullYear(), agora.getMonth(), 1); fim = new Date(amanha.getTime() - 1) }
-    else if (periodo === '1ano')  { inicio = new Date(hoje); inicio.setFullYear(hoje.getFullYear() - 1); fim = new Date(amanha.getTime() - 1) }
-    else if (periodo === 'personalizado') {
-      inicio = customInicio ? new Date(customInicio) : new Date(0)
-      fim    = customFim    ? new Date(customFim + 'T23:59:59') : new Date()
-    } else return 0
+    const fimHoje = new Date(amanha.getTime() - 1)
+    if (periodo === 'hoje')   return { inicio: hoje, fim: fimHoje }
+    if (periodo === 'ontem')  { const o = new Date(hoje); o.setDate(hoje.getDate() - 1); return { inicio: o, fim: new Date(hoje.getTime() - 1) } }
+    if (periodo === '7d')     { const i = new Date(hoje); i.setDate(hoje.getDate() - 7); return { inicio: i, fim: fimHoje } }
+    if (periodo === '30d')    { const i = new Date(hoje); i.setDate(hoje.getDate() - 30); return { inicio: i, fim: fimHoje } }
+    if (periodo === 'mes')    return { inicio: new Date(agora.getFullYear(), agora.getMonth(), 1), fim: fimHoje }
+    if (periodo === '1ano')   { const i = new Date(hoje); i.setFullYear(hoje.getFullYear() - 1); return { inicio: i, fim: fimHoje } }
+    if (periodo === 'personalizado') return {
+      inicio: customInicio ? new Date(customInicio) : new Date(0),
+      fim: customFim ? new Date(customFim + 'T23:59:59') : new Date(),
+    }
+    return null
+  })()
+
+  // Lançamento manual mensal, rateado pelos dias do período (fallback quando não há dado da API)
+  const adsManual = (inicio: Date, fim: Date) => {
     let soma = 0
     adsMensais.forEach(({ ano, mes, desp_ads_ml }) => {
       if (!desp_ads_ml) return
@@ -274,11 +279,27 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
       soma += desp_ads_ml * (diasOverlap / diasMes)
     })
     return soma
+  }
+
+  // Product Ads via API: usado nos dias em que existe; antes do primeiro dia da API, vale o manual
+  const { totalAds, receitaAds, fonteAds } = (() => {
+    if (!periodoAds) return { totalAds: 0, receitaAds: undefined as number | undefined, fonteAds: 'manual' as const }
+    const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const ini = ymd(periodoAds.inicio), fim = ymd(periodoAds.fim)
+    const api = adsDiarios.filter(a => contaFiltro === 'todas' || a.conexao_id === contaFiltro)
+    if (api.length === 0) return { totalAds: adsManual(periodoAds.inicio, periodoAds.fim), receitaAds: undefined, fonteAds: 'manual' as const }
+    const primeiroApi = api[0].data
+    const noPeriodo = api.filter(a => a.data >= ini && a.data <= fim)
+    const custoApi = noPeriodo.reduce((s, a) => s + a.custo, 0)
+    const receitaApi = noPeriodo.reduce((s, a) => s + a.receita, 0)
+    if (ini >= primeiroApi) return { totalAds: custoApi, receitaAds: receitaApi, fonteAds: 'api' as const }
+    const fimManual = new Date(`${primeiroApi}T00:00:00`); fimManual.setMilliseconds(-1)
+    return { totalAds: custoApi + adsManual(periodoAds.inicio, fimManual), receitaAds: undefined, fonteAds: 'misto' as const }
   })()
   const lucroComAds = totalLucro - (adsSubtraido ? totalAds : 0)
-  // Sem receita atribuída por anúncio (Product Ads API ainda não integrada), ROAS/ACOS usam o
-  // faturamento total e ficam iguais ao TACOS. TACOS = ads ÷ faturamento (antes era ÷ lucro).
-  const { roas, acos, tacos } = metricasAds(totalAds, totalFat)
+  // Com a API: ROAS/ACOS sobre a receita atribuída pelo ML. Sem ela: sobre o faturamento (= TACOS).
+  // TACOS = ads ÷ faturamento total.
+  const { roas, acos, tacos } = metricasAds(totalAds, totalFat, receitaAds)
 
   // Chave única por produto — consistente em todos os cálculos
   const prodChave = (p: { sku: string | null; ml_item_id: string; titulo: string }) =>
@@ -715,7 +736,13 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm px-5 py-3 flex flex-wrap items-center gap-6">
         <div className="flex items-center gap-3">
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Investimento em Ads</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              Investimento em Ads{' '}
+              <span className={`normal-case tracking-normal font-semibold ${fonteAds === 'api' ? 'text-emerald-600' : 'text-slate-400'}`}
+                title={fonteAds === 'api' ? 'Product Ads do Mercado Livre (API), atualizado a cada sync' : fonteAds === 'misto' ? 'API nos dias disponíveis + lançamento manual antes disso' : 'Lançamento manual mensal, rateado pelos dias do período'}>
+                · {fonteAds === 'api' ? 'API ML' : fonteAds === 'misto' ? 'API + manual' : 'manual'}
+              </span>
+            </p>
             {totalAds > 0
               ? <p className="text-lg font-black text-slate-800">{brl(totalAds)}</p>
               : <p className="text-sm font-bold text-slate-300">Não lançado <span className="text-[10px] font-normal">(lançar na planilha mensal)</span></p>}
@@ -732,7 +759,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
           <>
             <div className="w-px h-8 bg-slate-100 hidden sm:block" />
             {[
-              { label: 'Receita', value: brl(totalFat) },
+              { label: receitaAds != null ? 'Receita ads' : 'Receita', value: brl(receitaAds ?? totalFat) },
               { label: 'Vendas', value: String(filtrados.length) },
               { label: 'ROAS', value: `${roas.toFixed(2)}x` },
               { label: 'ACOS', value: pct(acos) },

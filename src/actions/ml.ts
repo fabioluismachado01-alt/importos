@@ -9,6 +9,7 @@ import { estimarAliquotasFuturas } from '@/actions/aliquotas'
 import { encryptToken, decryptToken } from '@/lib/crypto'
 import { sanitizeSaleFee, custoTotalLinha, alocarFretePorEnvio, classificarDevolucao, statusNormalizado } from '@/lib/ml-calculos'
 import type { DevolucaoStatus } from '@/lib/ml-calculos'
+import { buscarAdsDiariosML } from '@/lib/ml-ads'
 
 // ─── URL de conexão OAuth ─────────────────────────────────────────────────────
 
@@ -124,6 +125,37 @@ async function buscarStatusDevolucoes(token: string, claimIds: string[]): Promis
 
 // Busca TODOS os pedidos pagos da janela (até 1000), consulta o custo de cada envio uma vez
 // e grava com o frete rateado sobre o conjunto inteiro (pacotes podem cruzar páginas da API).
+// Product Ads do ML: grava o total diário da conexão (até 90 dias). Falha aqui não derruba o sync de pedidos.
+async function _sincronizarAdsML(
+  token: string,
+  conn: { id: string; workspace_id: string },
+  dateFrom: Date,
+): Promise<number> {
+  try {
+    const limite = new Date(Date.now() - 89 * 86_400_000)
+    const desde = dateFrom < limite ? limite : dateFrom
+    const dias = await buscarAdsDiariosML(token, desde, new Date())
+    if (!dias) return 0
+    for (const d of dias) {
+      const data = new Date(`${d.data}T00:00:00.000Z`)
+      const valores = {
+        custo: d.custo, receita: d.receita, receita_direta: d.receita_direta,
+        unidades: d.unidades, cliques: d.cliques, impressoes: d.impressoes,
+      }
+      await prisma.ml_ads_dia.upsert({
+        where: { conexao_id_data: { conexao_id: conn.id, data } },
+        create: { workspace_id: conn.workspace_id, conexao_id: conn.id, data, ...valores },
+        update: valores,
+      })
+    }
+    console.log(`[ads-ml] ${dias.length} dias gravados, custo R$ ${dias.reduce((s, d) => s + d.custo, 0).toFixed(2)}`)
+    return dias.length
+  } catch (err) {
+    console.error('[ads-ml] falhou:', err)
+    return 0
+  }
+}
+
 async function _gravarPedidosPagos(
   token: string,
   conn: { id: string; workspace_id: string; ml_user_id: string },
@@ -313,6 +345,7 @@ export async function sincronizarMLPedidos(
     : new Date(Date.now() - 30 * 86_400_000) // padrão: últimos 30 dias
 
   let { sincronizados, erros } = await _gravarPedidosPagos(token, conn, dateFrom, skuMap)
+  await _sincronizarAdsML(token, conn, dateFrom)
 
   // Sincroniza pedidos cancelados/devolvidos usando date_last_updated para capturar
   // devoluções recentes de pedidos mais antigos que a janela de sync
@@ -989,6 +1022,20 @@ export type AdsMes = {
   desp_ads_ml: number
 }
 
+export type AdsDiaRow = { data: string; conexao_id: string; custo: number; receita: number }
+
+// Ads do ML vindos da API (Product Ads). Quando existir para o período, substitui o lançamento manual mensal.
+export async function getAdsDiarios(dias = 400): Promise<AdsDiaRow[]> {
+  const { workspaceId } = await getAuthContext()
+  const desde = new Date(Date.now() - dias * 86_400_000)
+  const rows = await prisma.ml_ads_dia.findMany({
+    where: { workspace_id: workspaceId, data: { gte: desde } },
+    select: { data: true, conexao_id: true, custo: true, receita: true },
+    orderBy: { data: 'asc' },
+  })
+  return rows.map(r => ({ ...r, data: r.data.toISOString().slice(0, 10) }))
+}
+
 export async function getAdsMensais(): Promise<AdsMes[]> {
   const { workspaceId } = await getAuthContext()
   const meses = await prisma.faturamento_mes.findMany({
@@ -1062,6 +1109,7 @@ async function _syncPedidosInterno(
   const skuMap = new Map(produtos.map(p => [p.sku_interno!.toUpperCase(), p]))
 
   const { sincronizados } = await _gravarPedidosPagos(token, conn, dateFrom, skuMap)
+  await _sincronizarAdsML(token, conn, dateFrom)
 
   // Cancelados com date_last_updated
   const cancelParams = new URLSearchParams({
