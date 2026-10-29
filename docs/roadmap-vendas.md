@@ -23,6 +23,9 @@ nos diferenciais de importador. Regras de cálculo por canal: `docs/regras-calcu
 | 1 | Devoluções/mediações via claims/returns + card Devolvidas | 8f64d74 |
 | 1 | Reconciliação de pedidos que somem da busca de pagos (ML) | 61d43ce |
 | 2 | Product Ads do ML via API (tabela `ml_ads_dia`, gasto e receita atribuída diários) | c8a7061 |
+| 1 | Custo de logística própria por tipo de envio (`ml_logistica_custo`, card Outros) + alerta de vendas sem custo | 4c07eda |
+| 2 | Lucro por produto após ads (`ml_ads_item_dia`, ads por anúncio e dia, até 31 dias) | e0d12ec |
+| 4 | Calculadora por venda (lucro, preço ideal/mínimo, ACOS máx., ROAS mín.) + ranking filtra a tabela | 814b77a |
 
 Banco (29/10): colunas `ml_pedido.devolucao_status, claim_id, ml_tags`; tarifa de 176 pedidos
 antigos com qtd > 1 corrigida (backup em `_bkp_ml_pedido_tarifa_20261029`, RLS ligado).
@@ -43,10 +46,9 @@ Ads ML 30 dias: R$ 145,50 vs R$ 145,44 (arredondamento diário); receita atribu�
 - [ ] Abrir cadastro de desenvolvedor: Shopee Open Platform, TikTok Shop Partner, Amazon SP-API.
 
 ## Próximas etapas (ordem)
-1. **Etapa 2 (resto)**: lucro por SKU após ads (`/product_ads/ads/search` por item); Shopee Ads.
-2. **Etapa 1 (resto)**: status de liquidação/data do repasse (API Mercado Pago `/v1/payments/{id}`
-   — validar se o token ML funciona), custo de logística própria (Flex/agência), painel de SKUs
-   sem custo (base em `actions/alertas-catalogo.ts`).
+1. **Etapa 1 (resto)**: status de liquidação/data do repasse (API Mercado Pago `/v1/payments/{id}`
+   — validar se o token ML funciona).
+2. **Etapa 4 (resto)**: colunas personalizáveis, calculadora no mobile, visual azul-marinho/dourado.
 3. **Etapa 3 — Shopee via API** (pedidos + escrow detail + Ads). Hoje é import de CSV.
 4. **Etapa 4 — Tela de Vendas multicanal**: chips por conta, rankings que filtram a tabela,
    dividir por marketplace, colunas personalizáveis, calculadora por venda, visual azul-marinho/dourado.
