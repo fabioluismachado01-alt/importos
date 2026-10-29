@@ -175,3 +175,26 @@ export function equilibrioAds(p: ParamsCalculadora) {
   if (lucroAntesAds <= 0 || p.preco <= 0) return { acosMax: 0, roasMin: null as number | null }
   return { acosMax: (lucroAntesAds / p.preco) * 100, roasMin: p.preco / lucroAntesAds }
 }
+
+// ─── Repasse (liquidação) ─────────────────────────────────────────────────────
+
+/** Valor líquido que o ML repassa pela venda: valor − tarifa − frete do vendedor. */
+export function liquidoRepasse(p: { valor_venda: number; tarifa: number; frete_vendedor: number }): number {
+  return p.valor_venda - p.tarifa - p.frete_vendedor
+}
+
+/**
+ * Total a receber: vendas pagas, não devolvidas, com repasse consultado e ainda não liberado.
+ * Retorna também a próxima data de liberação.
+ */
+export function resumoAReceber(pedidos: Array<{
+  status: string; devolucao_status: string | null; liquidacao_status: string | null
+  liquidacao_data: Date | string | null; valor_venda: number; tarifa: number; frete_vendedor: number
+}>) {
+  const pend = pedidos.filter(p =>
+    p.status === 'paid' && !devolucaoConcluida(p.devolucao_status) &&
+    p.liquidacao_status != null && p.liquidacao_status !== 'released')
+  const total = pend.reduce((s, p) => s + liquidoRepasse(p), 0)
+  const datas = pend.map(p => (p.liquidacao_data ? new Date(p.liquidacao_data).getTime() : NaN)).filter(Number.isFinite)
+  return { total, pedidos: pend.length, proxima: datas.length ? new Date(Math.min(...datas)) : null }
+}

@@ -212,6 +212,7 @@ export interface MLOrder {
   paid_amount: number
   tags?: string[]
   mediations?: Array<{ id: number | string }>
+  payments?: Array<{ id: number | string; status?: string; date_approved?: string | null }>
 }
 
 export interface MLOrdersResponse {

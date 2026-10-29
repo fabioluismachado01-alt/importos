@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   sanitizeSaleFee, custoTotalLinha, alocarFretePorEnvio, metricasAds,
   classificarDevolucao, devolucaoConcluida, perdaDevolucao, statusNormalizado,
-  simularLucro, precoParaMargem, equilibrioAds,
+  simularLucro, precoParaMargem, equilibrioAds, resumoAReceber,
 } from '../src/lib/ml-calculos'
 import { agregarPorDia } from '../src/lib/ml-ads'
 
@@ -145,5 +145,22 @@ describe('calculadora', () => {
     expect(acosMax).toBeCloseTo((l0 / 99.9) * 100, 6)
     expect(roasMin).toBeCloseTo(99.9 / l0, 6)
     expect(simularLucro({ ...base, adsPorUnidade: l0 }).lucro).toBeCloseTo(0, 6)
+  })
+})
+
+describe('resumoAReceber', () => {
+  const base = { status: 'paid', devolucao_status: null, valor_venda: 100, tarifa: 12, frete_vendedor: 8 }
+  it('soma só o que está pendente de repasse e pega a próxima data', () => {
+    const r = resumoAReceber([
+      { ...base, liquidacao_status: 'pending', liquidacao_data: '2026-11-05T00:00:00Z' },
+      { ...base, liquidacao_status: 'pending', liquidacao_data: '2026-11-02T00:00:00Z' },
+      { ...base, liquidacao_status: 'released', liquidacao_data: '2026-10-20T00:00:00Z' },
+      { ...base, liquidacao_status: null, liquidacao_data: null },
+      { ...base, status: 'cancelled', liquidacao_status: 'pending', liquidacao_data: null },
+      { ...base, devolucao_status: 'reembolsado', liquidacao_status: 'pending', liquidacao_data: null },
+    ])
+    expect(r.total).toBe(160)
+    expect(r.pedidos).toBe(2)
+    expect(r.proxima?.toISOString().slice(0, 10)).toBe('2026-11-02')
   })
 })

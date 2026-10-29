@@ -7,7 +7,7 @@ import { Search, RefreshCw, Download, Pencil, Check, X, TrendingUp, TrendingDown
 import { CalculadoraVenda, type DadosCalculadora } from './CalculadoraVenda'
 import { sincronizarMLPedidos, editarCustoPedido, salvarCustoLogistica } from '@/actions/ml'
 import type { MLPedidoRow, AdsMes, AdsDiaRow, AdsItemRow, AliquotaMes } from '@/actions/ml'
-import { custoTotalLinha, metricasAds, devolucaoConcluida, perdaDevolucao } from '@/lib/ml-calculos'
+import { custoTotalLinha, metricasAds, devolucaoConcluida, perdaDevolucao, resumoAReceber } from '@/lib/ml-calculos'
 import { PageTitle } from '@/components/layout/PageTitle'
 
 function ProdImg({ fotoUrl, titulo, className }: { fotoUrl: string | null; titulo: string; className: string }) {
@@ -226,6 +226,8 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     const q = busca.toLowerCase()
     return matchConta && (!q || p.titulo.toLowerCase().includes(q) || (p.sku ?? '').toLowerCase().includes(q))
   })
+  // A receber: todo repasse ainda não liberado (independe do período selecionado)
+  const aReceber = resumoAReceber(pedidos.filter(p => contaFiltro === 'todas' || p.conexao_id === contaFiltro))
   const devolvidas      = posVenda.filter(p => devolucaoConcluida(p.devolucao_status))
   const emAndamento     = posVenda.filter(p => !devolucaoConcluida(p.devolucao_status))
   const valorDevolvido  = devolvidas.reduce((s, p) => s + p.valor_venda, 0)
@@ -767,7 +769,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
       </div>
 
       {/* KPIs — linha 1: secundários */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         <div className="bg-white rounded-xl p-3 shadow-sm">
           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Vendas</p>
           <p className="text-sm font-black mt-0.5 text-slate-800">{vis >= 3 ? '█' : filtrados.length}</p>
@@ -789,6 +791,14 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
           <p className="text-[9px] text-slate-400 mt-0.5">
             {emAndamento.length > 0 && <span className="text-amber-600 font-semibold">{emAndamento.length} em andamento · </span>}
             perda {mascaraValor(vis >= 3 ? '███' : brl(perdaDevolucoes))}
+          </p>
+        </div>
+        <div className="bg-white rounded-xl p-3 shadow-sm" title="Repasse do Mercado Pago ainda não liberado (valor − tarifa − frete), de todas as vendas, não só do período.">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">A receber</p>
+          <p className="text-sm font-black mt-0.5 text-slate-800">{mascaraValor(vis >= 3 ? '█████' : brl(aReceber.total))}</p>
+          <p className="text-[9px] text-slate-400 mt-0.5">
+            {aReceber.pedidos} {aReceber.pedidos === 1 ? 'venda' : 'vendas'}
+            {aReceber.proxima && <> · próximo {aReceber.proxima.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</>}
           </p>
         </div>
       </div>
@@ -1179,6 +1189,12 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                   </td>
                   <td className="px-3 py-2 max-w-[200px]">
                     <p className="font-medium text-slate-700 truncate" title={p.titulo}>{mascaraNome(p.titulo)}</p>
+                    {p.liquidacao_status && p.liquidacao_status !== 'released' && (
+                      <span className="inline-block mt-0.5 text-[9px] font-semibold text-amber-700 bg-amber-50 rounded px-1.5"
+                        title="O Mercado Pago ainda não liberou o repasse desta venda">
+                        repasse {p.liquidacao_data ? new Date(p.liquidacao_data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'pendente'}
+                      </span>
+                    )}
                   </td>
                   {conexoes.length > 1 && <td className="px-3 py-2 text-slate-500">{mascaraNome(p.nickname)}</td>}
                   <td className="px-3 py-2 text-slate-500 font-mono">{mascaraNome(p.comprador_nick)}</td>

@@ -101,6 +101,49 @@ async function buscarCustosEnvio(token: string, shipmentIds: string[]): Promise<
   return custos
 }
 
+// Repasse do ML (Mercado Pago): money_release_status (released | pending…) e money_release_date.
+// Só pagamentos ainda não liberados são consultados; uma vez "released" o pedido não é mais relido.
+async function _atualizarLiquidacao(
+  token: string,
+  conn: { id: string; workspace_id: string },
+  dateFrom: Date,
+): Promise<void> {
+  const pendentes = await prisma.ml_pedido.findMany({
+    where: {
+      workspace_id: conn.workspace_id,
+      conexao_id: conn.id,
+      status: 'paid',
+      payment_id: { not: null },
+      data_compra: { gte: dateFrom },
+      OR: [{ liquidacao_status: null }, { liquidacao_status: { not: 'released' } }],
+    },
+    select: { payment_id: true },
+    distinct: ['payment_id'],
+    take: 400,
+  })
+  const diag: Record<string, number> = {}
+  for (let i = 0; i < pendentes.length; i += 10) {
+    await Promise.all(pendentes.slice(i, i + 10).map(async ({ payment_id }) => {
+      try {
+        const res = await fetch(`https://api.mercadopago.com/v1/payments/${payment_id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        diag[`http_${res.status}`] = (diag[`http_${res.status}`] ?? 0) + 1
+        if (!res.ok) return
+        const pg = await res.json()
+        const status: string | null = pg?.money_release_status ?? null
+        const data = pg?.money_release_date ? new Date(pg.money_release_date) : null
+        diag[status ?? 'sem_status'] = (diag[status ?? 'sem_status'] ?? 0) + 1
+        await prisma.ml_pedido.updateMany({
+          where: { workspace_id: conn.workspace_id, payment_id: payment_id! },
+          data: { liquidacao_status: status, liquidacao_data: data },
+        })
+      } catch { diag.erro = (diag.erro ?? 0) + 1 }
+    }))
+  }
+  console.log(`[liquidacao-ml] consultados=${pendentes.length}`, JSON.stringify(diag))
+}
+
 // Pós-venda: para cada reclamação, consulta a devolução e classifica.
 // Só roda para pedidos com order.mediations (poucos), então o custo em chamadas é baixo.
 async function buscarStatusDevolucoes(token: string, claimIds: string[]): Promise<Map<string, DevolucaoStatus>> {
@@ -230,6 +273,8 @@ async function _gravarPedidosPagos(
         const claimId = claimDoPedido(order)
         const devolucao = claimId ? statusDevolucao.get(claimId) : undefined
         const tags = order.tags?.length ? order.tags.join(',') : null
+        const pagamento = order.payments?.find(pg => pg.status === 'approved') ?? order.payments?.[0]
+        const paymentId = pagamento?.id != null ? String(pagamento.id) : null
 
         await prisma.ml_pedido.upsert({
           where: {
@@ -260,6 +305,7 @@ async function _gravarPedidosPagos(
             devolucao_status: devolucao ?? null,
             claim_id: claimId,
             ml_tags: tags,
+            payment_id: paymentId,
           },
           update: {
             status: order.status ?? 'paid',
@@ -271,6 +317,7 @@ async function _gravarPedidosPagos(
             logistica_tipo: logisticaTipo,
             ml_tags: tags,
             claim_id: claimId,
+            ...(paymentId && { payment_id: paymentId }),
             // sem reclamação → limpa; com reclamação e consulta ok → atualiza; consulta falhou → mantém
             ...(claimId == null ? { devolucao_status: null } : devolucao ? { devolucao_status: devolucao } : {}),
             ...(foto && { foto_url: foto }),
@@ -327,6 +374,9 @@ async function _gravarPedidosPagos(
     }))
   }
   console.log(`[sync-ml] janela desde ${dateFrom.toISOString()}: busca=${pedidos.length} orfaos=${orfaos.length}`, JSON.stringify(diag))
+
+  // Repasse: consulta no Mercado Pago os pagamentos ainda não liberados da janela
+  await _atualizarLiquidacao(token, conn, dateFrom)
 
   // Pedidos que ainda não têm custo (SKU cadastrado depois da venda) recebem o custo atual do catálogo
   const produtosComCusto = Array.from(skuMap.values()).filter(p => p.custo_brl != null)
@@ -473,6 +523,8 @@ export type MLPedidoRow = {
   margem: number
   devolucao_status: string | null
   logistica_tipo: string | null
+  liquidacao_status: string | null
+  liquidacao_data: Date | null
 }
 
 export async function getMLPedidos(filtros?: {
@@ -531,6 +583,8 @@ export async function getMLPedidos(filtros?: {
       margem,
       devolucao_status: p.devolucao_status,
       logistica_tipo: p.logistica_tipo,
+      liquidacao_status: p.liquidacao_status,
+      liquidacao_data: p.liquidacao_data,
     }
   })
 }

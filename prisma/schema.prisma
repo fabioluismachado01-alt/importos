@@ -835,6 +835,10 @@ model ml_pedido {
   devolucao_status String?
   claim_id         String?  // id da reclamação no ML (order.mediations[].id)
   ml_tags          String?  // order.tags separados por vírgula (ex.: paid,delivered)
+  // Repasse (Mercado Pago /v1/payments/{id}): released | pending | … e a data prevista/efetiva
+  payment_id       String?
+  liquidacao_status String?
+  liquidacao_data  DateTime?
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
 
