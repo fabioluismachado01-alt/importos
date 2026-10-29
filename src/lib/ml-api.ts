@@ -210,6 +210,8 @@ export interface MLOrder {
   } | null
   total_amount: number
   paid_amount: number
+  tags?: string[]
+  mediations?: Array<{ id: number | string }>
 }
 
 export interface MLOrdersResponse {

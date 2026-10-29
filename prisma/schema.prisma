@@ -831,6 +831,10 @@ model ml_pedido {
   custo_produto  Float?   // puxado do produto_catalogo.custo_brl (editável)
   produto_id     String?  // FK para produto_catalogo (opcional)
   logistica_tipo String?  // fulfillment, drop_off, xd_drop_off, self_service, etc.
+  // Pós-venda (Etapa 1): null = sem reclamação; em_mediacao | devolucao_em_andamento | reembolsado | devolvido
+  devolucao_status String?
+  claim_id         String?  // id da reclamação no ML (order.mediations[].id)
+  ml_tags          String?  // order.tags separados por vírgula (ex.: paid,delivered)
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
 

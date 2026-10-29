@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Search, RefreshCw, Download, Pencil, Check, X, TrendingUp, TrendingDown, Eye, EyeOff, ShoppingBag, CheckCircle2 } from 'lucide-react'
 import { sincronizarMLPedidos, editarCustoPedido } from '@/actions/ml'
 import type { MLPedidoRow, AdsMes, AliquotaMes } from '@/actions/ml'
-import { custoTotalLinha, metricasAds } from '@/lib/ml-calculos'
+import { custoTotalLinha, metricasAds, devolucaoConcluida, perdaDevolucao } from '@/lib/ml-calculos'
 import { PageTitle } from '@/components/layout/PageTitle'
 
 function ProdImg({ fotoUrl, titulo, className }: { fotoUrl: string | null; titulo: string; className: string }) {
@@ -183,6 +183,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
 
   const filtrados = periodoFiltrado.filter(p => {
     if (p.status === 'cancelled') return false
+    if (devolucaoConcluida(p.devolucao_status)) return false // receita voltou ao comprador: vai para "Devolvidas"
     const matchConta = contaFiltro === 'todas' || p.conexao_id === contaFiltro
     const q = busca.toLowerCase()
     const matchBusca = !q || p.titulo.toLowerCase().includes(q) || p.comprador_nick.toLowerCase().includes(q) || (p.sku ?? '').toLowerCase().includes(q)
@@ -199,9 +200,22 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     return { ...p, custo_produto: custo > 0 ? custo : p.custo_produto, custo_total: custoTotal, lucro, margem, imposto }
   })
 
+  // Devoluções do período (mesma conta/busca da tabela)
+  const posVenda = periodoFiltrado.filter(p => {
+    if (p.status === 'cancelled' || !p.devolucao_status) return false
+    const matchConta = contaFiltro === 'todas' || p.conexao_id === contaFiltro
+    const q = busca.toLowerCase()
+    return matchConta && (!q || p.titulo.toLowerCase().includes(q) || (p.sku ?? '').toLowerCase().includes(q))
+  })
+  const devolvidas      = posVenda.filter(p => devolucaoConcluida(p.devolucao_status))
+  const emAndamento     = posVenda.filter(p => !devolucaoConcluida(p.devolucao_status))
+  const valorDevolvido  = devolvidas.reduce((s, p) => s + p.valor_venda, 0)
+  // perda da devolução: frete de ida + CMV quando o produto não voltou
+  const perdaDevolucoes = devolvidas.reduce((s, p) => s + perdaDevolucao(p), 0)
+
   // KPIs do período atual
   const totalFat      = filtrados.reduce((s, p) => s + p.valor_venda, 0)
-  const totalLucro    = filtrados.reduce((s, p) => s + p.lucro, 0)
+  const totalLucro    = filtrados.reduce((s, p) => s + p.lucro, 0) - perdaDevolucoes
   const totalTarifas  = filtrados.reduce((s, p) => s + p.tarifa, 0)
   const totalFrete    = filtrados.reduce((s, p) => s + p.frete_vendedor, 0)
   const totalImpostos = filtrados.reduce((s, p) => s + p.imposto, 0)
@@ -211,7 +225,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
   const lucroMedio    = filtrados.length > 0 ? totalLucro / filtrados.length : 0
 
   // KPIs do período anterior (para delta)
-  const anterior = filtrarPeriodoAnterior(pedidos, periodo).filter(p => p.status !== 'cancelled').map(p => {
+  const anterior = filtrarPeriodoAnterior(pedidos, periodo).filter(p => p.status !== 'cancelled' && !devolucaoConcluida(p.devolucao_status)).map(p => {
     const custo = custoTotalLinha(p)
     const aliqPedido = getAliquotaParaData(p.data_compra)
     const imposto = p.valor_venda * aliqPedido
@@ -651,9 +665,19 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ticket médio</p>
           <p className="text-sm font-black mt-0.5 text-slate-800">{mascaraValor(vis >= 3 ? '█████' : brl(ticketMedio))}</p>
         </div>
-        <div className="bg-white rounded-xl p-3 shadow-sm col-span-2 sm:col-span-2">
+        <div className="bg-white rounded-xl p-3 shadow-sm">
           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Canceladas no período</p>
           <p className="text-sm font-black mt-0.5 text-slate-800">{cancelados.length} <span className="text-[10px] font-normal text-slate-400">pedidos</span></p>
+        </div>
+        <div className="bg-white rounded-xl p-3 shadow-sm" title="Devolvidas = reembolso ao comprador concluído (fora do faturamento). A perda soma o frete de ida e o custo do produto quando ele não voltou.">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Devolvidas</p>
+          <p className="text-sm font-black mt-0.5 text-slate-800">
+            {devolvidas.length} <span className="text-[10px] font-normal text-slate-400">({mascaraValor(vis >= 3 ? '███' : brl(valorDevolvido))})</span>
+          </p>
+          <p className="text-[9px] text-slate-400 mt-0.5">
+            {emAndamento.length > 0 && <span className="text-amber-600 font-semibold">{emAndamento.length} em andamento · </span>}
+            perda {mascaraValor(vis >= 3 ? '███' : brl(perdaDevolucoes))}
+          </p>
         </div>
       </div>
 

@@ -86,3 +86,46 @@ export function metricasAds(ads: number, faturamentoTotal: number, receitaAds?: 
     atribuido: receitaAds != null,
   }
 }
+
+// ─── Pós-venda: reclamações e devoluções ──────────────────────────────────────
+
+export type DevolucaoStatus = 'em_mediacao' | 'devolucao_em_andamento' | 'reembolsado' | 'devolvido'
+
+/**
+ * Classifica o pós-venda de um pedido que tem reclamação (order.mediations não vazio),
+ * a partir da resposta de GET /post-purchase/v2/claims/{claim_id}/returns.
+ *
+ * - sem devolução (404 / null)           → em_mediacao   (reclamação sem envio de volta)
+ * - status do retorno "delivered"        → devolvido     (produto voltou ao vendedor: CMV estorna)
+ * - status_money "refunded"              → reembolsado   (dinheiro devolvido, produto não confirmado)
+ * - qualquer outro estado                → devolucao_em_andamento
+ */
+export function classificarDevolucao(
+  retorno: { status?: string | null; status_money?: string | null } | null,
+): DevolucaoStatus {
+  if (!retorno) return 'em_mediacao'
+  if (retorno.status === 'delivered') return 'devolvido'
+  if (retorno.status_money === 'refunded') return 'reembolsado'
+  return 'devolucao_em_andamento'
+}
+
+/** Devolução concluída: a receita não fica com o vendedor. */
+export function devolucaoConcluida(status: string | null | undefined): boolean {
+  return status === 'reembolsado' || status === 'devolvido'
+}
+
+/**
+ * Perda de uma devolução concluída (a receita sai, a tarifa de venda é estornada pelo ML):
+ * - o frete de ida fica com o vendedor
+ * - o CMV só é estornado quando o produto voltou (devolvido); se só houve reembolso, o custo fica.
+ */
+export function perdaDevolucao(p: {
+  devolucao_status: string | null
+  frete_vendedor: number
+  custo_produto: number | null
+  quantidade: number
+}): number {
+  if (!devolucaoConcluida(p.devolucao_status)) return 0
+  const cmv = p.devolucao_status === 'devolvido' ? 0 : custoTotalLinha(p)
+  return p.frete_vendedor + cmv
+}

@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { sanitizeSaleFee, custoTotalLinha, alocarFretePorEnvio, metricasAds } from '../src/lib/ml-calculos'
+import {
+  sanitizeSaleFee, custoTotalLinha, alocarFretePorEnvio, metricasAds,
+  classificarDevolucao, devolucaoConcluida, perdaDevolucao,
+} from '../src/lib/ml-calculos'
 
 describe('sanitizeSaleFee', () => {
   it('multiplica a tarifa unitária pela quantidade', () => {
@@ -71,5 +74,26 @@ describe('metricasAds', () => {
     expect(m.acos).toBe(10)
     expect(m.tacos).toBe(2)
     expect(m.atribuido).toBe(true)
+  })
+})
+
+
+describe('pós-venda', () => {
+  it('classifica pela resposta de returns', () => {
+    expect(classificarDevolucao(null)).toBe('em_mediacao')
+    expect(classificarDevolucao({ status: 'delivered', status_money: 'refunded' })).toBe('devolvido')
+    expect(classificarDevolucao({ status: 'shipped', status_money: 'refunded' })).toBe('reembolsado')
+    expect(classificarDevolucao({ status: 'pending', status_money: 'retained' })).toBe('devolucao_em_andamento')
+  })
+  it('só devolução concluída sai da receita', () => {
+    expect(devolucaoConcluida('reembolsado')).toBe(true)
+    expect(devolucaoConcluida('em_mediacao')).toBe(false)
+    expect(devolucaoConcluida(null)).toBe(false)
+  })
+  it('perda: frete sempre; CMV só quando o produto não voltou', () => {
+    const base = { frete_vendedor: 10, custo_produto: 20, quantidade: 2 }
+    expect(perdaDevolucao({ ...base, devolucao_status: 'reembolsado' })).toBe(50)
+    expect(perdaDevolucao({ ...base, devolucao_status: 'devolvido' })).toBe(10)
+    expect(perdaDevolucao({ ...base, devolucao_status: 'em_mediacao' })).toBe(0)
   })
 })

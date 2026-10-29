@@ -7,7 +7,8 @@ import { getMLAuthUrl, refreshMLToken, getMLOrders, getMLUserItemIds, getMLItems
 import type { MLOrder } from '@/lib/ml-api'
 import { estimarAliquotasFuturas } from '@/actions/aliquotas'
 import { encryptToken, decryptToken } from '@/lib/crypto'
-import { sanitizeSaleFee, custoTotalLinha, alocarFretePorEnvio } from '@/lib/ml-calculos'
+import { sanitizeSaleFee, custoTotalLinha, alocarFretePorEnvio, classificarDevolucao } from '@/lib/ml-calculos'
+import type { DevolucaoStatus } from '@/lib/ml-calculos'
 
 // ─── URL de conexão OAuth ─────────────────────────────────────────────────────
 
@@ -99,6 +100,28 @@ async function buscarCustosEnvio(token: string, shipmentIds: string[]): Promise<
   return custos
 }
 
+// Pós-venda: para cada reclamação, consulta a devolução e classifica.
+// Só roda para pedidos com order.mediations (poucos), então o custo em chamadas é baixo.
+async function buscarStatusDevolucoes(token: string, claimIds: string[]): Promise<Map<string, DevolucaoStatus>> {
+  const resultado = new Map<string, DevolucaoStatus>()
+  const unicos = Array.from(new Set(claimIds))
+  for (let i = 0; i < unicos.length; i += 10) {
+    const lote = unicos.slice(i, i + 10)
+    await Promise.all(lote.map(async (claimId) => {
+      try {
+        const res = await fetch(`https://api.mercadolibre.com/post-purchase/v2/claims/${claimId}/returns`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (res.status === 404) { resultado.set(claimId, classificarDevolucao(null)); return }
+        if (!res.ok) return // falha transitória: mantém o status já gravado
+        const ret = await res.json()
+        resultado.set(claimId, classificarDevolucao({ status: ret?.status, status_money: ret?.status_money }))
+      } catch { /* mantém o status já gravado */ }
+    }))
+  }
+  return resultado
+}
+
 // Busca TODOS os pedidos pagos da janela (até 1000), consulta o custo de cada envio uma vez
 // e grava com o frete rateado sobre o conjunto inteiro (pacotes podem cruzar páginas da API).
 async function _gravarPedidosPagos(
@@ -125,6 +148,15 @@ async function _gravarPedidosPagos(
   const custoPorEnvio = await buscarCustosEnvio(token, shipmentIds)
   const fretePorLinha = alocarFretePorEnvio(pedidos, custoPorEnvio)
 
+  const claimDoPedido = (o: MLOrder) => {
+    const m = o.mediations?.[0]
+    return m?.id != null ? String(m.id) : null
+  }
+  const statusDevolucao = await buscarStatusDevolucoes(
+    token,
+    pedidos.map(claimDoPedido).filter((c): c is string => c != null),
+  )
+
   let sincronizados = 0
   let erros = 0
   for (const order of pedidos) {
@@ -144,6 +176,9 @@ async function _gravarPedidosPagos(
 
         const frete = fretePorLinha.get(`${order.id}:${orderItem.item.id}`) ?? null
         const tarifa = sanitizeSaleFee(orderItem.sale_fee, orderItem.unit_price, orderItem.quantity)
+        const claimId = claimDoPedido(order)
+        const devolucao = claimId ? statusDevolucao.get(claimId) : undefined
+        const tags = order.tags?.length ? order.tags.join(',') : null
 
         await prisma.ml_pedido.upsert({
           where: {
@@ -171,6 +206,9 @@ async function _gravarPedidosPagos(
             custo_produto: produto?.custo_brl ?? null,
             produto_id: produto?.id ?? null,
             logistica_tipo: logisticaTipo,
+            devolucao_status: devolucao ?? null,
+            claim_id: claimId,
+            ml_tags: tags,
           },
           update: {
             status: order.status ?? 'paid',
@@ -180,6 +218,10 @@ async function _gravarPedidosPagos(
             // custo do envio não consultado nesta rodada: mantém o frete já gravado
             ...(frete != null && { frete_vendedor: frete }),
             logistica_tipo: logisticaTipo,
+            ml_tags: tags,
+            claim_id: claimId,
+            // sem reclamação → limpa; com reclamação e consulta ok → atualiza; consulta falhou → mantém
+            ...(claimId == null ? { devolucao_status: null } : devolucao ? { devolucao_status: devolucao } : {}),
             ...(foto && { foto_url: foto }),
             // custo_produto NÃO é atualizado aqui: ele é o custo da época da venda
             // (gravado na criação ou ajustado por "Atualizar custo com vigência" / rateio).
@@ -336,6 +378,7 @@ export type MLPedidoRow = {
   custo_produto: number | null
   lucro: number
   margem: number
+  devolucao_status: string | null
 }
 
 export async function getMLPedidos(filtros?: {
@@ -392,6 +435,7 @@ export async function getMLPedidos(filtros?: {
       custo_produto: p.custo_produto,
       lucro,
       margem,
+      devolucao_status: p.devolucao_status,
     }
   })
 }
