@@ -42,8 +42,9 @@ async function carregar(workspaceId: string, skuFiltro?: string) {
   const pedidos = skus.length === 0 ? [] : await prisma.ml_pedido.findMany({
     where: {
       workspace_id: workspaceId, status: 'paid',
-      // devolvido = o produto voltou ao estoque: não consome lote
-      NOT: { devolucao_status: 'devolvido' },
+      // devolvido = o produto voltou ao estoque: não consome lote.
+      // (NOT simples excluiria também os NULL — por isso o OR explícito)
+      OR: [{ devolucao_status: null }, { devolucao_status: { not: 'devolvido' } }],
       sku: { in: skus, mode: 'insensitive' },
     },
     select: { id: true, sku: true, data_compra: true, quantidade: true, custo_produto: true },
