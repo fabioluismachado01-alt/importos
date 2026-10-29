@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ChevronRight, AlertTriangle, CheckCircle2, Clock, TrendingUp, Target } from 'lucide-react'
+import { ChevronRight, AlertTriangle, TrendingUp, Target, BarChart3, Wallet, Landmark } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { cn, formatCurrency, getMesNome, getDiasParaVencimento } from '@/lib/utils'
@@ -41,44 +41,40 @@ export function FaturamentoAnualView({ ano, mesesIniciais, config }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* KPIs Anuais */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPIAnual label={`Receita ${ano}`} value={formatCurrency(totalReceita)}
-          sub={`${meses.filter(m => m.fechado).length} meses fechados`} color="emerald" />
-        <KPIAnual label="Lucro Bruto" value={formatCurrency(totalLucroBruto)}
-          sub={totalReceita > 0 ? `${((totalLucroBruto / totalReceita) * 100).toFixed(1)}% da receita` : '—'} color="blue" />
-        <KPIAnual label="Lucro Líquido" value={formatCurrency(totalLucroLiq)}
-          sub="Após previdência" color={totalLucroLiq >= 0 ? 'emerald' : 'red'} />
-        <KPIAnual label="DAS Total"
-          value={formatCurrency(totalDAS)}
-          sub={alertas.length > 0 ? `${alertas.length} vencendo` : 'Em dia'}
-          color={alertas.length > 0 ? 'amber' : 'slate'} />
-      </div>
+      {/* Hero: título, KPIs do ano e meta */}
+      <div className="bg-gradient-to-br from-marinho to-marinho-2 rounded-2xl p-5 border-t-2 border-ouro shadow-md">
+        <p className="text-[9px] font-black text-ouro uppercase tracking-widest">Ano {ano}</p>
+        <h1 className="text-2xl font-black text-white tracking-tight mt-1">Faturamento</h1>
+        <p className="text-xs text-slate-300 mt-0.5">Receitas, despesas, DAS e resultado de cada mês</p>
 
-      {/* Meta Anual */}
-      {config.meta_faturamento_anual > 0 && (
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Target className="w-4 h-4 text-slate-400" />
-                <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">Meta Anual {ano}</span>
-              </div>
-              <span className="text-sm font-black text-slate-800">
-                {formatCurrency(totalReceita)} / {formatCurrency(config.meta_faturamento_anual)} — <span className={metaPorc >= 100 ? 'text-emerald-600' : 'text-slate-600'}>{metaPorc.toFixed(1)}%</span>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
+          <KPIAnual label={`Receita ${ano}`} value={formatCurrency(totalReceita)} Icon={TrendingUp} destaque
+            sub={`${meses.filter(m => m.fechado).length} meses fechados`} />
+          <KPIAnual label="Lucro bruto" value={formatCurrency(totalLucroBruto)} Icon={BarChart3}
+            sub={totalReceita > 0 ? `${((totalLucroBruto / totalReceita) * 100).toFixed(1)}% da receita` : '—'} />
+          <KPIAnual label="Lucro líquido" value={formatCurrency(totalLucroLiq)} Icon={Wallet} ouro negativo={totalLucroLiq < 0}
+            sub={totalReceita > 0 ? `${((totalLucroLiq / totalReceita) * 100).toFixed(1)}% · após previdência` : 'Após previdência'} />
+          <KPIAnual label="DAS total" value={formatCurrency(totalDAS)} Icon={Landmark} alerta={alertas.length > 0}
+            sub={alertas.length > 0 ? `${alertas.length} vencendo` : 'Em dia'} />
+        </div>
+
+        {config.meta_faturamento_anual > 0 && (
+          <div className="mt-5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="flex items-center gap-1.5 text-[10px] font-black text-slate-300 uppercase tracking-widest">
+                <Target className="w-3.5 h-3.5 text-ouro" /> Meta anual
+              </span>
+              <span className="text-xs font-black text-white">
+                {formatCurrency(totalReceita)} <span className="text-slate-400 font-bold">de {formatCurrency(config.meta_faturamento_anual)}</span>
+                <span className="ml-2 text-ouro">{metaPorc.toFixed(1)}%</span>
               </span>
             </div>
-            <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
-              <div
-                className={cn('h-full rounded-full transition-all duration-500',
-                  metaPorc >= 100 ? 'bg-emerald-500' : metaPorc >= 70 ? 'bg-blue-500' : 'bg-amber-500'
-                )}
-                style={{ width: `${metaPorc}%` }}
-              />
+            <div className="h-2.5 bg-white/10 rounded-full overflow-hidden">
+              <div className="h-full rounded-full bg-gradient-to-r from-ouro-escuro via-ouro to-[#F2D675] transition-all duration-500" style={{ width: `${metaPorc}%` }} />
             </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        )}
+      </div>
 
       {/* Alertas */}
       {alertas.length > 0 && (
@@ -97,7 +93,7 @@ export function FaturamentoAnualView({ ano, mesesIniciais, config }: Props) {
 
       {/* Grid de meses */}
       <div>
-        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Meses — {ano}</h2>
+        <h2 className="text-[10px] font-black text-marinho uppercase tracking-widest mb-4">Meses — {ano}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {MESES_ANO.map((mes) => {
             const dados = meses.find((m) => m.mes === mes)
@@ -113,18 +109,33 @@ export function FaturamentoAnualView({ ano, mesesIniciais, config }: Props) {
   )
 }
 
-function KPIAnual({ label, value, sub, color }: {
-  label: string; value: string; sub: string; color: 'emerald' | 'blue' | 'amber' | 'red' | 'slate'
+function KPIAnual({ label, value, sub, Icon, destaque, ouro, negativo, alerta }: {
+  label: string; value: string; sub: string; Icon: React.ComponentType<{ className?: string }>
+  destaque?: boolean; ouro?: boolean; negativo?: boolean; alerta?: boolean
 }) {
-  const COLORS = { emerald: 'text-emerald-600', blue: 'text-blue-600', amber: 'text-amber-600', red: 'text-red-500', slate: 'text-slate-600' }
+  if (destaque) {
+    return (
+      <div className="rounded-xl p-4 bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-900/20">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center"><Icon className="w-3.5 h-3.5 text-white" /></span>
+          <p className="text-[9px] font-black text-white/80 uppercase tracking-widest">{label}</p>
+        </div>
+        <p className="text-xl font-black font-mono text-white tracking-tight">{value}</p>
+        <p className="text-[10px] text-white/70 mt-0.5">{sub}</p>
+      </div>
+    )
+  }
   return (
-    <Card className="border-0 shadow-sm">
-      <CardContent className="p-5">
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
-        <p className={cn('text-xl font-black font-mono mt-1', COLORS[color])}>{value}</p>
-        <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>
-      </CardContent>
-    </Card>
+    <div className={cn('rounded-xl p-4 bg-white/5 border', ouro ? 'border-ouro/40' : alerta ? 'border-amber-400/50' : 'border-white/10')}>
+      <div className="flex items-center gap-2 mb-2">
+        <span className={cn('w-7 h-7 rounded-lg flex items-center justify-center', ouro ? 'bg-ouro/20' : alerta ? 'bg-amber-400/20' : 'bg-sky-400/15')}>
+          <Icon className={cn('w-3.5 h-3.5', ouro ? 'text-ouro' : alerta ? 'text-amber-300' : 'text-sky-300')} />
+        </span>
+        <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">{label}</p>
+      </div>
+      <p className={cn('text-xl font-black font-mono tracking-tight', negativo ? 'text-red-400' : ouro ? 'text-ouro' : 'text-white')}>{value}</p>
+      <p className={cn('text-[10px] mt-0.5', alerta ? 'text-amber-300 font-bold' : 'text-slate-400')}>{sub}</p>
+    </div>
   )
 }
 
@@ -149,7 +160,8 @@ function MesCard({ mes, ano, dados, isAtual, isFuturo }: {
     <Link href={`/faturamento/${ano}/${mes}`}>
       <Card className={cn(
         'border transition-all hover:shadow-md hover:-translate-y-0.5 cursor-pointer h-full',
-        isAtual && 'border-emerald-400 ring-2 ring-emerald-400/20',
+        isAtual && 'border-ouro ring-2 ring-ouro/25',
+        temDados && !isAtual && 'border-t-2 border-t-marinho',
         isFuturo && !temDados && 'opacity-50',
         alertaDAS && 'border-amber-300',
         alertaAliquota && 'border-orange-400 ring-2 ring-orange-300/20',
@@ -159,7 +171,7 @@ function MesCard({ mes, ano, dados, isAtual, isFuturo }: {
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-slate-700">{nomeMes}</span>
               {isAtual && (
-                <Badge className="text-[9px] bg-emerald-100 text-emerald-700 border-emerald-200 h-4 px-1.5">Atual</Badge>
+                <Badge className="text-[9px] bg-ouro-claro text-ouro-escuro border-ouro h-4 px-1.5">Atual</Badge>
               )}
               {dados?.fechado && (
                 <Badge className="text-[9px] bg-slate-100 text-slate-600 border-slate-200 h-4 px-1.5">✓ Fechado</Badge>

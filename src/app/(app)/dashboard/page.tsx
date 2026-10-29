@@ -105,90 +105,72 @@ export default async function DashboardPage() {
       {/* ── ALERTAS DE CATÁLOGO ── */}
       <AlertasCatalogoBanner alertas={alertas} />
 
-      {/* ── HEADER ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Dashboard</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Visão geral da operação — {ano}</p>
-        </div>
-        <DashboardUsd />
-      </div>
-
-      {/* ── KPIs DO MÊS ── */}
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-            {MESES[mesAtual - 1]} {ano} · Mês Atual
-          </p>
-          {isProvisional && (
-            <span className="text-[8px] font-black bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full uppercase tracking-wider">
-              Provisório · API ML · {provisional?.pedidos} pedidos
-            </span>
-          )}
-        </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-
-          {/* Receita */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-8 h-8 bg-emerald-500/10 rounded-xl flex items-center justify-center">
-                <TrendingUp className="w-4 h-4 text-emerald-600" />
-              </div>
-              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Receita Bruta</p>
+      {/* ── HERO: cabeçalho + KPIs do mês ── */}
+      <div className="bg-gradient-to-br from-marinho to-marinho-2 rounded-2xl p-5 border-t-2 border-ouro shadow-md">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-[9px] font-black text-ouro uppercase tracking-widest">
+                {MESES[mesAtual - 1]} {ano} · Mês atual
+              </p>
+              {isProvisional && (
+                <span className="text-[8px] font-black bg-white/10 text-slate-200 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  Provisório · API ML · {provisional?.pedidos} pedidos
+                </span>
+              )}
             </div>
-            <p className="text-2xl font-black text-slate-900 font-mono">{brl(receitaMes)}</p>
-            {receitaMes === 0 && <p className="text-[9px] text-slate-300 mt-1">Sem lançamentos ainda</p>}
+            <h1 className="text-2xl font-black text-white tracking-tight mt-1">Dashboard</h1>
+            <p className="text-xs text-slate-300 mt-0.5">Visão geral da operação — {ano}</p>
+          </div>
+          <DashboardUsd />
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Receita */}
+          <div className="rounded-xl p-4 bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-900/20">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center"><TrendingUp className="w-3.5 h-3.5 text-white" /></span>
+              <p className="text-[9px] font-black text-white/80 uppercase tracking-widest">Receita bruta</p>
+            </div>
+            <p className="text-2xl font-black text-white font-mono tracking-tight">{brl(receitaMes)}</p>
+            <p className="text-[10px] text-white/70 mt-0.5">{receitaMes === 0 ? 'Sem lançamentos ainda' : `${brl(receitaAno)} no ano`}</p>
           </div>
 
           {/* Lucro Bruto */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-8 h-8 bg-blue-500/10 rounded-xl flex items-center justify-center">
-                <BarChart3 className="w-4 h-4 text-blue-600" />
-              </div>
-              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Lucro Bruto</p>
+          <div className="rounded-xl p-4 bg-white/5 border border-white/10">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-7 h-7 rounded-lg bg-sky-400/15 flex items-center justify-center"><BarChart3 className="w-3.5 h-3.5 text-sky-300" /></span>
+              <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Lucro bruto</p>
             </div>
-            <p className={`text-2xl font-black font-mono ${lucroMes >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
-              {brl(lucroMes)}
-            </p>
-            {receitaMes > 0 && (
-              <p className="text-[9px] text-slate-400 mt-1">
-                {receitaMes > 0 ? `${((lucroMes / receitaMes) * 100).toFixed(1)}% da receita` : ''}
-              </p>
-            )}
+            <p className={`text-2xl font-black font-mono tracking-tight ${lucroMes >= 0 ? 'text-white' : 'text-red-400'}`}>{brl(lucroMes)}</p>
+            {receitaMes > 0 && <p className="text-[10px] text-slate-400 mt-0.5">{((lucroMes / receitaMes) * 100).toFixed(1)}% da receita</p>}
           </div>
 
           {/* Lucro Líquido */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-8 h-8 bg-purple-500/10 rounded-xl flex items-center justify-center">
-                <DollarSign className="w-4 h-4 text-purple-600" />
-              </div>
-              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Lucro Líquido</p>
+          <div className="rounded-xl p-4 bg-white/5 border border-ouro/40">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-7 h-7 rounded-lg bg-ouro/20 flex items-center justify-center"><DollarSign className="w-3.5 h-3.5 text-ouro" /></span>
+              <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Lucro líquido</p>
             </div>
-            <p className={`text-2xl font-black font-mono ${lucroLiq >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
-              {brl(lucroLiq)}
-            </p>
+            <p className={`text-2xl font-black font-mono tracking-tight ${lucroLiq >= 0 ? 'text-ouro' : 'text-red-400'}`}>{brl(lucroLiq)}</p>
             {cmvMes > 0 && (() => {
               const roi = (lucroLiq / cmvMes) * 100
               return (
-                <p className={`text-[9px] mt-1 font-bold ${roi >= 30 ? 'text-emerald-600' : roi >= 10 ? 'text-amber-600' : 'text-red-500'}`}>
-                  ROI {roi.toFixed(1)}%
+                <p className={`text-[10px] mt-0.5 font-bold ${roi >= 30 ? 'text-emerald-400' : roi >= 10 ? 'text-amber-300' : 'text-red-400'}`}>
+                  ROI {roi.toFixed(1)}% sobre o CMV
                 </p>
               )
             })()}
           </div>
 
           {/* DAS */}
-          <div className={`rounded-2xl border shadow-sm p-5 ${dasStyle.bg} ${dasStyle.border}`}>
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-8 h-8 bg-white/60 rounded-xl flex items-center justify-center">
-                <DasIcon className={`w-4 h-4 ${dasStyle.color}`} />
-              </div>
-              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">DAS · Simples</p>
+          <div className={`rounded-xl p-4 border shadow-sm ${dasStyle.bg} ${dasStyle.border}`}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-7 h-7 rounded-lg bg-white/70 flex items-center justify-center"><DasIcon className={`w-3.5 h-3.5 ${dasStyle.color}`} /></span>
+              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">DAS · Simples</p>
             </div>
-            <p className={`text-2xl font-black font-mono ${dasStyle.color}`}>{brl(dasMes)}</p>
-            <p className={`text-[9px] font-black mt-1 uppercase ${dasStyle.color}`}>{dasStyle.label}</p>
+            <p className={`text-2xl font-black font-mono tracking-tight ${dasStyle.color}`}>{brl(dasMes)}</p>
+            <p className={`text-[10px] font-black mt-0.5 uppercase ${dasStyle.color}`}>{dasStyle.label}</p>
           </div>
         </div>
       </div>
@@ -203,7 +185,7 @@ export default async function DashboardPage() {
               <p className="text-lg font-black text-slate-900 font-mono mt-0.5">{brl(receitaAno)} <span className="text-xs text-slate-400 font-bold">acumulado</span></p>
             </div>
             <Link href="/faturamento"
-              className="flex items-center gap-1 text-[9px] font-black text-emerald-600 hover:text-emerald-700 uppercase tracking-wider transition-colors">
+              className="flex items-center gap-1 text-[9px] font-black text-ouro-escuro hover:text-marinho uppercase tracking-wider transition-colors">
               Ver detalhes <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
@@ -230,16 +212,16 @@ export default async function DashboardPage() {
                           style={{
                             height: `${barH}%`,
                             background: isCurrent
-                              ? 'linear-gradient(180deg, #10b981 0%, #059669 100%)'
-                              : 'linear-gradient(180deg, #6ee7b7 0%, #34d399 100%)',
-                            boxShadow: isCurrent ? '0 -2px 8px rgba(16,185,129,0.35)' : 'none',
+                              ? 'linear-gradient(180deg, #E0B93A 0%, #C9A227 100%)'
+                              : 'linear-gradient(180deg, #1E3A64 0%, #0B1F3A 100%)',
+                            boxShadow: isCurrent ? '0 -2px 10px rgba(201,162,39,0.45)' : 'none',
                           }}
                         />
                       ) : (
                         <div className={`w-full h-1 rounded-full ${isFuture ? 'bg-slate-100' : 'bg-slate-200'}`} />
                       )}
                     </div>
-                    <span className={`text-[7px] font-black uppercase ${isCurrent ? 'text-emerald-600' : isFuture ? 'text-slate-300' : 'text-slate-500'}`}>
+                    <span className={`text-[7px] font-black uppercase ${isCurrent ? 'text-ouro-escuro' : isFuture ? 'text-slate-300' : 'text-slate-500'}`}>
                       {MESES[i]}
                     </span>
                   </Link>
@@ -250,11 +232,11 @@ export default async function DashboardPage() {
 
           <div className="flex items-center gap-4 mt-3 pt-3 border-t border-slate-100">
             <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
+              <div className="w-2.5 h-2.5 rounded-sm bg-ouro" />
               <span className="text-[8px] font-bold text-slate-500">Mês atual</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-sm bg-emerald-300" />
+              <div className="w-2.5 h-2.5 rounded-sm bg-marinho" />
               <span className="text-[8px] font-bold text-slate-500">Meses anteriores</span>
             </div>
             <div className="ml-auto">
@@ -269,10 +251,10 @@ export default async function DashboardPage() {
           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Acesso Rápido</p>
 
           {[
-            { href: '/marketplaces/pedidos', label: 'Vendas',           desc: 'ML, Shopee e demais canais',      Icon: ShoppingBag, color: 'bg-emerald-500' },
-            { href: '/faturamento',          label: 'Faturamento',       desc: 'Receitas, DAS e despesas',        Icon: DollarSign,  color: 'bg-blue-500' },
-            { href: '/vendas',               label: 'Análise de Vendas', desc: 'Importar relatórios dos canais',  Icon: BarChart3,   color: 'bg-violet-500' },
-            { href: '/produtos',             label: 'Produtos / SKUs',   desc: 'Catálogo com custos e margens',   Icon: Package,     color: 'bg-amber-500' },
+            { href: '/marketplaces/pedidos', label: 'Vendas',           desc: 'ML, Shopee e demais canais',      Icon: ShoppingBag, color: 'bg-gradient-to-br from-emerald-400 to-emerald-600' },
+            { href: '/faturamento',          label: 'Faturamento',       desc: 'Receitas, DAS e despesas',        Icon: DollarSign,  color: 'bg-gradient-to-br from-marinho-2 to-marinho' },
+            { href: '/vendas',               label: 'Análise de Vendas', desc: 'Importar relatórios dos canais',  Icon: BarChart3,   color: 'bg-gradient-to-br from-violet-400 to-violet-600' },
+            { href: '/produtos',             label: 'Produtos / SKUs',   desc: 'Catálogo com custos e margens',   Icon: Package,     color: 'bg-gradient-to-br from-ouro to-ouro-escuro' },
           ].map(({ href, label, desc, Icon, color }) => (
             <Link key={href} href={href}
               className="flex items-center gap-3 bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 hover:shadow-md hover:-translate-y-0.5 transition-all group">
