@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   sanitizeSaleFee, custoTotalLinha, alocarFretePorEnvio, metricasAds,
-  classificarDevolucao, devolucaoConcluida, perdaDevolucao,
+  classificarDevolucao, devolucaoConcluida, perdaDevolucao, statusNormalizado,
 } from '../src/lib/ml-calculos'
 
 describe('sanitizeSaleFee', () => {
@@ -95,5 +95,14 @@ describe('pós-venda', () => {
     expect(perdaDevolucao({ ...base, devolucao_status: 'reembolsado' })).toBe(50)
     expect(perdaDevolucao({ ...base, devolucao_status: 'devolvido' })).toBe(10)
     expect(perdaDevolucao({ ...base, devolucao_status: 'em_mediacao' })).toBe(0)
+  })
+})
+
+describe('statusNormalizado', () => {
+  it('inválido e cancelado saem das vendas', () => {
+    expect(statusNormalizado('cancelled')).toBe('cancelled')
+    expect(statusNormalizado('invalid')).toBe('cancelled')
+    expect(statusNormalizado('partially_refunded')).toBe('paid')
+    expect(statusNormalizado('paid')).toBe('paid')
   })
 })

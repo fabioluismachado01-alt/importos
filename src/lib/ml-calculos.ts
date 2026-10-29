@@ -129,3 +129,12 @@ export function perdaDevolucao(p: {
   const cmv = p.devolucao_status === 'devolvido' ? 0 : custoTotalLinha(p)
   return p.frete_vendedor + cmv
 }
+
+/**
+ * Status do ML → status do ImportOS. Só "paid" e "cancelled" existem na tela:
+ * pedido inválido ou cancelado sai das vendas; demais estados (partially_refunded, confirmed…)
+ * continuam como venda e o status bruto fica registrado em ml_tags.
+ */
+export function statusNormalizado(statusML: string): 'paid' | 'cancelled' {
+  return statusML === 'cancelled' || statusML === 'invalid' ? 'cancelled' : 'paid'
+}

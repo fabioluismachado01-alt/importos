@@ -7,7 +7,7 @@ import { getMLAuthUrl, refreshMLToken, getMLOrders, getMLUserItemIds, getMLItems
 import type { MLOrder } from '@/lib/ml-api'
 import { estimarAliquotasFuturas } from '@/actions/aliquotas'
 import { encryptToken, decryptToken } from '@/lib/crypto'
-import { sanitizeSaleFee, custoTotalLinha, alocarFretePorEnvio, classificarDevolucao } from '@/lib/ml-calculos'
+import { sanitizeSaleFee, custoTotalLinha, alocarFretePorEnvio, classificarDevolucao, statusNormalizado } from '@/lib/ml-calculos'
 import type { DevolucaoStatus } from '@/lib/ml-calculos'
 
 // ─── URL de conexão OAuth ─────────────────────────────────────────────────────
@@ -234,6 +234,43 @@ async function _gravarPedidosPagos(
         erros++
       }
     }
+  }
+
+  // Reconciliação: pedido gravado como pago, dentro da janela, que sumiu da busca de pagos.
+  // Acontece quando o ML muda o status para algo fora de "paid"/"cancelled" (ex.: invalid,
+  // partially_refunded) — sem isso o pedido ficava preso como venda para sempre.
+  // O status bruto do ML fica registrado em ml_tags como "ml_status:<status>".
+  const vistos = Array.from(new Set(pedidos.map(o => String(o.id))))
+  const orfaos = await prisma.ml_pedido.findMany({
+    where: {
+      workspace_id: conn.workspace_id,
+      conexao_id: conn.id,
+      status: 'paid',
+      data_compra: { gte: dateFrom },
+      ml_order_id: { notIn: vistos },
+    },
+    select: { ml_order_id: true },
+    distinct: ['ml_order_id'],
+  })
+  for (let i = 0; i < orfaos.length; i += 10) {
+    await Promise.all(orfaos.slice(i, i + 10).map(async ({ ml_order_id }) => {
+      try {
+        const res = await fetch(`https://api.mercadolibre.com/orders/${ml_order_id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) return
+        const o: MLOrder = await res.json()
+        const statusML = o.status ?? 'desconhecido'
+        await prisma.ml_pedido.updateMany({
+          where: { workspace_id: conn.workspace_id, ml_order_id },
+          data: {
+            status: statusNormalizado(statusML),
+            ml_tags: [...(o.tags ?? []), `ml_status:${statusML}`].join(','),
+          },
+        })
+        sincronizados++
+      } catch { erros++ }
+    }))
   }
 
   // Pedidos que ainda não têm custo (SKU cadastrado depois da venda) recebem o custo atual do catálogo
