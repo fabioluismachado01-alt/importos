@@ -1,6 +1,6 @@
 # Roadmap — módulo Vendas (Marketplaces)
 
-Nota de continuidade. Última atualização: 29/10/2026.
+Nota de continuidade. Última atualização: 29/10/2026 (tarde).
 Objetivo: levar o ImportOS ao nível funcional do Metrizap (referência, não cópia) e superá-lo
 nos diferenciais de importador. Regras de cálculo por canal: `docs/regras-calculo-marketplaces.md`.
 
@@ -22,13 +22,19 @@ nos diferenciais de importador. Regras de cálculo por canal: `docs/regras-calcu
 | 1 | Sync não sobrescreve mais o custo histórico do pedido; CMV mensal do rateio × qtd | 0eba2cc |
 | 1 | Devoluções/mediações via claims/returns + card Devolvidas | 8f64d74 |
 | 1 | Reconciliação de pedidos que somem da busca de pagos (ML) | 61d43ce |
+| 2 | Product Ads do ML via API (tabela `ml_ads_dia`, gasto e receita atribuída diários) | c8a7061 |
 
 Banco (29/10): colunas `ml_pedido.devolucao_status, claim_id, ml_tags`; tarifa de 176 pedidos
 antigos com qtd > 1 corrigida (backup em `_bkp_ml_pedido_tarifa_20261029`, RLS ligado).
 
+Banco (29/10, tarde): tabela `ml_ads_dia`; **RLS ligado em todas as tabelas do schema public**
+(antes 37 tabelas abertas pela API REST do Supabase). Script: `prisma/sql/2026-10-29_rls_tabelas_publicas.sql`.
+Toda tabela nova precisa de `ENABLE ROW LEVEL SECURITY` no SQL de criação.
+
 Conferência ML 30 dias vs Metrizap: vendas, faturamento, tarifas e frete **idênticos**.
 Diferenças restantes são de regra/cadastro: imposto (Simples efetivo 7,9% vs 8% fixo) e custo
 unitário de BTS-1, INV070-5, INV070, DTS-1 (os dois sistemas têm valores diferentes).
+Ads ML 30 dias: R$ 145,50 vs R$ 145,44 (arredondamento diário); receita atribuída R$ 1.632,90 idêntica.
 
 ## Pendências do Fábio
 - [ ] Criar `CRON_SECRET` (Production) no Vercel e fazer redeploy — sem ela o cron recebe 401.
@@ -37,9 +43,7 @@ unitário de BTS-1, INV070-5, INV070, DTS-1 (os dois sistemas têm valores difer
 - [ ] Abrir cadastro de desenvolvedor: Shopee Open Platform, TikTok Shop Partner, Amazon SP-API.
 
 ## Próximas etapas (ordem)
-1. **Etapa 2 — Ads do ML via API**: gasto diário por anúncio (Product Ads), receita atribuída,
-   ROAS/ACOS reais, lucro por SKU após ads. Hoje o ads é manual (`getAdsMensais`).
-   Metrizap 30d: ML R$ 145,44 vs ImportOS R$ 69,10.
+1. **Etapa 2 (resto)**: lucro por SKU após ads (`/product_ads/ads/search` por item); Shopee Ads.
 2. **Etapa 1 (resto)**: status de liquidação/data do repasse (API Mercado Pago `/v1/payments/{id}`
    — validar se o token ML funciona), custo de logística própria (Flex/agência), painel de SKUs
    sem custo (base em `actions/alertas-catalogo.ts`).
