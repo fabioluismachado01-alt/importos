@@ -27,6 +27,7 @@ nos diferenciais de importador. Regras de cálculo por canal: `docs/regras-calcu
 | 2 | Lucro por produto após ads (`ml_ads_item_dia`, ads por anúncio e dia, até 31 dias) | e0d12ec |
 | 4 | Calculadora por venda (lucro, preço ideal/mínimo, ACOS máx., ROAS mín.) + ranking filtra a tabela | 814b77a |
 | 1 | Repasse via Mercado Pago (`/v1/payments/{id}` aceita o token ML): card A receber, selo por venda, atrasados | 3e818d9 |
+| 4 | Fonte do app corrigida (Times → Inter) + identidade marinho/ouro na tela de Vendas + calculadora no celular | add9b9f |
 
 Banco (29/10): colunas `ml_pedido.devolucao_status, claim_id, ml_tags`; tarifa de 176 pedidos
 antigos com qtd > 1 corrigida (backup em `_bkp_ml_pedido_tarifa_20261029`, RLS ligado).
@@ -47,7 +48,7 @@ Ads ML 30 dias: R$ 145,50 vs R$ 145,44 (arredondamento diário); receita atribu�
 - [ ] Abrir cadastro de desenvolvedor: Shopee Open Platform, TikTok Shop Partner, Amazon SP-API.
 
 ## Próximas etapas (ordem)
-1. **Etapa 4 (resto)**: colunas personalizáveis, calculadora no mobile, visual azul-marinho/dourado.
+1. **Etapa 4 (resto)**: colunas personalizáveis; levar a identidade marinho/ouro às outras telas (tokens em globals.css).
 2. **Etapa 3 — Shopee via API** (pedidos + escrow detail + Ads). Hoje é import de CSV.
 3. **Etapa 4 — Tela de Vendas multicanal**: chips por conta, rankings que filtram a tabela,
    dividir por marketplace, colunas personalizáveis, calculadora por venda, visual azul-marinho/dourado.
