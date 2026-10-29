@@ -62,6 +62,7 @@ const NAV_ITEMS: NavItem[] = [
       { href: '/faturamento', label: 'Visão Anual' },
       { href: '/faturamento/crescimento', label: 'Crescimento & Meta' },
       { href: '/faturamento/dre', label: 'DRE Anual' },
+      { href: '/faturamento/cmv', label: 'CMV por Lote' },
       { href: '/faturamento/executivo', label: 'Painel Executivo' },
       { href: '/faturamento/importar', label: 'Importar Planilha' },
       { href: '/vendas', label: 'Análise de Vendas' },
