@@ -56,7 +56,7 @@ export function CalculadoraVenda({ dados, onClose }: { dados: DadosCalculadora; 
       <span className="flex items-center gap-1">
         {!sufixo && <span className="text-[10px] text-slate-400">R$</span>}
         <input value={campos[k]} onChange={set(k)} inputMode="decimal"
-          className="w-24 text-right text-xs font-semibold border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:border-emerald-400" />
+          className="w-24 text-right text-xs font-semibold border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:border-ouro" />
         {sufixo && <span className="text-[10px] text-slate-400 w-3">{sufixo}</span>}
       </span>
     </label>
@@ -65,7 +65,7 @@ export function CalculadoraVenda({ dados, onClose }: { dados: DadosCalculadora; 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="bg-slate-900 text-white px-5 py-3 flex items-start justify-between gap-3">
+        <div className="bg-gradient-to-br from-marinho to-marinho-2 text-white px-5 py-3 border-b-2 border-ouro flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-black">Calculadora da venda</p>
             <p className="text-[11px] text-slate-300 truncate">{dados.titulo} · valores por unidade</p>

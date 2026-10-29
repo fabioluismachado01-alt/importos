@@ -4,12 +4,24 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Identidade premium do módulo Vendas: azul-marinho + dourado (classes bg-marinho, text-ouro…).
+   Verde/vermelho continuam reservados para lucro e prejuízo. */
+@theme {
+  --color-marinho: #0B1F3A;
+  --color-marinho-2: #132B4D;
+  --color-ouro: #C9A227;
+  --color-ouro-escuro: #9E7E17;
+  --color-ouro-claro: #F7EFD6;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  /* Inter e JetBrains Mono vêm do next/font (layout.tsx). Antes --font-sans apontava para ele
+     mesmo (referência circular) e o app inteiro caía em Times New Roman. */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  --font-heading: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);

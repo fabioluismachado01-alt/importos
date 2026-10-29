@@ -568,7 +568,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
         <div className="flex gap-1 mb-3">
           {(['faturamento', 'lucro'] as AbcTab[]).map(t => (
             <button key={t} onClick={() => setAbcTab(t)}
-              className={`px-3 py-1 text-[11px] font-bold rounded-full transition-colors ${abcTab === t ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500 hover:text-slate-700'}`}>
+              className={`px-3 py-1 text-[11px] font-bold rounded-full transition-colors ${abcTab === t ? 'bg-marinho text-white' : 'bg-slate-100 text-slate-500 hover:text-slate-700'}`}>
               Por {t === 'faturamento' ? 'Faturamento' : 'Lucro'}
             </button>
           ))}
@@ -658,7 +658,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
             Conecte sua conta do Mercado Livre para que seus pedidos apareçam aqui automaticamente.
           </p>
           <Link href="/marketplaces"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl text-sm hover:bg-emerald-700 transition-colors">
+            className="inline-flex items-center gap-2 px-6 py-3 bg-marinho text-white font-bold rounded-xl text-sm hover:bg-marinho-2 transition-colors">
             Conectar conta do Mercado Livre →
           </Link>
         </div>
@@ -685,7 +685,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
       )}
 
       {/* ── HERO HEADER ESCURO ── */}
-      <div className="bg-slate-900 rounded-2xl p-4 pb-5">
+      <div className="bg-gradient-to-br from-marinho to-marinho-2 rounded-2xl p-4 pb-5 border-t-2 border-ouro shadow-md">
         {/* Linha topo: faturamento hero + ações */}
         <div className="flex items-start justify-between mb-3">
           <div>
@@ -704,7 +704,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
             </button>
             <button onClick={() => handleSync(false)} disabled={isPending}
               className="p-2 rounded-xl text-slate-300 hover:text-white transition-colors disabled:opacity-40">
-              <RefreshCw className={`w-4 h-4 ${isPending ? 'animate-spin text-emerald-400' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${isPending ? 'animate-spin text-ouro' : ''}`} />
             </button>
             <button onClick={exportarCSV}
               className="p-2 rounded-xl text-slate-300 hover:text-white transition-colors">
@@ -754,16 +754,16 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
         <div className="flex items-center gap-1.5 flex-wrap">
           {periodos.map(p => (
             <button key={p.id} onClick={() => setPeriodo(p.id)}
-              className={`px-3 py-1 text-[11px] font-bold rounded-full transition-colors ${periodo === p.id ? 'bg-emerald-500 text-white' : 'bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white'}`}>
+              className={`px-3 py-1 text-[11px] font-bold rounded-full transition-colors ${periodo === p.id ? 'bg-ouro text-marinho' : 'bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white'}`}>
               {p.label}
             </button>
           ))}
         </div>
         {periodo === 'personalizado' && (
           <div className="flex items-center gap-2 flex-wrap mt-2">
-            <input type="date" value={customInicio} onChange={e => setCustomInicio(e.target.value)} className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 bg-slate-800 text-slate-200 focus:outline-none focus:border-emerald-500" />
+            <input type="date" value={customInicio} onChange={e => setCustomInicio(e.target.value)} className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 bg-marinho-2 text-slate-200 focus:outline-none focus:border-ouro" />
             <span className="text-xs text-slate-500">até</span>
-            <input type="date" value={customFim} onChange={e => setCustomFim(e.target.value)} className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 bg-slate-800 text-slate-200 focus:outline-none focus:border-emerald-500" />
+            <input type="date" value={customFim} onChange={e => setCustomFim(e.target.value)} className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 bg-marinho-2 text-slate-200 focus:outline-none focus:border-ouro" />
           </div>
         )}
       </div>
@@ -915,7 +915,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
               <button key={tab} onClick={() => setDashTab(tab)}
                 className={`px-4 py-2.5 text-xs font-bold whitespace-nowrap border-b-2 transition-colors ${
                   dashTab === tab
-                    ? tab === 'canceladas' ? 'border-red-500 text-red-600 bg-red-50' : 'border-slate-800 text-slate-800 bg-slate-50'
+                    ? tab === 'canceladas' ? 'border-red-500 text-red-600 bg-red-50' : 'border-ouro text-marinho bg-ouro-claro/60'
                     : 'border-transparent text-slate-400 hover:text-slate-600'
                 }`}>
                 {tab === 'faturamento' ? 'Faturamento' :
@@ -960,7 +960,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                             onChange={e => setCustoLogEdit(prev => ({ ...prev, [t.tipo]: e.target.value }))}
                             onKeyDown={e => { if (e.key === 'Enter') salvarLogistica(t.tipo) }}
                             onBlur={() => { if (custoLogEdit[t.tipo] != null) salvarLogistica(t.tipo) }}
-                            className="w-16 text-right border border-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-emerald-400"
+                            className="w-16 text-right border border-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-ouro"
                           />
                           <span className="text-slate-400">/ped.</span>
                         </span>
@@ -1022,7 +1022,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                       <div key={item.chave}
                         onClick={() => setProdutoFiltro(f => f?.chave === item.chave ? null : { chave: item.chave, titulo: item.titulo })}
                         title="Ver só as vendas deste produto"
-                        className={`flex items-center gap-2 px-2 py-1.5 rounded-xl cursor-pointer transition-colors ${produtoFiltro?.chave === item.chave ? 'bg-emerald-50 ring-1 ring-emerald-300' : 'hover:bg-slate-50'}`}>
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded-xl cursor-pointer transition-colors ${produtoFiltro?.chave === item.chave ? 'bg-ouro-claro ring-1 ring-ouro' : 'hover:bg-slate-50'}`}>
                         <RingChart pct={item.pct} color={cor} />
                         <ProdImg fotoUrl={item.foto_url} titulo={item.titulo} className="w-9 h-9 rounded" />
                         <div className="min-w-0 max-w-[200px]">
@@ -1068,11 +1068,11 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
           <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por título, comprador ou SKU..."
-            className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 bg-white" />
+            className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-ouro bg-white" />
         </div>
         {conexoes.length > 1 && (
           <select value={contaFiltro} onChange={e => setContaFiltro(e.target.value)}
-            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-emerald-500">
+            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-ouro">
             <option value="todas">Todas as contas</option>
             {conexoes.map(c => <option key={c.id} value={c.id}>{c.nickname}</option>)}
           </select>
@@ -1081,7 +1081,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
 
       {produtoFiltro && (
         <div className="flex items-center gap-2 text-xs">
-          <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full px-3 py-1 font-semibold truncate max-w-[70%]">
+          <span className="bg-ouro-claro border border-ouro/50 text-marinho rounded-full px-3 py-1 font-semibold truncate max-w-[70%]">
             Só as vendas de: {mascaraNome(produtoFiltro.titulo)} ({linhasTabela.length})
           </span>
           <button onClick={() => setProdutoFiltro(null)} className="text-slate-400 hover:text-slate-600 flex items-center gap-1"><X className="w-3 h-3" /> limpar</button>
@@ -1116,6 +1116,8 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                   <p className="text-xs font-semibold text-slate-700 leading-snug line-clamp-2 flex-1" title={p.titulo}>
                     {mascaraNome(p.titulo)}
                   </p>
+                  <button onClick={() => abrirCalculadora(p)} aria-label="Abrir calculadora com os dados desta venda"
+                    className="shrink-0 p-1 text-slate-300 active:text-ouro-escuro"><Calculator className="w-4 h-4" /></button>
                   <div className={`shrink-0 px-2 py-0.5 rounded-lg text-[11px] font-black flex flex-col items-end ${p.lucro >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                     <span>{mascaraValor(vis >= 3 ? '████' : brl(p.lucro))}</span>
                     <span className="text-[9px] font-bold opacity-70">{vis >= 3 ? '██' : pct(p.margem)}</span>
@@ -1240,7 +1242,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                   </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     <button onClick={() => abrirCalculadora(p)} title="Abrir calculadora com os dados desta venda"
-                      className="mr-1.5 align-middle text-slate-300 hover:text-emerald-600"><Calculator className="w-3.5 h-3.5" /></button>
+                      className="mr-1.5 align-middle text-slate-300 hover:text-ouro-escuro"><Calculator className="w-3.5 h-3.5" /></button>
                     <div className={`inline-flex flex-col items-end font-black px-2 py-0.5 rounded-lg text-[11px] align-middle ${p.lucro >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                       <div className="flex items-center gap-1">
                         {p.lucro >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
