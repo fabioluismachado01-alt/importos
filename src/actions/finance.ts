@@ -8,6 +8,7 @@ import {
   type LancamentoRaw, type FinanceConfig,
 } from '@/engines/finance'
 import { estimarAliquotasFuturas } from '@/actions/aliquotas'
+import { custoTotalLinha } from '@/lib/ml-calculos'
 
 // =============================================
 // HELPERS
@@ -879,7 +880,7 @@ export async function getProvisionalMesAtual(): Promise<ProvisionalMes | null> {
 
   const pedidos = await prisma.ml_pedido.findMany({
     where: { workspace_id: workspaceId, status: 'paid', data_compra: { gte: inicio, lt: fim } },
-    select: { valor_venda: true, tarifa: true, frete_vendedor: true, custo_produto: true },
+    select: { valor_venda: true, tarifa: true, frete_vendedor: true, custo_produto: true, quantidade: true },
   })
 
   if (pedidos.length === 0) return null
@@ -904,7 +905,7 @@ export async function getProvisionalMesAtual(): Promise<ProvisionalMes | null> {
   const receita_total  = pedidos.reduce((s, p) => s + p.valor_venda, 0)
   const tarifas        = pedidos.reduce((s, p) => s + p.tarifa, 0)
   const frete          = pedidos.reduce((s, p) => s + p.frete_vendedor, 0)
-  const custo_produtos = pedidos.reduce((s, p) => s + (p.custo_produto ?? 0), 0)
+  const custo_produtos = pedidos.reduce((s, p) => s + custoTotalLinha(p), 0)
   const das_valor_calc = receita_total * aliquota
   const lucro_bruto    = receita_total - tarifas - frete - custo_produtos
   const lucro_liquido  = lucro_bruto - das_valor_calc

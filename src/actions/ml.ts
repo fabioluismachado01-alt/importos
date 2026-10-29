@@ -4,8 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { getAuthContext } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getMLAuthUrl, refreshMLToken, getMLOrders, getMLUserItemIds, getMLItemsBatch } from '@/lib/ml-api'
+import type { MLOrder } from '@/lib/ml-api'
 import { estimarAliquotasFuturas } from '@/actions/aliquotas'
 import { encryptToken, decryptToken } from '@/lib/crypto'
+import { sanitizeSaleFee, custoTotalLinha, alocarFretePorEnvio } from '@/lib/ml-calculos'
 
 // ─── URL de conexão OAuth ─────────────────────────────────────────────────────
 
@@ -75,12 +77,120 @@ export async function getTokenValido(conexaoId: string, workspaceId: string): Pr
 
 // ─── Sincronizar pedidos ──────────────────────────────────────────────────────
 
-// ML às vezes retorna sale_fee como o valor total do item ao invés da comissão.
-// Limitamos a 35% (teto máximo de comissão ML) para evitar lucros negativos por dado errado.
-function sanitizeSaleFee(saleFee: number | null | undefined, unitPrice: number, qty: number): number {
-  const raw = saleFee ?? 0
-  const maxFee = (unitPrice ?? 0) * (qty ?? 1) * 0.35
-  return Math.max(0, Math.min(raw, maxFee))
+// Custo de frete do vendedor por envio: list_cost − cost (parte paga pelo comprador).
+async function buscarCustosEnvio(token: string, shipmentIds: string[]): Promise<Map<string, number>> {
+  const custos = new Map<string, number>()
+  const unicos = Array.from(new Set(shipmentIds))
+  for (let i = 0; i < unicos.length; i += 10) {
+    const lote = unicos.slice(i, i + 10)
+    await Promise.all(lote.map(async (shipId) => {
+      try {
+        const res = await fetch(`https://api.mercadolibre.com/shipments/${shipId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) return
+        const ship = await res.json()
+        const listCost: number = ship.shipping_option?.list_cost ?? 0
+        const buyerCost: number = ship.shipping_option?.cost ?? 0
+        custos.set(String(shipId), Math.max(0, listCost - buyerCost))
+      } catch { /* envio sem custo conhecido: fica fora do mapa */ }
+    }))
+  }
+  return custos
+}
+
+// Busca TODOS os pedidos pagos da janela (até 1000), consulta o custo de cada envio uma vez
+// e grava com o frete rateado sobre o conjunto inteiro (pacotes podem cruzar páginas da API).
+async function _gravarPedidosPagos(
+  token: string,
+  conn: { id: string; workspace_id: string; ml_user_id: string },
+  dateFrom: Date,
+  skuMap: Map<string, { id: string; sku_interno: string | null; custo_brl: number | null }>,
+): Promise<{ sincronizados: number; erros: number }> {
+  const pedidos: MLOrder[] = []
+  let offset = 0
+  let totalAPI = 1
+  while (offset < Math.min(totalAPI, 1000)) { // cap em 1000 pedidos por sync
+    const data = await getMLOrders(token, conn.ml_user_id, offset, 50, dateFrom)
+    totalAPI = data.paging.total
+    pedidos.push(...data.results)
+    if (data.results.length === 0) break
+    offset += 50
+  }
+
+  const shipmentIds = pedidos
+    .map(o => o.shipping?.id)
+    .filter((id): id is number => id != null)
+    .map(id => String(id))
+  const custoPorEnvio = await buscarCustosEnvio(token, shipmentIds)
+  const fretePorLinha = alocarFretePorEnvio(pedidos, custoPorEnvio)
+
+  let sincronizados = 0
+  let erros = 0
+  for (const order of pedidos) {
+    for (const orderItem of order.order_items) {
+      try {
+        const sku = orderItem.item.seller_sku?.toUpperCase() ?? null
+        const produto = sku ? skuMap.get(sku) : undefined
+        const foto = (orderItem.item.thumbnail ?? orderItem.item.picture_url ?? '')
+          .replace('http://', 'https://')
+
+        // Tipo de logística (fulfillment = Full, drop_off = agência, etc.)
+        const logisticaTipo =
+          order.shipping?.logistic_type ??
+          order.shipping?.mode ??
+          orderItem.item.logistic_type ??
+          null
+
+        const frete = fretePorLinha.get(`${order.id}:${orderItem.item.id}`) ?? null
+        const tarifa = sanitizeSaleFee(orderItem.sale_fee, orderItem.unit_price, orderItem.quantity)
+
+        await prisma.ml_pedido.upsert({
+          where: {
+            workspace_id_ml_order_id_ml_item_id: {
+              workspace_id: conn.workspace_id,
+              ml_order_id: String(order.id),
+              ml_item_id: orderItem.item.id,
+            },
+          },
+          create: {
+            conexao_id: conn.id,
+            workspace_id: conn.workspace_id,
+            ml_order_id: String(order.id),
+            ml_item_id: orderItem.item.id,
+            status: order.status ?? 'paid',
+            data_compra: new Date(order.date_created),
+            comprador_nick: order.buyer?.nickname ?? 'Desconhecido',
+            titulo: orderItem.item.title ?? '',
+            foto_url: foto || null,
+            sku: orderItem.item.seller_sku ?? null,
+            quantidade: orderItem.quantity ?? 1,
+            valor_venda: (orderItem.unit_price ?? 0) * (orderItem.quantity ?? 1),
+            tarifa,
+            frete_vendedor: frete ?? 0,
+            custo_produto: produto?.custo_brl ?? null,
+            produto_id: produto?.id ?? null,
+            logistica_tipo: logisticaTipo,
+          },
+          update: {
+            status: order.status ?? 'paid',
+            quantidade: orderItem.quantity ?? 1,
+            valor_venda: (orderItem.unit_price ?? 0) * (orderItem.quantity ?? 1),
+            tarifa,
+            // custo do envio não consultado nesta rodada: mantém o frete já gravado
+            ...(frete != null && { frete_vendedor: frete }),
+            logistica_tipo: logisticaTipo,
+            ...(foto && { foto_url: foto }),
+            ...(produto && { custo_produto: produto.custo_brl, produto_id: produto.id }),
+          },
+        })
+        sincronizados++
+      } catch {
+        erros++
+      }
+    }
+  }
+  return { sincronizados, erros }
 }
 
 export async function sincronizarMLPedidos(
@@ -107,128 +217,7 @@ export async function sincronizarMLPedidos(
     ? new Date(Date.now() - opcoes.dias * 86_400_000)
     : new Date(Date.now() - 30 * 86_400_000) // padrão: últimos 30 dias
 
-  let offset = 0
-  let totalAPI = 1
-  let sincronizados = 0
-  let erros = 0
-
-  while (offset < Math.min(totalAPI, 1000)) { // cap em 1000 pedidos por sync
-    const data = await getMLOrders(token, conn.ml_user_id, offset, 50, dateFrom)
-    totalAPI = data.paging.total
-
-    // Busca o custo de frete do vendedor via /shipments/{id} em paralelo (10 por vez)
-    // O campo correto é shipment.shipping_option.list_cost
-    const shipmentIds = data.results
-      .map(o => (o as any).shipping?.id)
-      .filter(Boolean) as string[]
-
-    const shipmentCosts = new Map<string, number>()
-    for (let i = 0; i < shipmentIds.length; i += 10) {
-      const batchIds = shipmentIds.slice(i, i + 10)
-      const results = await Promise.all(
-        batchIds.map(async (shipId) => {
-          try {
-            const res = await fetch(`https://api.mercadolibre.com/shipments/${shipId}`, {
-              headers: { Authorization: `Bearer ${token}` },
-            })
-            if (!res.ok) return { id: String(shipId), cost: 0 }
-            const ship = await res.json()
-            // Custo REAL do vendedor = list_cost (total cobrado pelo ML) − cost (parte paga pelo comprador)
-            // Quando o comprador paga frete, cost > 0 e o seller só arca com a diferença.
-            // Quando é frete grátis para o comprador, cost = 0 e seller paga list_cost inteiro.
-            const listCost: number = ship.shipping_option?.list_cost ?? 0
-            const buyerCost: number = ship.shipping_option?.cost ?? 0
-            const cost = Math.max(0, listCost - buyerCost)
-            return { id: String(shipId), cost }
-          } catch {
-            return { id: String(shipId), cost: 0 }
-          }
-        })
-      )
-      results.forEach(r => shipmentCosts.set(r.id, r.cost))
-    }
-
-    // Para pacotes (pack_id), o frete é compartilhado entre vários pedidos no mesmo shipment.
-    // Precisa saber o valor total de cada shipment para rateio proporcional.
-    const shipmentValorTotal = new Map<string, number>()
-    for (const order of data.results) {
-      const shipId = String((order as any).shipping?.id ?? '')
-      if (!shipId) continue
-      const orderValor = order.order_items.reduce(
-        (s: number, oi: any) => s + (oi.unit_price ?? 0) * (oi.quantity ?? 1), 0
-      )
-      shipmentValorTotal.set(shipId, (shipmentValorTotal.get(shipId) ?? 0) + orderValor)
-    }
-
-    for (const order of data.results) {
-      for (const orderItem of order.order_items) {
-        try {
-          const sku = orderItem.item.seller_sku?.toUpperCase() ?? null
-          const produto = sku ? skuMap.get(sku) : undefined
-          const foto = (orderItem.item.thumbnail ?? orderItem.item.picture_url ?? '')
-            .replace('http://', 'https://')
-
-          // Extrai tipo de logística (fulfillment = Full, drop_off = agência, etc.)
-          const logisticaTipo =
-            (order as any).shipping?.logistic_type ??
-            (order as any).shipping?.mode ??
-            (orderItem.item as any).logistic_type ??
-            null
-
-          // Frete do vendedor: rateado proporcionalmente ao valor do item no pack
-          const shipId = String((order as any).shipping?.id ?? '')
-          const freteTotalShipment = shipmentCosts.get(shipId) ?? 0
-          const valorTotalShipment = shipmentValorTotal.get(shipId) ?? 1
-          const itemValor = (orderItem.unit_price ?? 0) * (orderItem.quantity ?? 1)
-          const shippingFee = valorTotalShipment > 0
-            ? freteTotalShipment * (itemValor / valorTotalShipment)
-            : 0
-
-          await prisma.ml_pedido.upsert({
-            where: {
-              workspace_id_ml_order_id_ml_item_id: {
-                workspace_id: workspaceId,
-                ml_order_id: String(order.id),
-                ml_item_id: orderItem.item.id,
-              },
-            },
-            create: {
-              conexao_id: conexaoId,
-              workspace_id: workspaceId,
-              ml_order_id: String(order.id),
-              ml_item_id: orderItem.item.id,
-              status: order.status ?? 'paid',
-              data_compra: new Date(order.date_created),
-              comprador_nick: order.buyer?.nickname ?? 'Desconhecido',
-              titulo: orderItem.item.title ?? '',
-              foto_url: foto || null,
-              sku: orderItem.item.seller_sku ?? null,
-              quantidade: orderItem.quantity ?? 1,
-              valor_venda: (orderItem.unit_price ?? 0) * (orderItem.quantity ?? 1),
-              tarifa: sanitizeSaleFee(orderItem.sale_fee, orderItem.unit_price, orderItem.quantity),
-              frete_vendedor: shippingFee,
-              custo_produto: produto?.custo_brl ?? null,
-              produto_id: produto?.id ?? null,
-              logistica_tipo: logisticaTipo,
-            },
-            update: {
-              status: order.status ?? 'paid',
-              tarifa: sanitizeSaleFee(orderItem.sale_fee, orderItem.unit_price, orderItem.quantity),
-              frete_vendedor: shippingFee,
-              logistica_tipo: logisticaTipo,
-              ...(foto && { foto_url: foto }),
-              ...(produto && { custo_produto: produto.custo_brl, produto_id: produto.id }),
-            },
-          })
-          sincronizados++
-        } catch {
-          erros++
-        }
-      }
-    }
-
-    offset += 50
-  }
+  let { sincronizados, erros } = await _gravarPedidosPagos(token, conn, dateFrom, skuMap)
 
   // Sincroniza pedidos cancelados/devolvidos usando date_last_updated para capturar
   // devoluções recentes de pedidos mais antigos que a janela de sync
@@ -369,7 +358,7 @@ export async function getMLPedidos(filtros?: {
   return pedidos.map(p => {
     // imposto é calculado no componente com aliquota histórica; aqui retornamos 0 como placeholder
     const imposto = 0
-    const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - imposto - (p.custo_produto ?? 0)
+    const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - imposto - custoTotalLinha(p)
     const margem = p.valor_venda > 0 ? (lucro / p.valor_venda) * 100 : 0
     return {
       id: p.id,
@@ -420,7 +409,7 @@ export async function getMLResumo(dias = 30) {
   const faturamento = pedidos.reduce((s, p) => s + p.valor_venda, 0)
   const tarifas = pedidos.reduce((s, p) => s + p.tarifa, 0)
   const frete = pedidos.reduce((s, p) => s + p.frete_vendedor, 0)
-  const custos = pedidos.reduce((s, p) => s + (p.custo_produto ?? 0), 0)
+  const custos = pedidos.reduce((s, p) => s + custoTotalLinha(p), 0)
   const lucro = faturamento - tarifas - frete - custos
   const unidades = pedidos.reduce((s, p) => s + p.quantidade, 0)
 
@@ -778,7 +767,7 @@ export async function getMLCurvaABC(filtros?: {
 
   for (const p of pedidos) {
     const chave = p.sku ?? p.ml_item_id
-    const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - (p.custo_produto ?? 0)
+    const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - custoTotalLinha(p)
     const curr = mapa.get(chave) ?? {
       titulo: p.titulo, foto_url: p.foto_url, sku: p.sku,
       faturamento: 0, lucro: 0, vendas: 0, unidades: 0,
@@ -975,89 +964,7 @@ async function _syncPedidosInterno(
   })
   const skuMap = new Map(produtos.map(p => [p.sku_interno!.toUpperCase(), p]))
 
-  let offset = 0, totalAPI = 1, sincronizados = 0
-
-  while (offset < Math.min(totalAPI, 1000)) {
-    const params = new URLSearchParams({
-      seller: conn.ml_user_id,
-      'order.status': 'paid',
-      sort: 'date_desc',
-      offset: String(offset),
-      limit: '50',
-      'order.date_created.from': dateFrom.toISOString(),
-    })
-    const res = await fetch(`https://api.mercadolibre.com/orders/search?${params}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (!res.ok) break
-    const data = await res.json()
-    totalAPI = data.paging.total
-
-    // Busca custo de frete via /shipments/{id} em lotes de 10
-    const shipmentIds = data.results
-      .map((o: any) => o.shipping?.id)
-      .filter(Boolean) as string[]
-    const shipmentCosts = new Map<string, number>()
-    for (let i = 0; i < shipmentIds.length; i += 10) {
-      const batch = shipmentIds.slice(i, i + 10)
-      await Promise.all(batch.map(async (shipId) => {
-        try {
-          const r = await fetch(`https://api.mercadolibre.com/shipments/${shipId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          })
-          if (!r.ok) return
-          const ship = await r.json()
-          const listCost: number = ship.shipping_option?.list_cost ?? 0
-          const buyerCost: number = ship.shipping_option?.cost ?? 0
-          shipmentCosts.set(String(shipId), Math.max(0, listCost - buyerCost))
-        } catch { /* ignora */ }
-      }))
-    }
-    const shipmentValorTotal = new Map<string, number>()
-    for (const order of data.results) {
-      const shipId = String((order as any).shipping?.id ?? '')
-      if (!shipId) continue
-      const val = order.order_items.reduce((s: number, oi: any) => s + (oi.unit_price ?? 0) * (oi.quantity ?? 1), 0)
-      shipmentValorTotal.set(shipId, (shipmentValorTotal.get(shipId) ?? 0) + val)
-    }
-
-    for (const order of data.results) {
-      for (const oi of order.order_items) {
-        try {
-          const sku = oi.item.seller_sku?.toUpperCase() ?? null
-          const produto = sku ? skuMap.get(sku) : undefined
-          const foto = (oi.item.thumbnail ?? oi.item.picture_url ?? '').replace('http://', 'https://')
-          const fee = sanitizeSaleFee(oi.sale_fee, oi.unit_price, oi.quantity)
-          const shipId = String((order as any).shipping?.id ?? '')
-          const freteTotalShipment = shipmentCosts.get(shipId) ?? 0
-          const valorTotalShipment = shipmentValorTotal.get(shipId) ?? 1
-          const itemValor = (oi.unit_price ?? 0) * (oi.quantity ?? 1)
-          const shippingFee = valorTotalShipment > 0 ? freteTotalShipment * (itemValor / valorTotalShipment) : 0
-          await prisma.ml_pedido.upsert({
-            where: { workspace_id_ml_order_id_ml_item_id: { workspace_id: conn.workspace_id, ml_order_id: String(order.id), ml_item_id: oi.item.id } },
-            create: {
-              conexao_id: conn.id, workspace_id: conn.workspace_id,
-              ml_order_id: String(order.id), ml_item_id: oi.item.id,
-              status: order.status ?? 'paid', data_compra: new Date(order.date_created),
-              comprador_nick: order.buyer?.nickname ?? 'Desconhecido',
-              titulo: oi.item.title ?? '', foto_url: foto || null,
-              sku: oi.item.seller_sku ?? null, quantidade: oi.quantity ?? 1,
-              valor_venda: (oi.unit_price ?? 0) * (oi.quantity ?? 1), tarifa: fee,
-              frete_vendedor: shippingFee, custo_produto: produto?.custo_brl ?? null,
-              produto_id: produto?.id ?? null,
-            },
-            update: {
-              status: order.status ?? 'paid', tarifa: fee, frete_vendedor: shippingFee,
-              ...(foto && { foto_url: foto }),
-              ...(produto && { custo_produto: produto.custo_brl, produto_id: produto.id }),
-            },
-          })
-          sincronizados++
-        } catch { /* ignora */ }
-      }
-    }
-    offset += 50
-  }
+  const { sincronizados } = await _gravarPedidosPagos(token, conn, dateFrom, skuMap)
 
   // Cancelados com date_last_updated
   const cancelParams = new URLSearchParams({

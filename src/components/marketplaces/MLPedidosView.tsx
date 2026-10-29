@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Search, RefreshCw, Download, Pencil, Check, X, TrendingUp, TrendingDown, Eye, EyeOff, ShoppingBag, CheckCircle2 } from 'lucide-react'
 import { sincronizarMLPedidos, editarCustoPedido } from '@/actions/ml'
 import type { MLPedidoRow, AdsMes, AliquotaMes } from '@/actions/ml'
+import { custoTotalLinha, metricasAds } from '@/lib/ml-calculos'
 import { PageTitle } from '@/components/layout/PageTitle'
 
 function ProdImg({ fotoUrl, titulo, className }: { fotoUrl: string | null; titulo: string; className: string }) {
@@ -188,12 +189,14 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     return matchConta && matchBusca
   }).map(p => {
     const local = custosLocais[p.id]
+    // custo_produto é UNITÁRIO; o CMV da linha é custo × quantidade
     const custo = local?.custo ?? p.custo_produto ?? 0
+    const custoTotal = custoTotalLinha({ custo_produto: custo, quantidade: p.quantidade })
     const aliqPedido = getAliquotaParaData(p.data_compra)
     const imposto = p.valor_venda * aliqPedido
-    const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - custo - imposto
+    const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - custoTotal - imposto
     const margem = p.valor_venda > 0 ? (lucro / p.valor_venda) * 100 : 0
-    return { ...p, custo_produto: custo > 0 ? custo : p.custo_produto, lucro, margem, imposto }
+    return { ...p, custo_produto: custo > 0 ? custo : p.custo_produto, custo_total: custoTotal, lucro, margem, imposto }
   })
 
   // KPIs do período atual
@@ -202,14 +205,14 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
   const totalTarifas  = filtrados.reduce((s, p) => s + p.tarifa, 0)
   const totalFrete    = filtrados.reduce((s, p) => s + p.frete_vendedor, 0)
   const totalImpostos = filtrados.reduce((s, p) => s + p.imposto, 0)
-  const totalCustos   = filtrados.reduce((s, p) => s + (p.custo_produto ?? 0), 0)
+  const totalCustos   = filtrados.reduce((s, p) => s + p.custo_total, 0)
   const margemMedia   = totalFat > 0 ? (totalLucro / totalFat) * 100 : 0
   const ticketMedio   = filtrados.length > 0 ? totalFat / filtrados.length : 0
   const lucroMedio    = filtrados.length > 0 ? totalLucro / filtrados.length : 0
 
   // KPIs do período anterior (para delta)
   const anterior = filtrarPeriodoAnterior(pedidos, periodo).filter(p => p.status !== 'cancelled').map(p => {
-    const custo = p.custo_produto ?? 0
+    const custo = custoTotalLinha(p)
     const aliqPedido = getAliquotaParaData(p.data_compra)
     const imposto = p.valor_venda * aliqPedido
     const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - custo - imposto
@@ -259,9 +262,9 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     return soma
   })()
   const lucroComAds = totalLucro - (adsSubtraido ? totalAds : 0)
-  const roas  = totalAds > 0 ? totalFat / totalAds : 0
-  const acos  = totalFat > 0 ? (totalAds / totalFat) * 100 : 0
-  const tacos = totalLucro > 0 ? (totalAds / totalLucro) * 100 : 0
+  // Sem receita atribuída por anúncio (Product Ads API ainda não integrada), ROAS/ACOS usam o
+  // faturamento total e ficam iguais ao TACOS. TACOS = ads ÷ faturamento (antes era ÷ lucro).
+  const { roas, acos, tacos } = metricasAds(totalAds, totalFat)
 
   // Chave única por produto — consistente em todos os cálculos
   const prodChave = (p: { sku: string | null; ml_item_id: string; titulo: string }) =>
@@ -382,7 +385,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
 
   function exportarCSV() {
     const header = ['Data', 'Conta', 'Comprador', 'SKU', 'Título', 'Qtde', 'Valor', 'Tarifa', 'Frete', 'Imposto', 'Custo', 'Lucro', 'Margem%']
-    const rows = filtrados.map(p => [fmt(p.data_compra), p.nickname, p.comprador_nick, p.sku ?? '', `"${p.titulo}"`, p.quantidade, p.valor_venda.toFixed(2), p.tarifa.toFixed(2), p.frete_vendedor.toFixed(2), p.imposto.toFixed(2), (p.custo_produto ?? 0).toFixed(2), p.lucro.toFixed(2), p.margem.toFixed(1) + '%'])
+    const rows = filtrados.map(p => [fmt(p.data_compra), p.nickname, p.comprador_nick, p.sku ?? '', `"${p.titulo}"`, p.quantidade, p.valor_venda.toFixed(2), p.tarifa.toFixed(2), p.frete_vendedor.toFixed(2), p.imposto.toFixed(2), p.custo_total.toFixed(2), p.lucro.toFixed(2), p.margem.toFixed(1) + '%'])
     const csv = [header, ...rows].map(r => r.join(';')).join('\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -937,7 +940,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                       <button onClick={() => { setEditandoId(p.id); setCustoTemp(p.custo_produto?.toFixed(2).replace('.', ',') ?? '') }}
                         className="flex items-center gap-1 text-slate-400 hover:text-slate-600">
                         <Pencil className="w-3 h-3" />
-                        <span>{p.custo_produto != null && p.custo_produto > 0 ? mascaraValor(vis >= 3 ? '██' : `C:${brl(p.custo_produto)}`) : 'custo'}</span>
+                        <span>{p.custo_produto != null && p.custo_produto > 0 ? mascaraValor(vis >= 3 ? '██' : `C:${brl(p.custo_total)}${p.quantidade > 1 ? ` (${p.quantidade}×)` : ''}`) : 'custo'}</span>
                       </button>
                     )}
                   </div>
@@ -1011,7 +1014,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                       <button onClick={() => { setEditandoId(p.id); setCustoTemp(p.custo_produto?.toFixed(2).replace('.', ',') ?? '') }}
                         className="group flex items-center gap-1 justify-end w-full font-mono text-slate-600 hover:text-slate-800">
                         {p.custo_produto != null && p.custo_produto > 0
-                          ? mascaraValor(vis >= 3 ? '███' : brl(p.custo_produto))
+                          ? mascaraValor(vis >= 3 ? '███' : (p.quantidade > 1 ? `${brl(p.custo_total)} (${p.quantidade}×)` : brl(p.custo_total)))
                           : <span className="text-slate-300">— editar</span>}
                         <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 text-slate-400 transition-opacity" />
                       </button>

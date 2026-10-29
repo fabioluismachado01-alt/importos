@@ -183,6 +183,7 @@ export interface MLOrderItem {
     seller_sku: string | null
     thumbnail?: string
     picture_url?: string
+    logistic_type?: string | null
   }
   quantity: number
   unit_price: number
@@ -204,6 +205,8 @@ export interface MLOrder {
     id?: number
     cost?: number | null
     status?: string
+    logistic_type?: string | null
+    mode?: string | null
   } | null
   total_amount: number
   paid_amount: number
