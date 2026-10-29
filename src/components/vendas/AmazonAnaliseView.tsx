@@ -45,6 +45,7 @@ interface GeralData {
   reembolsos_bruto: number; reembolsos_comissao: number
   reembolsos_fba: number; reembolsos_liquido: number
   ajustes: number; publicidade_interno: number
+  fba_frete?: number  // Taxa de Estoque FBA (transportadora) — vem de /api/analisar-relatorio-vendas
   skus: SkuGeral[]
   // Campos do Relatório de Pedidos (base competência)
   receita_total?: number; pedidos?: number; unidades?: number
@@ -319,6 +320,8 @@ export function AmazonAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
   const usandoCompetencia = !!dadosG && (dadosG.receita_total ?? 0) > 0
   const rec      = dadosV?.receita_bruta   ?? 0
   const comissao = dadosV?.comissao_amazon ?? 0
+  // Taxa de comissão efetiva do CSV de transações (usada no rótulo do modo competência)
+  const taxaComissaoCSV = rec > 0 ? comissao / rec : 0
   const fbaFull    = geralEfetivo?.fba_fulfillment ?? 0
   const fbaArm     = geralEfetivo?.fba_armazenagem ?? 0
   const mensal     = geralEfetivo?.mensalidade ?? 0

@@ -299,6 +299,8 @@ export function TiktokAnaliseView({ salvas = [] }: { salvas?: MesSalvo[] }) {
   // Receita e taxas: sempre do Demonstrativo (01-30 do mês, sem misturar liquidações)
   const rec  = dadosD?.receita_bruta ?? 0
   const taxas = dadosD?.taxas_plataforma_servico ?? 0
+  // Taxa efetiva do Demonstrativo (usada no rótulo do modo competência)
+  const taxaEfetiva = rec > 0 ? taxas / rec : 0
 
   const afiliados = dadosD?.com_afiliados ?? 0
   // CMV: usa pedidos (exato) quando disponível, senão heurística do demonstrativo
