@@ -3,7 +3,7 @@ import { getIronSession } from 'iron-session'
 import { SESSION_OPTIONS } from '@/lib/auth'
 import type { SessionData } from '@/types/auth'
 
-const PUBLIC_PATHS = ['/login', '/api/auth', '/api/ml-proxy', '/api/ml/callback', '/api/ping', '/api/seed-demo']
+const PUBLIC_PATHS = ['/login', '/api/auth', '/api/ml-proxy', '/api/ml/callback', '/api/ping', '/api/seed-demo', '/api/cron']  // /api/cron valida CRON_SECRET na própria rota
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl

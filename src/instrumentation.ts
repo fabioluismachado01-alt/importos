@@ -1,6 +1,8 @@
 export async function register() {
   // Só roda no Node.js (não no Edge Runtime)
   if (process.env.NEXT_RUNTIME !== 'nodejs') return
+  // No Vercel o setTimeout não sobrevive entre requisições: o sync roda via Vercel Cron (/api/cron/ml-sync)
+  if (process.env.VERCEL) return
 
   const INTERVALO_CHECK_MS = 15 * 60 * 1000 // verifica a cada 15 min quem precisa sincronizar
   const TIMEOUT_TICK_MS    = 2 * 60 * 1000  // aborta o tick se demorar mais de 2 minutos

@@ -1,1 +1,5 @@
-{}
+{
+  "crons": [
+    { "path": "/api/cron/ml-sync", "schedule": "0 9 * * *" }
+  ]
+}
