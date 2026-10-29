@@ -195,6 +195,15 @@ export function resumoAReceber(pedidos: Array<{
     p.status === 'paid' && !devolucaoConcluida(p.devolucao_status) &&
     p.liquidacao_status != null && p.liquidacao_status !== 'released')
   const total = pend.reduce((s, p) => s + liquidoRepasse(p), 0)
+  const agora = Date.now()
   const datas = pend.map(p => (p.liquidacao_data ? new Date(p.liquidacao_data).getTime() : NaN)).filter(Number.isFinite)
-  return { total, pedidos: pend.length, proxima: datas.length ? new Date(Math.min(...datas)) : null }
+  // atrasado: data de liberação já passou e o dinheiro continua retido
+  const atrasados = pend.filter(p => p.liquidacao_data && new Date(p.liquidacao_data).getTime() < agora)
+  const futuras = datas.filter(t => t >= agora)
+  return {
+    total, pedidos: pend.length,
+    proxima: futuras.length ? new Date(Math.min(...futuras)) : null,
+    atrasados: atrasados.length,
+    valorAtrasado: atrasados.reduce((s, p) => s + liquidoRepasse(p), 0),
+  }
 }

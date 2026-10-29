@@ -800,6 +800,11 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
             {aReceber.pedidos} {aReceber.pedidos === 1 ? 'venda' : 'vendas'}
             {aReceber.proxima && <> · próximo {aReceber.proxima.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</>}
           </p>
+          {aReceber.atrasados > 0 && (
+            <p className="text-[9px] font-semibold text-red-600 mt-0.5" title="Data de liberação já passou e o Mercado Pago não liberou. Confira no Mercado Pago se há retenção.">
+              {aReceber.atrasados} atrasado{aReceber.atrasados > 1 ? 's' : ''} · {mascaraValor(vis >= 3 ? '███' : brl(aReceber.valorAtrasado))}
+            </p>
+          )}
         </div>
       </div>
 
@@ -1190,9 +1195,10 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                   <td className="px-3 py-2 max-w-[200px]">
                     <p className="font-medium text-slate-700 truncate" title={p.titulo}>{mascaraNome(p.titulo)}</p>
                     {p.liquidacao_status && p.liquidacao_status !== 'released' && (
-                      <span className="inline-block mt-0.5 text-[9px] font-semibold text-amber-700 bg-amber-50 rounded px-1.5"
+                      <span className={`inline-block mt-0.5 text-[9px] font-semibold rounded px-1.5 ${p.liquidacao_data && new Date(p.liquidacao_data).getTime() < Date.now() ? 'text-red-700 bg-red-50' : 'text-amber-700 bg-amber-50'}`}
                         title="O Mercado Pago ainda não liberou o repasse desta venda">
-                        repasse {p.liquidacao_data ? new Date(p.liquidacao_data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'pendente'}
+                        {p.liquidacao_data && new Date(p.liquidacao_data).getTime() < Date.now() ? 'repasse atrasado ' : 'repasse '}
+                        {p.liquidacao_data ? new Date(p.liquidacao_data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'pendente'}
                       </span>
                     )}
                   </td>

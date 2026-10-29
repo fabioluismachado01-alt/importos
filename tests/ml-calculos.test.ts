@@ -152,8 +152,8 @@ describe('resumoAReceber', () => {
   const base = { status: 'paid', devolucao_status: null, valor_venda: 100, tarifa: 12, frete_vendedor: 8 }
   it('soma só o que está pendente de repasse e pega a próxima data', () => {
     const r = resumoAReceber([
-      { ...base, liquidacao_status: 'pending', liquidacao_data: '2026-11-05T00:00:00Z' },
-      { ...base, liquidacao_status: 'pending', liquidacao_data: '2026-11-02T00:00:00Z' },
+      { ...base, liquidacao_status: 'pending', liquidacao_data: '2999-11-05T00:00:00Z' },
+      { ...base, liquidacao_status: 'pending', liquidacao_data: '2999-11-02T00:00:00Z' },
       { ...base, liquidacao_status: 'released', liquidacao_data: '2026-10-20T00:00:00Z' },
       { ...base, liquidacao_status: null, liquidacao_data: null },
       { ...base, status: 'cancelled', liquidacao_status: 'pending', liquidacao_data: null },
@@ -161,6 +161,16 @@ describe('resumoAReceber', () => {
     ])
     expect(r.total).toBe(160)
     expect(r.pedidos).toBe(2)
-    expect(r.proxima?.toISOString().slice(0, 10)).toBe('2026-11-02')
+    expect(r.proxima?.toISOString().slice(0, 10)).toBe('2999-11-02')
+    expect(r.atrasados).toBe(0)
+  })
+  it('conta repasse atrasado (data já passou) e a próxima data ignora as vencidas', () => {
+    const r = resumoAReceber([
+      { ...base, liquidacao_status: 'pending', liquidacao_data: '2020-01-01T00:00:00Z' },
+      { ...base, liquidacao_status: 'pending', liquidacao_data: '2999-01-01T00:00:00Z' },
+    ])
+    expect(r.atrasados).toBe(1)
+    expect(r.valorAtrasado).toBe(80)
+    expect(r.proxima?.getUTCFullYear()).toBe(2999)
   })
 })
