@@ -453,6 +453,7 @@ export type MLPedidoRow = {
   lucro: number
   margem: number
   devolucao_status: string | null
+  logistica_tipo: string | null
 }
 
 export async function getMLPedidos(filtros?: {
@@ -510,6 +511,7 @@ export async function getMLPedidos(filtros?: {
       lucro,
       margem,
       devolucao_status: p.devolucao_status,
+      logistica_tipo: p.logistica_tipo,
     }
   })
 }
@@ -1020,6 +1022,25 @@ export type AdsMes = {
   ano: number
   mes: number
   desp_ads_ml: number
+}
+
+// ─── Custo de logística própria (por tipo de envio) ──────────────────────────
+
+export async function getCustosLogistica(): Promise<Record<string, number>> {
+  const { workspaceId } = await getAuthContext()
+  const rows = await prisma.ml_logistica_custo.findMany({ where: { workspace_id: workspaceId } })
+  return Object.fromEntries(rows.map(r => [r.logistica_tipo, r.custo_por_pedido]))
+}
+
+export async function salvarCustoLogistica(logisticaTipo: string, custoPorPedido: number) {
+  const { workspaceId } = await getAuthContext()
+  if (!Number.isFinite(custoPorPedido) || custoPorPedido < 0) throw new Error('Custo inválido')
+  await prisma.ml_logistica_custo.upsert({
+    where: { workspace_id_logistica_tipo: { workspace_id: workspaceId, logistica_tipo: logisticaTipo } },
+    create: { workspace_id: workspaceId, logistica_tipo: logisticaTipo, custo_por_pedido: custoPorPedido },
+    update: { custo_por_pedido: custoPorPedido },
+  })
+  revalidatePath('/marketplaces/pedidos')
 }
 
 export type AdsDiaRow = { data: string; conexao_id: string; custo: number; receita: number }

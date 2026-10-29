@@ -846,6 +846,17 @@ model ml_pedido {
   @@index([conexao_id])
 }
 
+// Custo de logística própria por pedido, por tipo de envio do ML (Flex, agência…) — entra em "Outros"
+model ml_logistica_custo {
+  id               String   @id @default(cuid())
+  workspace_id     String
+  logistica_tipo   String   // self_service | drop_off | xd_drop_off | fulfillment | not_specified
+  custo_por_pedido Float    @default(0)
+  updated_at       DateTime @updatedAt
+
+  @@unique([workspace_id, logistica_tipo])
+}
+
 // Product Ads do Mercado Livre — totais diários por conexão (Etapa 2)
 model ml_ads_dia {
   id             String   @id @default(cuid())

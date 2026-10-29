@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Search, RefreshCw, Download, Pencil, Check, X, TrendingUp, TrendingDown, Eye, EyeOff, ShoppingBag, CheckCircle2 } from 'lucide-react'
-import { sincronizarMLPedidos, editarCustoPedido } from '@/actions/ml'
+import { sincronizarMLPedidos, editarCustoPedido, salvarCustoLogistica } from '@/actions/ml'
 import type { MLPedidoRow, AdsMes, AdsDiaRow, AliquotaMes } from '@/actions/ml'
 import { custoTotalLinha, metricasAds, devolucaoConcluida, perdaDevolucao } from '@/lib/ml-calculos'
 import { PageTitle } from '@/components/layout/PageTitle'
@@ -28,6 +28,17 @@ interface Props {
   adsMensais: AdsMes[]
   adsDiarios: AdsDiaRow[]
   aliquotasHistorico?: { historico: AliquotaMes[]; padrao: number }
+  custosLogistica: Record<string, number>
+}
+
+// Tipos de envio do ML (order.shipping.logistic_type / mode)
+const LOGISTICA_ROTULO: Record<string, string> = {
+  fulfillment: 'Full (ML)',
+  self_service: 'Flex / envio próprio',
+  drop_off: 'Agência',
+  xd_drop_off: 'Coleta / Places',
+  cross_docking: 'Coleta',
+  not_specified: 'Não especificado',
 }
 
 function RingChart({ pct, color = '#10b981' }: { pct: number; color?: string }) {
@@ -137,7 +148,7 @@ function periodoParaDias(periodo: Periodo): number {
   return 90
 }
 
-export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, adsDiarios, aliquotasHistorico }: Props) {
+export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, adsDiarios, aliquotasHistorico, custosLogistica }: Props) {
   // Helper: retorna a alíquota correta para a data do pedido (como decimal, ex: 0.08)
   function getAliquotaParaData(dataPedido: string | Date): number {
     const d = new Date(dataPedido)
@@ -182,6 +193,9 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
 
   const periodoFiltrado = filtrarPorPeriodo(pedidos, periodo, customInicio, customFim)
 
+  const [custosLog, setCustosLog] = useState<Record<string, number>>(custosLogistica)
+  const custoLogisticaDe = (tipo: string | null) => custosLog[tipo ?? 'not_specified'] ?? 0
+
   const filtrados = periodoFiltrado.filter(p => {
     if (p.status === 'cancelled') return false
     if (devolucaoConcluida(p.devolucao_status)) return false // receita voltou ao comprador: vai para "Devolvidas"
@@ -196,9 +210,11 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     const custoTotal = custoTotalLinha({ custo_produto: custo, quantidade: p.quantidade })
     const aliqPedido = getAliquotaParaData(p.data_compra)
     const imposto = p.valor_venda * aliqPedido
-    const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - custoTotal - imposto
+    // Outros = custo de logística própria do tipo de envio (Flex, agência…), cadastrado na aba Logística
+    const outros = custoLogisticaDe(p.logistica_tipo)
+    const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - custoTotal - imposto - outros
     const margem = p.valor_venda > 0 ? (lucro / p.valor_venda) * 100 : 0
-    return { ...p, custo_produto: custo > 0 ? custo : p.custo_produto, custo_total: custoTotal, lucro, margem, imposto }
+    return { ...p, custo_produto: custo > 0 ? custo : p.custo_produto, custo_total: custoTotal, outros, lucro, margem, imposto }
   })
 
   // Devoluções do período (mesma conta/busca da tabela)
@@ -221,6 +237,20 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
   const totalFrete    = filtrados.reduce((s, p) => s + p.frete_vendedor, 0)
   const totalImpostos = filtrados.reduce((s, p) => s + p.imposto, 0)
   const totalCustos   = filtrados.reduce((s, p) => s + p.custo_total, 0)
+  const totalOutros   = filtrados.reduce((s, p) => s + p.outros, 0)
+
+  // Vendas sem custo cadastrado: o lucro delas sai superestimado
+  const semCusto = (() => {
+    const linhas = filtrados.filter(p => !p.custo_produto || p.custo_produto <= 0)
+    const skus = new Map<string, { sku: string; titulo: string; vendas: number; fat: number }>()
+    for (const p of linhas) {
+      const k = p.sku ?? p.ml_item_id
+      const c = skus.get(k) ?? { sku: p.sku ?? '(sem SKU)', titulo: p.titulo, vendas: 0, fat: 0 }
+      c.vendas += 1; c.fat += p.valor_venda
+      skus.set(k, c)
+    }
+    return { vendas: linhas.length, fat: linhas.reduce((s, p) => s + p.valor_venda, 0), skus: Array.from(skus.values()).sort((a, b) => b.fat - a.fat) }
+  })()
   const margemMedia   = totalFat > 0 ? (totalLucro / totalFat) * 100 : 0
   const ticketMedio   = filtrados.length > 0 ? totalFat / filtrados.length : 0
   const lucroMedio    = filtrados.length > 0 ? totalLucro / filtrados.length : 0
@@ -230,7 +260,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     const custo = custoTotalLinha(p)
     const aliqPedido = getAliquotaParaData(p.data_compra)
     const imposto = p.valor_venda * aliqPedido
-    const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - custo - imposto
+    const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - custo - imposto - custoLogisticaDe(p.logistica_tipo)
     return { ...p, lucro }
   })
   const antFat    = anterior.reduce((s, p) => s + p.valor_venda, 0)
@@ -445,8 +475,25 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
       ...item,
       totalFrete: filtrados.filter(p => prodChave(p) === item.chave).reduce((s, p) => s + p.frete_vendedor, 0),
     })).filter(i => i.totalFrete > 0)
-    return { comFrete: comFrete.length, semFrete: semFrete.length, totalFrete, avgFrete: filtrados.length > 0 ? totalFrete / filtrados.length : 0, topFrete, pctFat: totalFat > 0 ? (totalFrete / totalFat) * 100 : 0 }
+    const porTipo = new Map<string, { tipo: string; pedidos: number; fat: number; frete: number; outros: number }>()
+    for (const p of filtrados) {
+      const tipo = p.logistica_tipo ?? 'not_specified'
+      const c = porTipo.get(tipo) ?? { tipo, pedidos: 0, fat: 0, frete: 0, outros: 0 }
+      c.pedidos += 1; c.fat += p.valor_venda; c.frete += p.frete_vendedor; c.outros += p.outros
+      porTipo.set(tipo, c)
+    }
+    const tipos = Array.from(porTipo.values()).sort((a, b) => b.fat - a.fat)
+    return { comFrete: comFrete.length, semFrete: semFrete.length, totalFrete, avgFrete: filtrados.length > 0 ? totalFrete / filtrados.length : 0, topFrete, pctFat: totalFat > 0 ? (totalFrete / totalFat) * 100 : 0, tipos }
   })()
+
+  const [custoLogEdit, setCustoLogEdit] = useState<Record<string, string>>({})
+  async function salvarLogistica(tipo: string) {
+    const v = parseFloat((custoLogEdit[tipo] ?? '').replace(',', '.'))
+    if (!Number.isFinite(v) || v < 0) return
+    await salvarCustoLogistica(tipo, v)
+    setCustosLog(prev => ({ ...prev, [tipo]: v }))
+    setCustoLogEdit(prev => { const n = { ...prev }; delete n[tipo]; return n })
+  }
 
   function renderCurvaABC() {
     if (curvaABC.length === 0) return <p className="text-xs text-slate-400 text-center py-4">Nenhum produto nesse período.</p>
@@ -703,7 +750,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
       </div>
 
       {/* KPIs — linha 2: custos com color coding */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
         <div className="bg-white rounded-xl p-3 shadow-sm">
           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tarifas ML</p>
           <p className="text-sm font-black mt-0.5 text-slate-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalTarifas))}</p>
@@ -724,6 +771,11 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
           <p className="text-sm font-black mt-0.5 text-orange-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalCustos))}</p>
           <p className="text-[9px] text-slate-400 mt-0.5">{pct(totalFat > 0 ? (totalCustos / totalFat) * 100 : 0)} do fat.</p>
         </div>
+        <div className="bg-white rounded-xl p-3 shadow-sm" title="Custo de logística própria por pedido (Flex, agência…). Cadastre na aba Logística.">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Outros</p>
+          <p className="text-sm font-black mt-0.5 text-slate-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalOutros))}</p>
+          <p className="text-[9px] text-slate-400 mt-0.5">{pct(totalFat > 0 ? (totalOutros / totalFat) * 100 : 0)} · logística própria</p>
+        </div>
         <div className="bg-emerald-50 rounded-xl p-3 shadow-sm border-l-2 border-emerald-400">
           <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Lucro líquido</p>
           <p className={`text-sm font-black mt-0.5 ${totalLucro >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{mascaraValor(vis >= 3 ? '█████' : brl(totalLucro))}</p>
@@ -731,6 +783,19 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
           <Delta atual={totalLucro} anterior={antLucro} />
         </div>
       </div>
+
+      {/* Alerta: vendas sem custo cadastrado */}
+      {semCusto.vendas > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3">
+          <p className="text-xs font-bold text-amber-800">
+            ⚠ {semCusto.vendas} {semCusto.vendas === 1 ? 'venda' : 'vendas'} sem custo de produto ({mascaraValor(vis >= 3 ? '███' : brl(semCusto.fat))}) — o lucro do período está superestimado.
+            {' '}<Link href="/produtos" className="underline">Cadastrar custos</Link>
+          </p>
+          <p className="text-[11px] text-amber-700 mt-1">
+            {semCusto.skus.slice(0, 6).map(s => `${s.sku} (${s.vendas})`).join(' · ')}{semCusto.skus.length > 6 ? ` · +${semCusto.skus.length - 6}` : ''}
+          </p>
+        </div>
+      )}
 
       {/* Bloco de Ads */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm px-5 py-3 flex flex-wrap items-center gap-6">
@@ -819,6 +884,30 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                       <p className="text-[10px] text-slate-400">{k.sub}</p>
                     </div>
                   ))}
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Por tipo de envio · custo próprio por pedido</p>
+                  <div className="divide-y divide-slate-50">
+                    {logistica.tipos.map(t => (
+                      <div key={t.tipo} className="flex items-center gap-3 py-1.5 text-xs">
+                        <span className="flex-1 font-semibold text-slate-700">{LOGISTICA_ROTULO[t.tipo] ?? t.tipo}</span>
+                        <span className="w-20 text-right text-slate-500">{t.pedidos} ped.</span>
+                        <span className="w-24 text-right text-slate-600">{mascaraValor(vis >= 3 ? '███' : brl(t.fat))}</span>
+                        <span className="w-24 text-right text-orange-600" title="Frete cobrado pelo ML">{mascaraValor(vis >= 3 ? '███' : brl(t.frete))}</span>
+                        <span className="flex items-center gap-1" title="Quanto você gasta por pedido para entregar por conta própria (motoboy, ida à agência…)">
+                          R$
+                          <input
+                            value={custoLogEdit[t.tipo] ?? (custosLog[t.tipo] ?? 0).toFixed(2).replace('.', ',')}
+                            onChange={e => setCustoLogEdit(prev => ({ ...prev, [t.tipo]: e.target.value }))}
+                            onKeyDown={e => { if (e.key === 'Enter') salvarLogistica(t.tipo) }}
+                            onBlur={() => { if (custoLogEdit[t.tipo] != null) salvarLogistica(t.tipo) }}
+                            className="w-16 text-right border border-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-emerald-400"
+                          />
+                          <span className="text-slate-400">/ped.</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 {logistica.topFrete.length > 0 && (
                   <div>
