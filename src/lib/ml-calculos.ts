@@ -138,3 +138,40 @@ export function perdaDevolucao(p: {
 export function statusNormalizado(statusML: string): 'paid' | 'cancelled' {
   return statusML === 'cancelled' || statusML === 'invalid' ? 'cancelled' : 'paid'
 }
+
+// ─── Calculadora por venda (por unidade) ──────────────────────────────────────
+
+export type ParamsCalculadora = {
+  preco: number          // preço de venda por unidade
+  custo: number          // custo do produto por unidade
+  tarifaPct: number      // comissão do marketplace (fração: 0.12 = 12%)
+  tarifaFixa: number     // tarifa fixa por unidade (R$)
+  frete: number          // frete do vendedor por unidade (R$)
+  impostoPct: number     // alíquota sobre o preço (fração)
+  adsPorUnidade?: number // gasto de ads por unidade vendida (R$)
+}
+
+/** Lucro e margem por unidade. */
+export function simularLucro(p: ParamsCalculadora) {
+  const ads = p.adsPorUnidade ?? 0
+  const lucroAntesAds = p.preco * (1 - p.tarifaPct - p.impostoPct) - p.tarifaFixa - p.frete - p.custo
+  const lucro = lucroAntesAds - ads
+  return { lucro, lucroAntesAds, margem: p.preco > 0 ? (lucro / p.preco) * 100 : 0 }
+}
+
+/**
+ * Preço que entrega a margem desejada (fração sobre o preço; 0 = preço mínimo, empata).
+ * P = (custo + fixa + frete + ads) ÷ (1 − tarifa% − imposto% − margem). Null quando impossível.
+ */
+export function precoParaMargem(p: Omit<ParamsCalculadora, 'preco'>, margemAlvo: number): number | null {
+  const denom = 1 - p.tarifaPct - p.impostoPct - margemAlvo
+  if (denom <= 0) return null
+  return (p.custo + p.tarifaFixa + p.frete + (p.adsPorUnidade ?? 0)) / denom
+}
+
+/** Até quanto de ads a venda aguenta sem prejuízo: ACOS máximo (%) e ROAS mínimo (x). */
+export function equilibrioAds(p: ParamsCalculadora) {
+  const { lucroAntesAds } = simularLucro({ ...p, adsPorUnidade: 0 })
+  if (lucroAntesAds <= 0 || p.preco <= 0) return { acosMax: 0, roasMin: null as number | null }
+  return { acosMax: (lucroAntesAds / p.preco) * 100, roasMin: p.preco / lucroAntesAds }
+}

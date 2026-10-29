@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   sanitizeSaleFee, custoTotalLinha, alocarFretePorEnvio, metricasAds,
   classificarDevolucao, devolucaoConcluida, perdaDevolucao, statusNormalizado,
+  simularLucro, precoParaMargem, equilibrioAds,
 } from '../src/lib/ml-calculos'
 import { agregarPorDia } from '../src/lib/ml-ads'
 
@@ -120,5 +121,29 @@ describe('agregarPorDia (Product Ads)', () => {
     expect(r).toHaveLength(2)
     expect(r[0]).toMatchObject({ data: '2026-10-01', custo: 4, receita: 40, receita_direta: 30, unidades: 2, cliques: 15, impressoes: 150 })
     expect(r[1].custo).toBe(3)
+  })
+})
+
+describe('calculadora', () => {
+  // caso real: INV02 a R$ 99,90 — tarifa 11,5%, frete R$ 13,85, custo R$ 45,00, Simples 8%
+  const base = { preco: 99.9, custo: 45, tarifaPct: 0.115, tarifaFixa: 0, frete: 13.85, impostoPct: 0.08 }
+  it('simula o lucro por unidade', () => {
+    expect(simularLucro(base).lucro).toBeCloseTo(99.9 * 0.805 - 13.85 - 45, 2)
+  })
+  it('preço mínimo zera o lucro e preço ideal entrega a margem pedida', () => {
+    const min = precoParaMargem(base, 0)!
+    expect(simularLucro({ ...base, preco: min }).lucro).toBeCloseTo(0, 6)
+    const ideal = precoParaMargem(base, 0.2)!
+    expect(simularLucro({ ...base, preco: ideal }).margem).toBeCloseTo(20, 6)
+  })
+  it('margem impossível retorna null', () => {
+    expect(precoParaMargem({ ...base, tarifaPct: 0.5, impostoPct: 0.3 }, 0.25)).toBeNull()
+  })
+  it('ACOS máximo e ROAS mínimo de equilíbrio', () => {
+    const { acosMax, roasMin } = equilibrioAds(base)
+    const l0 = simularLucro(base).lucroAntesAds
+    expect(acosMax).toBeCloseTo((l0 / 99.9) * 100, 6)
+    expect(roasMin).toBeCloseTo(99.9 / l0, 6)
+    expect(simularLucro({ ...base, adsPorUnidade: l0 }).lucro).toBeCloseTo(0, 6)
   })
 })

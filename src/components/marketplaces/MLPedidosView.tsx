@@ -3,7 +3,8 @@
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, RefreshCw, Download, Pencil, Check, X, TrendingUp, TrendingDown, Eye, EyeOff, ShoppingBag, CheckCircle2 } from 'lucide-react'
+import { Search, RefreshCw, Download, Pencil, Check, X, TrendingUp, TrendingDown, Eye, EyeOff, ShoppingBag, CheckCircle2, Calculator } from 'lucide-react'
+import { CalculadoraVenda, type DadosCalculadora } from './CalculadoraVenda'
 import { sincronizarMLPedidos, editarCustoPedido, salvarCustoLogistica } from '@/actions/ml'
 import type { MLPedidoRow, AdsMes, AdsDiaRow, AdsItemRow, AliquotaMes } from '@/actions/ml'
 import { custoTotalLinha, metricasAds, devolucaoConcluida, perdaDevolucao } from '@/lib/ml-calculos'
@@ -428,6 +429,24 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     })
   })()
   const temAdsPorProduto = adsPorChave.size > 0
+
+  // Clique num produto do ranking → a tabela mostra só as vendas dele
+  const [produtoFiltro, setProdutoFiltro] = useState<{ chave: string; titulo: string } | null>(null)
+  const linhasTabela = produtoFiltro ? filtrados.filter(p => prodChave(p) === produtoFiltro.chave) : filtrados
+
+  // Calculadora por venda (valores por unidade)
+  const [calc, setCalc] = useState<DadosCalculadora | null>(null)
+  const abrirCalculadora = (p: (typeof filtrados)[number]) => {
+    const q = p.quantidade || 1
+    setCalc({
+      titulo: p.titulo,
+      preco: p.valor_venda / q,
+      custo: p.custo_produto ?? 0,
+      tarifaPct: p.valor_venda > 0 ? (p.tarifa / p.valor_venda) * 100 : 0,
+      frete: (p.frete_vendedor + p.outros) / q,
+      impostoPct: getAliquotaParaData(p.data_compra) * 100,
+    })
+  }
 
   const dashTabData = (() => {
     if (dashTab === 'canceladas' || dashTab === 'curvaABC' || dashTab === 'logistica') return []
@@ -985,7 +1004,10 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                   {dashTabData.map((item, i) => {
                     const cor = i === 0 ? '#10b981' : i === 1 ? '#3b82f6' : i === 2 ? '#8b5cf6' : '#94a3b8'
                     return (
-                      <div key={item.chave} className="flex items-center gap-2 px-2 py-1.5">
+                      <div key={item.chave}
+                        onClick={() => setProdutoFiltro(f => f?.chave === item.chave ? null : { chave: item.chave, titulo: item.titulo })}
+                        title="Ver só as vendas deste produto"
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded-xl cursor-pointer transition-colors ${produtoFiltro?.chave === item.chave ? 'bg-emerald-50 ring-1 ring-emerald-300' : 'hover:bg-slate-50'}`}>
                         <RingChart pct={item.pct} color={cor} />
                         <ProdImg fotoUrl={item.foto_url} titulo={item.titulo} className="w-9 h-9 rounded" />
                         <div className="min-w-0 max-w-[200px]">
@@ -1042,6 +1064,15 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
         )}
       </div>
 
+      {produtoFiltro && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full px-3 py-1 font-semibold truncate max-w-[70%]">
+            Só as vendas de: {mascaraNome(produtoFiltro.titulo)} ({linhasTabela.length})
+          </span>
+          <button onClick={() => setProdutoFiltro(null)} className="text-slate-400 hover:text-slate-600 flex items-center gap-1"><X className="w-3 h-3" /> limpar</button>
+        </div>
+      )}
+
       {/* Tabela */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
 
@@ -1061,7 +1092,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                 <p className="text-sm text-slate-400">Nenhum pedido nesse período.</p>
               )}
             </div>
-          ) : filtrados.map(p => (
+          ) : linhasTabela.map(p => (
             <div key={p.id} className={`p-3 flex gap-3 ${p.lucro < 0 ? 'bg-red-50/50' : ''}`}>
               <ProdImg fotoUrl={p.foto_url} titulo={p.titulo} className="w-11 h-11 rounded-xl shrink-0" />
               <div className="flex-1 min-w-0">
@@ -1141,7 +1172,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                   {pedidos.length === 0 ? 'Nenhum pedido sincronizado ainda. Clique em sincronizar.' : 'Nenhum pedido nesse período.'}
                 </td></tr>
               )}
-              {filtrados.map(p => (
+              {linhasTabela.map(p => (
                 <tr key={p.id} className={`hover:bg-slate-50 transition-colors ${p.lucro < 0 ? 'bg-red-50/40' : ''}`}>
                   <td className="px-3 py-2">
                     <ProdImg fotoUrl={p.foto_url} titulo={p.titulo} className="w-8 h-8 rounded-md" />
@@ -1185,8 +1216,10 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                       </button>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right">
-                    <div className={`inline-flex flex-col items-end font-black px-2 py-0.5 rounded-lg text-[11px] ${p.lucro >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <button onClick={() => abrirCalculadora(p)} title="Abrir calculadora com os dados desta venda"
+                      className="mr-1.5 align-middle text-slate-300 hover:text-emerald-600"><Calculator className="w-3.5 h-3.5" /></button>
+                    <div className={`inline-flex flex-col items-end font-black px-2 py-0.5 rounded-lg text-[11px] align-middle ${p.lucro >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                       <div className="flex items-center gap-1">
                         {p.lucro >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                         {vis >= 3 ? '█████' : brl(p.lucro)}
@@ -1200,6 +1233,8 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
           </table>
         </div>
       </div>
+
+      {calc && <CalculadoraVenda dados={calc} onClose={() => setCalc(null)} />}
     </div>
   )
 }
