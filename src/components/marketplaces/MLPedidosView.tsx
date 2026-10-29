@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, RefreshCw, Download, Pencil, Check, X, TrendingUp, TrendingDown, Eye, EyeOff, ShoppingBag, CheckCircle2, Calculator } from 'lucide-react'
+import { Search, RefreshCw, Download, Pencil, Check, X, TrendingUp, TrendingDown, Eye, EyeOff, ShoppingBag, CheckCircle2, Calculator, ShoppingCart, Receipt, XCircle, Undo2, Wallet, Percent, Truck, Landmark, Package, Boxes } from 'lucide-react'
 import { CalculadoraVenda, type DadosCalculadora } from './CalculadoraVenda'
 import { sincronizarMLPedidos, editarCustoPedido, salvarCustoLogistica } from '@/actions/ml'
 import type { MLPedidoRow, AdsMes, AdsDiaRow, AdsItemRow, AliquotaMes } from '@/actions/ml'
@@ -769,23 +769,23 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
       </div>
 
       {/* KPIs — linha 1: secundários */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-        <div className="bg-white rounded-xl p-3 shadow-sm">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Vendas</p>
-          <p className="text-sm font-black mt-0.5 text-slate-800">{vis >= 3 ? '█' : filtrados.length}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 hover:shadow-md hover:-translate-y-0.5 transition-all">
+          <div className="flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-sky-100 text-sky-600 flex items-center justify-center"><ShoppingCart className="w-3.5 h-3.5" /></span><p className="text-[10px] font-black text-sky-600 uppercase tracking-wider">Vendas</p></div>
+          <p className="text-lg font-black mt-1.5 tracking-tight text-slate-800">{vis >= 3 ? '█' : filtrados.length}</p>
           <Delta atual={filtrados.length} anterior={antVendas} />
         </div>
-        <div className="bg-white rounded-xl p-3 shadow-sm">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ticket médio</p>
-          <p className="text-sm font-black mt-0.5 text-slate-800">{mascaraValor(vis >= 3 ? '█████' : brl(ticketMedio))}</p>
+        <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 hover:shadow-md hover:-translate-y-0.5 transition-all">
+          <div className="flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center"><Receipt className="w-3.5 h-3.5" /></span><p className="text-[10px] font-black text-violet-600 uppercase tracking-wider">Ticket médio</p></div>
+          <p className="text-lg font-black mt-1.5 tracking-tight text-slate-800">{mascaraValor(vis >= 3 ? '█████' : brl(ticketMedio))}</p>
         </div>
-        <div className="bg-white rounded-xl p-3 shadow-sm">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Canceladas no período</p>
-          <p className="text-sm font-black mt-0.5 text-slate-800">{cancelados.length} <span className="text-[10px] font-normal text-slate-400">pedidos</span></p>
+        <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 hover:shadow-md hover:-translate-y-0.5 transition-all">
+          <div className="flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center"><XCircle className="w-3.5 h-3.5" /></span><p className="text-[10px] font-black text-rose-600 uppercase tracking-wider">Canceladas no período</p></div>
+          <p className="text-lg font-black mt-1.5 tracking-tight text-slate-800">{cancelados.length} <span className="text-[10px] font-normal text-slate-400">pedidos</span></p>
         </div>
-        <div className="bg-white rounded-xl p-3 shadow-sm" title="Devolvidas = reembolso ao comprador concluído (fora do faturamento). A perda soma o frete de ida e o custo do produto quando ele não voltou.">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Devolvidas</p>
-          <p className="text-sm font-black mt-0.5 text-slate-800">
+        <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 hover:shadow-md hover:-translate-y-0.5 transition-all" title="Devolvidas = reembolso ao comprador concluído (fora do faturamento). A perda soma o frete de ida e o custo do produto quando ele não voltou.">
+          <div className="flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center"><Undo2 className="w-3.5 h-3.5" /></span><p className="text-[10px] font-black text-orange-600 uppercase tracking-wider">Devolvidas</p></div>
+          <p className="text-lg font-black mt-1.5 tracking-tight text-slate-800">
             {devolvidas.length} <span className="text-[10px] font-normal text-slate-400">({mascaraValor(vis >= 3 ? '███' : brl(valorDevolvido))})</span>
           </p>
           <p className="text-[9px] text-slate-400 mt-0.5">
@@ -793,9 +793,9 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
             perda {mascaraValor(vis >= 3 ? '███' : brl(perdaDevolucoes))}
           </p>
         </div>
-        <div className="bg-white rounded-xl p-3 shadow-sm" title="Repasse do Mercado Pago ainda não liberado (valor − tarifa − frete), de todas as vendas, não só do período.">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">A receber</p>
-          <p className="text-sm font-black mt-0.5 text-slate-800">{mascaraValor(vis >= 3 ? '█████' : brl(aReceber.total))}</p>
+        <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 hover:shadow-md hover:-translate-y-0.5 transition-all" title="Repasse do Mercado Pago ainda não liberado (valor − tarifa − frete), de todas as vendas, não só do período.">
+          <div className="flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center"><Wallet className="w-3.5 h-3.5" /></span><p className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">A receber</p></div>
+          <p className="text-lg font-black mt-1.5 tracking-tight text-slate-800">{mascaraValor(vis >= 3 ? '█████' : brl(aReceber.total))}</p>
           <p className="text-[9px] text-slate-400 mt-0.5">
             {aReceber.pedidos} {aReceber.pedidos === 1 ? 'venda' : 'vendas'}
             {aReceber.proxima && <> · próximo {aReceber.proxima.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</>}
@@ -809,35 +809,35 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
       </div>
 
       {/* KPIs — linha 2: custos com color coding */}
-      <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
-        <div className="bg-white rounded-xl p-3 shadow-sm">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tarifas ML</p>
-          <p className="text-sm font-black mt-0.5 text-slate-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalTarifas))}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+        <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 hover:shadow-md hover:-translate-y-0.5 transition-all">
+          <div className="flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center"><Percent className="w-3.5 h-3.5" /></span><p className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">Tarifas ML</p></div>
+          <p className="text-lg font-black mt-1.5 tracking-tight text-slate-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalTarifas))}</p>
           <p className="text-[9px] text-slate-400 mt-0.5">{pct(totalFat > 0 ? (totalTarifas / totalFat) * 100 : 0)} do fat.</p>
         </div>
-        <div className="bg-white rounded-xl p-3 shadow-sm">
-          <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest">Frete</p>
-          <p className="text-sm font-black mt-0.5 text-amber-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalFrete))}</p>
+        <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 hover:shadow-md hover:-translate-y-0.5 transition-all">
+          <div className="flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center"><Truck className="w-3.5 h-3.5" /></span><p className="text-[10px] font-black text-amber-600 uppercase tracking-wider">Frete</p></div>
+          <p className="text-lg font-black mt-1.5 tracking-tight text-amber-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalFrete))}</p>
           <p className="text-[9px] text-slate-400 mt-0.5">{pct(totalFat > 0 ? (totalFrete / totalFat) * 100 : 0)} do fat.</p>
         </div>
-        <div className="bg-white rounded-xl p-3 shadow-sm">
-          <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Impostos</p>
-          <p className="text-sm font-black mt-0.5 text-blue-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalImpostos))}</p>
+        <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 hover:shadow-md hover:-translate-y-0.5 transition-all">
+          <div className="flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-cyan-100 text-cyan-600 flex items-center justify-center"><Landmark className="w-3.5 h-3.5" /></span><p className="text-[10px] font-black text-cyan-600 uppercase tracking-wider">Impostos</p></div>
+          <p className="text-lg font-black mt-1.5 tracking-tight text-blue-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalImpostos))}</p>
           <p className="text-[9px] text-slate-400 mt-0.5">{pct(totalFat > 0 ? (totalImpostos / totalFat) * 100 : 0)} do fat.</p>
         </div>
-        <div className="bg-white rounded-xl p-3 shadow-sm">
-          <p className="text-[9px] font-black text-orange-400 uppercase tracking-widest">Custos prod.</p>
-          <p className="text-sm font-black mt-0.5 text-orange-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalCustos))}</p>
+        <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 hover:shadow-md hover:-translate-y-0.5 transition-all">
+          <div className="flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center"><Package className="w-3.5 h-3.5" /></span><p className="text-[10px] font-black text-orange-600 uppercase tracking-wider">Custos prod.</p></div>
+          <p className="text-lg font-black mt-1.5 tracking-tight text-orange-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalCustos))}</p>
           <p className="text-[9px] text-slate-400 mt-0.5">{pct(totalFat > 0 ? (totalCustos / totalFat) * 100 : 0)} do fat.</p>
         </div>
-        <div className="bg-white rounded-xl p-3 shadow-sm" title="Custo de logística própria por pedido (Flex, agência…). Cadastre na aba Logística.">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Outros</p>
-          <p className="text-sm font-black mt-0.5 text-slate-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalOutros))}</p>
+        <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 hover:shadow-md hover:-translate-y-0.5 transition-all" title="Custo de logística própria por pedido (Flex, agência…). Cadastre na aba Logística.">
+          <div className="flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-slate-200 text-slate-600 flex items-center justify-center"><Boxes className="w-3.5 h-3.5" /></span><p className="text-[10px] font-black text-slate-600 uppercase tracking-wider">Outros</p></div>
+          <p className="text-lg font-black mt-1.5 tracking-tight text-slate-600">{mascaraValor(vis >= 3 ? '█████' : brl(totalOutros))}</p>
           <p className="text-[9px] text-slate-400 mt-0.5">{pct(totalFat > 0 ? (totalOutros / totalFat) * 100 : 0)} · logística própria</p>
         </div>
-        <div className="bg-emerald-50 rounded-xl p-3 shadow-sm border-l-2 border-emerald-400">
-          <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Lucro líquido</p>
-          <p className={`text-sm font-black mt-0.5 ${totalLucro >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{mascaraValor(vis >= 3 ? '█████' : brl(totalLucro))}</p>
+        <div className="bg-gradient-to-br from-emerald-500 to-teal-500 rounded-2xl p-3.5 shadow-md text-white [&_.text-slate-400]:text-white/80 [&_.text-emerald-600]:text-white [&_.text-red-600]:text-red-100">
+          <div className="flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center"><TrendingUp className="w-3.5 h-3.5" /></span><p className="text-[10px] font-black uppercase tracking-wider">Lucro líquido</p></div>
+          <p className={`text-lg font-black mt-1.5 tracking-tight ${totalLucro >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{mascaraValor(vis >= 3 ? '█████' : brl(totalLucro))}</p>
           <p className="text-[9px] text-slate-400 mt-0.5">{pct(margemMedia)} mg</p>
           <Delta atual={totalLucro} anterior={antLucro} />
         </div>
@@ -857,7 +857,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
       )}
 
       {/* Bloco de Ads */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm px-5 py-3 flex flex-wrap items-center gap-6">
+      <div className="bg-white border border-slate-100 border-l-4 border-l-ouro rounded-2xl shadow-sm px-5 py-3 flex flex-wrap items-center gap-6">
         <div className="flex items-center gap-3">
           <div>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -1053,7 +1053,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                   {d.label}: {vis === 0 ? brl(d.fat) : '••••'} · {d.qtde} pedidos
                 </div>
                 <div className="w-full rounded-t-sm flex flex-col justify-end" style={{ height: '72px' }}>
-                  <div className={`w-full rounded-t-sm ${d.lucro >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`}
+                  <div className={`w-full rounded-t-md shadow-sm transition-all group-hover:brightness-110 ${d.lucro >= 0 ? 'bg-gradient-to-t from-emerald-500 to-teal-300' : 'bg-gradient-to-t from-rose-500 to-rose-300'}`}
                     style={{ height: `${Math.max((d.fat / maxFat) * 100, 2)}%`, minHeight: '2px' }} />
                 </div>
                 <span className="text-[8px] text-slate-400 leading-none">{d.label}</span>
@@ -1167,25 +1167,24 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
         <div className="hidden md:block overflow-x-auto">
           <table ref={tableRef} className="w-full text-xs">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50">
-                <th className="text-left px-3 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest w-10">Foto</th>
-                <th className="text-left px-3 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">Título</th>
-                {conexoes.length > 1 && <th className="text-left px-3 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">Conta</th>}
-                <th className="text-left px-3 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">Comprador</th>
-                <th className="text-left px-3 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">SKU</th>
-                <th className="text-left px-3 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">Data</th>
-                <th className="text-right px-3 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">Qtde</th>
-                <th className="text-right px-3 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">Valor</th>
-                <th className="text-right px-3 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">Tarifa</th>
-                <th className="text-right px-3 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">Frete</th>
-                <th className="text-right px-3 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">Imposto</th>
-                <th className="text-right px-3 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">Custo</th>
-                <th className="text-right px-3 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">Lucro / Mg</th>
+              <tr className="bg-marinho">
+                <th className="text-left px-3 py-2.5 text-[9px] font-black text-white/70 uppercase tracking-widest w-10">Foto</th>
+                <th className="text-left px-3 py-2.5 text-[9px] font-black text-white/70 uppercase tracking-widest">Título</th>
+                {conexoes.length > 1 && <th className="text-left px-3 py-2.5 text-[9px] font-black text-white/70 uppercase tracking-widest">Conta</th>}
+                <th className="text-left px-3 py-2.5 text-[9px] font-black text-white/70 uppercase tracking-widest">SKU</th>
+                <th className="text-left px-3 py-2.5 text-[9px] font-black text-white/70 uppercase tracking-widest">Data</th>
+                <th className="text-right px-3 py-2.5 text-[9px] font-black text-white/70 uppercase tracking-widest">Qtde</th>
+                <th className="text-right px-3 py-2.5 text-[9px] font-black text-white/70 uppercase tracking-widest">Valor</th>
+                <th className="text-right px-3 py-2.5 text-[9px] font-black text-white/70 uppercase tracking-widest">Tarifa</th>
+                <th className="text-right px-3 py-2.5 text-[9px] font-black text-white/70 uppercase tracking-widest">Outros</th>
+                <th className="text-right px-3 py-2.5 text-[9px] font-black text-white/70 uppercase tracking-widest">Frete</th>
+                                <th className="text-right px-3 py-2.5 text-[9px] font-black text-white/70 uppercase tracking-widest">Custo</th>
+                <th className="text-right px-3 py-2.5 text-[9px] font-black text-ouro uppercase tracking-widest">Lucro</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filtrados.length === 0 && (
-                <tr><td colSpan={13} className="text-center py-12 text-slate-400 text-sm">
+                <tr><td colSpan={12} className="text-center py-12 text-slate-400 text-sm">
                   {pedidos.length === 0 ? 'Nenhum pedido sincronizado ainda. Clique em sincronizar.' : 'Nenhum pedido nesse período.'}
                 </td></tr>
               )}
@@ -1196,6 +1195,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                   </td>
                   <td className="px-3 py-2 max-w-[200px]">
                     <p className="font-medium text-slate-700 truncate" title={p.titulo}>{mascaraNome(p.titulo)}</p>
+                    <p className="text-[10px] text-slate-400 truncate">{mascaraNome(p.comprador_nick)}</p>
                     {p.liquidacao_status && p.liquidacao_status !== 'released' && (
                       <span className={`inline-block mt-0.5 text-[9px] font-semibold rounded px-1.5 ${p.liquidacao_data && new Date(p.liquidacao_data).getTime() < Date.now() ? 'text-red-700 bg-red-50' : 'text-amber-700 bg-amber-50'}`}
                         title="O Mercado Pago ainda não liberou o repasse desta venda">
@@ -1205,7 +1205,6 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                     )}
                   </td>
                   {conexoes.length > 1 && <td className="px-3 py-2 text-slate-500">{mascaraNome(p.nickname)}</td>}
-                  <td className="px-3 py-2 text-slate-500 font-mono">{mascaraNome(p.comprador_nick)}</td>
                   <td className="px-3 py-2">
                     {p.sku ? <span className="bg-slate-100 text-slate-600 font-mono px-1.5 py-0.5 rounded text-[10px]">{p.sku}</span> : <span className="text-slate-300">—</span>}
                   </td>
@@ -1216,11 +1215,13 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                     <div>{mascaraValor(vis >= 3 ? '███' : brl(p.tarifa))}</div>
                     <div className="text-[9px] text-slate-400">{p.valor_venda > 0 ? pct((p.tarifa / p.valor_venda) * 100) : ''}</div>
                   </td>
+                  <td className="px-3 py-2 text-right font-mono text-slate-500" title="Custo de logística própria (Flex, agência…), cadastrado na aba Logística">
+                    {p.outros > 0 ? mascaraValor(vis >= 3 ? '███' : brl(p.outros)) : <span className="text-slate-300">R$ 0,00</span>}
+                  </td>
                   <td className="px-3 py-2 text-right font-mono text-orange-600">
                     <div>{mascaraValor(vis >= 3 ? '███' : brl(p.frete_vendedor))}</div>
                     <div className="text-[9px] text-slate-400">{p.valor_venda > 0 && p.frete_vendedor > 0 ? pct((p.frete_vendedor / p.valor_venda) * 100) : ''}</div>
                   </td>
-                  <td className="px-3 py-2 text-right font-mono text-orange-600">{mascaraValor(vis >= 3 ? '███' : brl(p.imposto))}</td>
                   <td className="px-3 py-2 text-right">
                     {editandoId === p.id ? (
                       <div className="flex items-center gap-1 justify-end">
@@ -1243,7 +1244,8 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     <button onClick={() => abrirCalculadora(p)} title="Abrir calculadora com os dados desta venda"
                       className="mr-1.5 align-middle text-slate-300 hover:text-ouro-escuro"><Calculator className="w-3.5 h-3.5" /></button>
-                    <div className={`inline-flex flex-col items-end font-black px-2 py-0.5 rounded-lg text-[11px] align-middle ${p.lucro >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                    <div title={vis >= 3 ? undefined : `Valor ${brl(p.valor_venda)} − Tarifa ${brl(p.tarifa)} − Outros ${brl(p.outros)} − Frete ${brl(p.frete_vendedor)} − Imposto ${brl(p.imposto)} − Custo ${brl(p.custo_total)} = Lucro ${brl(p.lucro)}`}
+                      className={`inline-flex flex-col items-end font-black px-2 py-0.5 rounded-lg text-[11px] align-middle ${p.lucro >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                       <div className="flex items-center gap-1">
                         {p.lucro >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                         {vis >= 3 ? '█████' : brl(p.lucro)}
