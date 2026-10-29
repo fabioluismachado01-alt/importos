@@ -9,7 +9,7 @@ import { estimarAliquotasFuturas } from '@/actions/aliquotas'
 import { encryptToken, decryptToken } from '@/lib/crypto'
 import { sanitizeSaleFee, custoTotalLinha, alocarFretePorEnvio, classificarDevolucao, statusNormalizado } from '@/lib/ml-calculos'
 import type { DevolucaoStatus } from '@/lib/ml-calculos'
-import { buscarAdsDiariosML } from '@/lib/ml-ads'
+import { buscarAdsDiariosML, buscarAdsPorItemML } from '@/lib/ml-ads'
 
 // ─── URL de conexão OAuth ─────────────────────────────────────────────────────
 
@@ -149,6 +149,25 @@ async function _sincronizarAdsML(
       })
     }
     console.log(`[ads-ml] ${dias.length} dias gravados, custo R$ ${dias.reduce((s, d) => s + d.custo, 0).toFixed(2)}`)
+
+    // Por anúncio (até 31 dias): substitui a janela inteira para não deixar linha velha
+    const itens = await buscarAdsPorItemML(token, desde, new Date())
+    if (itens) {
+      const ini = new Date(Math.max(desde.getTime(), Date.now() - 30 * 86_400_000))
+      const iniDia = new Date(`${ini.toISOString().slice(0, 10)}T00:00:00.000Z`)
+      await prisma.ml_ads_item_dia.deleteMany({ where: { conexao_id: conn.id, data: { gte: iniDia } } })
+      if (itens.length) {
+        await prisma.ml_ads_item_dia.createMany({
+          data: itens.map(i => ({
+            workspace_id: conn.workspace_id, conexao_id: conn.id,
+            data: new Date(`${i.data}T00:00:00.000Z`), ml_item_id: i.ml_item_id,
+            custo: i.custo, receita: i.receita, unidades: i.unidades,
+          })),
+          skipDuplicates: true,
+        })
+      }
+      console.log(`[ads-ml] ${itens.length} linhas por anúncio, custo R$ ${itens.reduce((s, i) => s + i.custo, 0).toFixed(2)}`)
+    }
     return dias.length
   } catch (err) {
     console.error('[ads-ml] falhou:', err)
@@ -1053,6 +1072,19 @@ export async function getAdsDiarios(dias = 400): Promise<AdsDiaRow[]> {
     where: { workspace_id: workspaceId, data: { gte: desde } },
     select: { data: true, conexao_id: true, custo: true, receita: true },
     orderBy: { data: 'asc' },
+  })
+  return rows.map(r => ({ ...r, data: r.data.toISOString().slice(0, 10) }))
+}
+
+export type AdsItemRow = { data: string; conexao_id: string; ml_item_id: string; custo: number }
+
+// Ads por anúncio (últimos dias) — usado para o lucro por produto após ads
+export async function getAdsPorItem(dias = 40): Promise<AdsItemRow[]> {
+  const { workspaceId } = await getAuthContext()
+  const desde = new Date(Date.now() - dias * 86_400_000)
+  const rows = await prisma.ml_ads_item_dia.findMany({
+    where: { workspace_id: workspaceId, data: { gte: desde } },
+    select: { data: true, conexao_id: true, ml_item_id: true, custo: true },
   })
   return rows.map(r => ({ ...r, data: r.data.toISOString().slice(0, 10) }))
 }

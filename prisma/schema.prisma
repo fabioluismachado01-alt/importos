@@ -875,6 +875,21 @@ model ml_ads_dia {
   @@index([workspace_id, data])
 }
 
+// Product Ads do ML por anúncio e dia — base do lucro por SKU após ads (Etapa 2)
+model ml_ads_item_dia {
+  id           String   @id @default(cuid())
+  workspace_id String
+  conexao_id   String
+  data         DateTime @db.Date
+  ml_item_id   String
+  custo        Float    @default(0)
+  receita      Float    @default(0)
+  unidades     Int      @default(0)
+
+  @@unique([conexao_id, data, ml_item_id])
+  @@index([workspace_id, data])
+}
+
 model ml_estoque {
   id             String   @id @default(cuid())
   conexao_id     String

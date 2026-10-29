@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Search, RefreshCw, Download, Pencil, Check, X, TrendingUp, TrendingDown, Eye, EyeOff, ShoppingBag, CheckCircle2 } from 'lucide-react'
 import { sincronizarMLPedidos, editarCustoPedido, salvarCustoLogistica } from '@/actions/ml'
-import type { MLPedidoRow, AdsMes, AdsDiaRow, AliquotaMes } from '@/actions/ml'
+import type { MLPedidoRow, AdsMes, AdsDiaRow, AdsItemRow, AliquotaMes } from '@/actions/ml'
 import { custoTotalLinha, metricasAds, devolucaoConcluida, perdaDevolucao } from '@/lib/ml-calculos'
 import { PageTitle } from '@/components/layout/PageTitle'
 
@@ -29,6 +29,7 @@ interface Props {
   adsDiarios: AdsDiaRow[]
   aliquotasHistorico?: { historico: AliquotaMes[]; padrao: number }
   custosLogistica: Record<string, number>
+  adsPorItem: AdsItemRow[]
 }
 
 // Tipos de envio do ML (order.shipping.logistic_type / mode)
@@ -148,7 +149,7 @@ function periodoParaDias(periodo: Periodo): number {
   return 90
 }
 
-export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, adsDiarios, aliquotasHistorico, custosLogistica }: Props) {
+export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, adsDiarios, aliquotasHistorico, custosLogistica, adsPorItem }: Props) {
   // Helper: retorna a alíquota correta para a data do pedido (como decimal, ex: 0.08)
   function getAliquotaParaData(dataPedido: string | Date): number {
     const d = new Date(dataPedido)
@@ -396,28 +397,52 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
   const maxFat = Math.max(...dadosDiarios.map(d => d.fat), 1)
 
   // Top produtos
+  // Ads por anúncio no período → produto (via ml_item_id dos pedidos). Só existe com a API de Ads.
+  const adsPorChave = (() => {
+    const mapa = new Map<string, number>()
+    if (!periodoAds || adsPorItem.length === 0) return mapa
+    const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const ini = ymd(periodoAds.inicio), fim = ymd(periodoAds.fim)
+    const itemParaChave = new Map<string, string>()
+    pedidos.forEach(p => itemParaChave.set(p.ml_item_id, prodChave(p)))
+    adsPorItem
+      .filter(a => a.data >= ini && a.data <= fim && (contaFiltro === 'todas' || a.conexao_id === contaFiltro))
+      .forEach(a => {
+        const chave = itemParaChave.get(a.ml_item_id) ?? a.ml_item_id
+        mapa.set(chave, (mapa.get(chave) ?? 0) + a.custo)
+      })
+    return mapa
+  })()
+
   const topProdutos = (() => {
-    const mapa = new Map<string, { chave: string; titulo: string; foto_url: string | null; fat: number; lucro: number; qtde: number }>()
+    const mapa = new Map<string, { chave: string; titulo: string; foto_url: string | null; fat: number; lucro: number; qtde: number; ads: number; lucroAds: number }>()
     filtrados.forEach(p => {
       const chave = prodChave(p)
-      const curr = mapa.get(chave) ?? { chave, titulo: p.titulo, foto_url: p.foto_url, fat: 0, lucro: 0, qtde: 0 }
+      const curr = mapa.get(chave) ?? { chave, titulo: p.titulo, foto_url: p.foto_url, fat: 0, lucro: 0, qtde: 0, ads: 0, lucroAds: 0 }
       mapa.set(chave, { ...curr, fat: curr.fat + p.valor_venda, lucro: curr.lucro + p.lucro, qtde: curr.qtde + p.quantidade })
     })
-    return Array.from(mapa.values())
+    // Lucro após ads por produto — o ads de cada anúncio é descontado do produto dele
+    return Array.from(mapa.values()).map(i => {
+      const ads = adsPorChave.get(i.chave) ?? 0
+      return { ...i, ads, lucroAds: i.lucro - ads }
+    })
   })()
+  const temAdsPorProduto = adsPorChave.size > 0
 
   const dashTabData = (() => {
     if (dashTab === 'canceladas' || dashTab === 'curvaABC' || dashTab === 'logistica') return []
     const sorted = [...topProdutos].sort((a, b) =>
       dashTab === 'faturamento' ? b.fat - a.fat :
-      dashTab === 'lucro'       ? b.lucro - a.lucro :
+      dashTab === 'lucro'       ? (temAdsPorProduto ? b.lucroAds - a.lucroAds : b.lucro - a.lucro) :
                                   b.qtde - a.qtde
     ).slice(0, 6)
     const total = dashTab === 'faturamento' ? totalFat : dashTab === 'lucro' ? Math.max(totalLucro, 0.01) : filtrados.reduce((s, p) => s + p.quantidade, 0)
     return sorted.map(item => ({
       ...item,
       pct: total > 0 ? ((dashTab === 'faturamento' ? item.fat : dashTab === 'lucro' ? Math.max(item.lucro, 0) : item.qtde) / total) * 100 : 0,
-      valor: dashTab === 'faturamento' ? brl(item.fat) : dashTab === 'lucro' ? brl(item.lucro) : String(item.qtde),
+      valor: dashTab === 'faturamento' ? brl(item.fat)
+        : dashTab === 'lucro' ? (temAdsPorProduto ? `${brl(item.lucroAds)} · ads ${brl(item.ads)}` : brl(item.lucro))
+        : String(item.qtde),
     }))
   })()
 
@@ -860,7 +885,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                     : 'border-transparent text-slate-400 hover:text-slate-600'
                 }`}>
                 {tab === 'faturamento' ? 'Faturamento' :
-                 tab === 'lucro' ? 'Lucro' :
+                 tab === 'lucro' ? (temAdsPorProduto ? 'Lucro após ads' : 'Lucro') :
                  tab === 'vendas' ? 'Vendas' :
                  tab === 'canceladas' ? `Canceladas${cancelados.length > 0 ? ` (${cancelados.length})` : ''}` :
                  tab === 'logistica' ? 'Logística' : 'Curva ABC'}

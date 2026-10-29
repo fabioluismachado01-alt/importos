@@ -1,4 +1,4 @@
-import { getMLPedidos, getMLConexoes, getAliquotaSimples, getAdsMensais, getAdsDiarios, getAliquotasHistorico, getCustosLogistica } from '@/actions/ml'
+import { getMLPedidos, getMLConexoes, getAliquotaSimples, getAdsMensais, getAdsDiarios, getAliquotasHistorico, getCustosLogistica, getAdsPorItem } from '@/actions/ml'
 import { MLPedidosView } from '@/components/marketplaces/MLPedidosView'
 import { AutoRefresh } from '@/components/AutoRefresh'
 import type { Metadata } from 'next'
@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 }
 
 export default async function MLPedidosPage() {
-  const [pedidos, conexoes, aliquotaSimples, adsMensais, adsDiarios, aliquotasHistorico, custosLogistica] = await Promise.all([
+  const [pedidos, conexoes, aliquotaSimples, adsMensais, adsDiarios, aliquotasHistorico, custosLogistica, adsPorItem] = await Promise.all([
     getMLPedidos({ dias: 365 }),
     getMLConexoes(),
     getAliquotaSimples(),
@@ -17,6 +17,7 @@ export default async function MLPedidosPage() {
     getAdsDiarios(),
     getAliquotasHistorico(),
     getCustosLogistica(),
+    getAdsPorItem(),
   ])
 
   const conexoesSimples = conexoes.map(c => ({ id: c.id, nickname: c.nickname }))
@@ -32,6 +33,7 @@ export default async function MLPedidosPage() {
         adsDiarios={adsDiarios}
         aliquotasHistorico={aliquotasHistorico}
         custosLogistica={custosLogistica}
+        adsPorItem={adsPorItem}
       />
     </>
   )

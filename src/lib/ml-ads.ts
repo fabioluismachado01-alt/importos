@@ -85,3 +85,45 @@ export async function buscarAdsDiariosML(token: string, desde: Date, ate: Date):
   }
   return agregarPorDia(linhas)
 }
+
+export type AdsItemDia = { data: string; ml_item_id: string; custo: number; receita: number; unidades: number }
+
+/**
+ * Ads por anúncio (item) e por dia: GET …/product_ads/ads/search com date_from = date_to = dia
+ * (api-version 2). Uma chamada (paginada) por dia — por isso limitado a 31 dias por sync.
+ * Só devolve itens com gasto ou receita no dia.
+ */
+export async function buscarAdsPorItemML(token: string, desde: Date, ate: Date): Promise<AdsItemDia[] | null> {
+  const adv = await buscarAnuncianteML(token)
+  if (!adv) return null
+  const saida: AdsItemDia[] = []
+  const inicio = new Date(Math.max(desde.getTime(), ate.getTime() - 30 * 86_400_000))
+  for (let d = new Date(inicio); d <= ate; d = new Date(d.getTime() + 86_400_000)) {
+    const dia = iso(d)
+    let offset = 0
+    for (let pagina = 0; pagina < 20; pagina++) {
+      const params = new URLSearchParams({
+        limit: '50', offset: String(offset), date_from: dia, date_to: dia,
+        metrics: 'cost,units_quantity,total_amount',
+      })
+      const res = await fetch(
+        `${API}/advertising/${adv.site_id}/advertisers/${adv.advertiser_id}/product_ads/ads/search?${params}`,
+        { headers: { Authorization: `Bearer ${token}`, 'api-version': '2' } },
+      )
+      if (!res.ok) throw new Error(`Ads por item ML: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`)
+      const body = await res.json()
+      const results: Array<{ item_id?: string; metrics?: Record<string, number> }> = body?.results ?? []
+      for (const r of results) {
+        const m = r.metrics ?? {}
+        const custo = Number(m.cost) || 0
+        const receita = Number(m.total_amount) || 0
+        if (r.item_id && (custo > 0 || receita > 0)) {
+          saida.push({ data: dia, ml_item_id: r.item_id, custo, receita, unidades: Number(m.units_quantity) || 0 })
+        }
+      }
+      offset += 50
+      if (results.length === 0 || offset >= (body?.paging?.total ?? 0)) break
+    }
+  }
+  return saida
+}
