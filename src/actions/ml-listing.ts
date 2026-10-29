@@ -93,9 +93,9 @@ async function _fetchMLListing(url: string): Promise<MLListingTaxas> {
   })
 
   if (historico.length > 0) {
-    // Calcula % efetiva média: tarifa / (valor_venda * quantidade)
+    // % efetiva média: tarifa ÷ valor_venda (ambos já são totais da linha: sale_fee × qtd e preço × qtd)
     const avgFeePct = historico.reduce((sum, p) => {
-      return sum + (p.tarifa / (p.valor_venda * p.quantidade)) * 100
+      return sum + (p.tarifa / p.valor_venda) * 100
     }, 0) / historico.length
 
     // Frete médio dos pedidos com frete > 0

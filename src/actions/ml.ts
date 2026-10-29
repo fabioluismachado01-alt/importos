@@ -181,7 +181,10 @@ async function _gravarPedidosPagos(
             ...(frete != null && { frete_vendedor: frete }),
             logistica_tipo: logisticaTipo,
             ...(foto && { foto_url: foto }),
-            ...(produto && { custo_produto: produto.custo_brl, produto_id: produto.id }),
+            // custo_produto NÃO é atualizado aqui: ele é o custo da época da venda
+            // (gravado na criação ou ajustado por "Atualizar custo com vigência" / rateio).
+            // Sobrescrever com o custo atual do catálogo apagava esse histórico.
+            ...(produto && { produto_id: produto.id }),
           },
         })
         sincronizados++
@@ -189,6 +192,15 @@ async function _gravarPedidosPagos(
         erros++
       }
     }
+  }
+
+  // Pedidos que ainda não têm custo (SKU cadastrado depois da venda) recebem o custo atual do catálogo
+  const produtosComCusto = Array.from(skuMap.values()).filter(p => p.custo_brl != null)
+  for (const p of produtosComCusto) {
+    await prisma.ml_pedido.updateMany({
+      where: { workspace_id: conn.workspace_id, produto_id: p.id, custo_produto: null },
+      data: { custo_produto: p.custo_brl },
+    })
   }
   return { sincronizados, erros }
 }

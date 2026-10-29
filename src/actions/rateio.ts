@@ -1,5 +1,6 @@
 'use server'
 
+import { custoTotalLinha } from '@/lib/ml-calculos'
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/auth'
@@ -244,16 +245,17 @@ async function propagarCustoRetroativo(
     const inicioMes = new Date(ano, mes - 1, 1)
     const fimMes = new Date(ano, mes, 1)
 
-    const { _sum } = await prisma.ml_pedido.aggregate({
+    // custo_produto é unitário: o CMV do mês é Σ custo × quantidade
+    const pedidosMes = await prisma.ml_pedido.findMany({
       where: {
         workspace_id: workspaceId,
         data_compra: { gte: inicioMes, lt: fimMes },
         status: { not: 'cancelled' },
         custo_produto: { not: null },
       },
-      _sum: { custo_produto: true },
+      select: { custo_produto: true, quantidade: true },
     })
-    const totalCustoMes = _sum.custo_produto ?? 0
+    const totalCustoMes = pedidosMes.reduce((s, p) => s + custoTotalLinha(p), 0)
 
     const lancExistente = await prisma.lancamento.findFirst({
       where: {
