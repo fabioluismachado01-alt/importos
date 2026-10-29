@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Search, RefreshCw, Download, Pencil, Check, X, TrendingUp, TrendingDown, Eye, EyeOff, ShoppingBag, CheckCircle2, Calculator, ShoppingCart, Receipt, XCircle, Undo2, Wallet, Percent, Truck, Landmark, Package, Boxes } from 'lucide-react'
 import { CalculadoraVenda, type DadosCalculadora } from './CalculadoraVenda'
 import { sincronizarMLPedidos, editarCustoPedido, salvarCustoLogistica } from '@/actions/ml'
+import { sincronizarShopee, editarCustoPedidoShopee, getShopeeConnectUrl } from '@/actions/shopee'
 import type { MLPedidoRow, AdsMes, AdsDiaRow, AdsItemRow, AliquotaMes } from '@/actions/ml'
 import { custoTotalLinha, metricasAds, devolucaoConcluida, perdaDevolucao, resumoAReceber } from '@/lib/ml-calculos'
 import { PageTitle } from '@/components/layout/PageTitle'
@@ -24,7 +25,8 @@ function ProdImg({ fotoUrl, titulo, className }: { fotoUrl: string | null; titul
 
 interface Props {
   pedidos: MLPedidoRow[]
-  conexoes: { id: string; nickname: string }[]
+  conexoes: { id: string; nickname: string; canal?: 'ml' | 'shopee' }[]
+  shopeeDisponivel?: boolean
   aliquotaSimples: number
   adsMensais: AdsMes[]
   adsDiarios: AdsDiaRow[]
@@ -150,7 +152,7 @@ function periodoParaDias(periodo: Periodo): number {
   return 90
 }
 
-export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, adsDiarios, aliquotasHistorico, custosLogistica, adsPorItem }: Props) {
+export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, adsDiarios, aliquotasHistorico, custosLogistica, adsPorItem, shopeeDisponivel }: Props) {
   // Helper: retorna a alíquota correta para a data do pedido (como decimal, ex: 0.08)
   function getAliquotaParaData(dataPedido: string | Date): number {
     const d = new Date(dataPedido)
@@ -197,6 +199,9 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
 
   const [custosLog, setCustosLog] = useState<Record<string, number>>(custosLogistica)
   const custoLogisticaDe = (tipo: string | null) => custosLog[tipo ?? 'not_specified'] ?? 0
+  // Outros: ML = logística própria por tipo de envio; Shopee = afiliados, cupom do vendedor etc. (extrato)
+  const outrosDe = (p: MLPedidoRow) => (p.canal === 'shopee' ? 0 : custoLogisticaDe(p.logistica_tipo)) + (p.outros_canal ?? 0)
+  const temShopee = conexoes.some(c => c.canal === 'shopee')
 
   const filtrados = periodoFiltrado.filter(p => {
     if (p.status === 'cancelled') return false
@@ -213,7 +218,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     const aliqPedido = getAliquotaParaData(p.data_compra)
     const imposto = p.valor_venda * aliqPedido
     // Outros = custo de logística própria do tipo de envio (Flex, agência…), cadastrado na aba Logística
-    const outros = custoLogisticaDe(p.logistica_tipo)
+    const outros = outrosDe(p)
     const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - custoTotal - imposto - outros
     const margem = p.valor_venda > 0 ? (lucro / p.valor_venda) * 100 : 0
     return { ...p, custo_produto: custo > 0 ? custo : p.custo_produto, custo_total: custoTotal, outros, lucro, margem, imposto }
@@ -264,7 +269,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     const custo = custoTotalLinha(p)
     const aliqPedido = getAliquotaParaData(p.data_compra)
     const imposto = p.valor_venda * aliqPedido
-    const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - custo - imposto - custoLogisticaDe(p.logistica_tipo)
+    const lucro = p.valor_venda - p.tarifa - p.frete_vendedor - custo - imposto - outrosDe(p)
     return { ...p, lucro }
   })
   const antFat    = anterior.reduce((s, p) => s + p.valor_venda, 0)
@@ -321,7 +326,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     const ini = ymd(periodoAds.inicio), fim = ymd(periodoAds.fim)
     const api = adsDiarios.filter(a => contaFiltro === 'todas' || a.conexao_id === contaFiltro)
-    if (api.length === 0) return { totalAds: adsManual(periodoAds.inicio, periodoAds.fim), receitaAds: undefined, fonteAds: 'manual' as const }
+    if (api.length === 0) return { totalAds: conexoes.find(c => c.id === contaFiltro)?.canal === 'shopee' ? 0 : adsManual(periodoAds.inicio, periodoAds.fim), receitaAds: undefined, fonteAds: 'manual' as const }
     const primeiroApi = api[0].data
     const noPeriodo = api.filter(a => a.data >= ini && a.data <= fim)
     const custoApi = noPeriodo.reduce((s, a) => s + a.custo, 0)
@@ -473,7 +478,10 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
       try {
         let total = 0
         for (const conn of conexoes) {
-          const r = await sincronizarMLPedidos(conn.id, { dias: periodoParaDias(periodo) })
+          const dias = periodoParaDias(periodo)
+          const r = conn.canal === 'shopee'
+            ? await sincronizarShopee(conn.id, { dias })
+            : await sincronizarMLPedidos(conn.id, { dias })
           total += r.sincronizados
         }
         setSyncMsg(`✓ ${total} pedidos atualizados`)
@@ -484,10 +492,16 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     })
   }
 
+  async function conectarShopee() {
+    window.location.href = await getShopeeConnectUrl()
+  }
+
   async function handleSaveCusto(pedidoId: string, valorVenda: number, tarifa: number, frete: number, dataCompra: string | Date) {
     const custo = parseFloat(custoTemp.replace(',', '.'))
     if (isNaN(custo) || custo < 0) return
-    await editarCustoPedido(pedidoId, custo)
+    const linha = pedidos.find(x => x.id === pedidoId)
+    if (linha?.canal === 'shopee') await editarCustoPedidoShopee(pedidoId, custo)
+    else await editarCustoPedido(pedidoId, custo)
     const imposto = valorVenda * getAliquotaParaData(dataCompra)
     const lucro = valorVenda - tarifa - frete - custo - imposto
     setCustosLocais(prev => ({ ...prev, [pedidoId]: { custo, lucro, margem: valorVenda > 0 ? (lucro / valorVenda) * 100 : 0 } }))
@@ -523,6 +537,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
     })).filter(i => i.totalFrete > 0)
     const porTipo = new Map<string, { tipo: string; pedidos: number; fat: number; frete: number; outros: number }>()
     for (const p of filtrados) {
+      if (p.canal === 'shopee') continue // tipos de envio e custo de logística própria são do ML
       const tipo = p.logistica_tipo ?? 'not_specified'
       const c = porTipo.get(tipo) ?? { tipo, pedidos: 0, fat: 0, frete: 0, outros: 0 }
       c.pedidos += 1; c.fat += p.valor_venda; c.frete += p.frete_vendedor; c.outros += p.outros
@@ -648,7 +663,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
   if (conexoes.length === 0) {
     return (
       <>
-        <PageTitle title="Vendas" subtitle="Mercado Livre" />
+        <PageTitle title="Vendas" subtitle={temShopee ? "Mercado Livre · Shopee" : "Mercado Livre"} />
         <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
           <div className="w-20 h-20 bg-slate-100 rounded-3xl flex items-center justify-center mb-5">
             <ShoppingBag className="w-10 h-10 text-slate-400" />
@@ -661,6 +676,12 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
             className="inline-flex items-center gap-2 px-6 py-3 bg-marinho text-white font-bold rounded-xl text-sm hover:bg-marinho-2 transition-colors">
             Conectar conta do Mercado Livre →
           </Link>
+          {shopeeDisponivel && (
+            <button onClick={conectarShopee}
+              className="mt-3 inline-flex items-center gap-2 px-6 py-3 bg-[#EE4D2D] text-white font-bold rounded-xl text-sm hover:brightness-110 transition">
+              Conectar loja da Shopee →
+            </button>
+          )}
         </div>
       </>
     )
@@ -668,7 +689,7 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
 
   return (
     <div className="space-y-3">
-      <PageTitle title="Vendas" subtitle="Mercado Livre" />
+      <PageTitle title="Vendas" subtitle={temShopee ? "Mercado Livre · Shopee" : "Mercado Livre"} />
 
       {/* ── BANNER DE SINCRONIZAÇÃO ── */}
       {isPending && syncVisivel && (
@@ -710,6 +731,12 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
               className="p-2 rounded-xl text-slate-300 hover:text-white transition-colors">
               <Download className="w-4 h-4" />
             </button>
+            {shopeeDisponivel && !temShopee && (
+              <button onClick={conectarShopee}
+                className="ml-1 px-2.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-[#EE4D2D] text-white hover:brightness-110 transition">
+                + Shopee
+              </button>
+            )}
           </div>
         </div>
 
@@ -1204,7 +1231,12 @@ export function MLPedidosView({ pedidos, conexoes, aliquotaSimples, adsMensais, 
                       </span>
                     )}
                   </td>
-                  {conexoes.length > 1 && <td className="px-3 py-2 text-slate-500">{mascaraNome(p.nickname)}</td>}
+                  {conexoes.length > 1 && <td className="px-3 py-2 text-slate-500">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${p.canal === 'shopee' ? 'bg-[#EE4D2D]' : 'bg-[#FFE600] ring-1 ring-amber-300'}`} title={p.canal === 'shopee' ? 'Shopee' : 'Mercado Livre'} />
+                      {mascaraNome(p.nickname)}
+                    </span>
+                  </td>}
                   <td className="px-3 py-2">
                     {p.sku ? <span className="bg-slate-100 text-slate-600 font-mono px-1.5 py-0.5 rounded text-[10px]">{p.sku}</span> : <span className="text-slate-300">—</span>}
                   </td>

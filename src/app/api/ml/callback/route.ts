@@ -14,8 +14,8 @@ export async function GET(req: NextRequest) {
   console.log('[ML Callback] state:', state ? 'presente' : 'AUSENTE')
   console.log('[ML Callback] error:', error)
 
-  // Sempre redireciona para localhost — ngrok é só túnel para receber o callback do ML
-  const appUrl = 'http://localhost:3001'
+  // Volta para o mesmo domínio que recebeu o callback (antes ia fixo para localhost:3001)
+  const appUrl = req.nextUrl.origin
 
   if (error || !code || !state) {
     console.log('[ML Callback] Faltando parâmetros, redirecionando para erro')

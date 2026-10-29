@@ -41,11 +41,25 @@ Diferenças restantes são de regra/cadastro: imposto (Simples efetivo 7,9% vs 8
 unitário de BTS-1, INV070-5, INV070, DTS-1 (os dois sistemas têm valores diferentes).
 Ads ML 30 dias: R$ 145,50 vs R$ 145,44 (arredondamento diário); receita atribuída R$ 1.632,90 idêntica.
 
+## Etapa 3 — Shopee via API (branch `feat/shopee-api`, aguardando chaves)
+- Código pronto: `src/lib/shopee-api.ts` (assinatura HMAC, auth, pedidos em janelas de 15 dias, extrato
+  `get_escrow_detail`, Ads CPC diário), `src/lib/shopee-calculos.ts` (regras + testes),
+  `src/actions/shopee.ts` (sync, cron, leitura), `/api/shopee/callback`, tela de Vendas multicanal.
+- Regra: Tarifa = comissão + serviço (+ transação; usa `net_*` do BR quando vier); Outros = afiliados (AMS) +
+  cupom do vendedor + moedas + frete reverso/falha + taxas de proteção + pay_per_sale; Frete = frete real −
+  subsídio Shopee − pago pelo comprador (≥ 0). Log `[sync-shopee]` mostra a diferença entre a fórmula e o repasse real.
+- Banco: `prisma/sql/2026-10-29_shopee_api.sql` (3 tabelas, RLS) — **aplicar no Supabase antes do merge**.
+- Ordem para ativar: perfil aprovado no Open Platform → criar app "Seller In House System" com redirect
+  `https://www.importos.com.br/api/shopee/callback` → Fábio cria `SHOPEE_PARTNER_ID` e `SHOPEE_PARTNER_KEY`
+  no Vercel → SQL no Supabase → merge → botão "+ Shopee" na tela de Vendas → autorizar a loja.
+- Corrigido junto: callback do ML redirecionava para `localhost:3001` após conectar.
+
 ## Pendências do Fábio
 - [ ] Criar `CRON_SECRET` (Production) no Vercel e fazer redeploy — sem ela o cron recebe 401.
 - [ ] Tornar o repositório privado.
 - [ ] Definir o custo correto de BTS-1, INV070-5, INV070, DTS-1.
-- [ ] Abrir cadastro de desenvolvedor: Shopee Open Platform, TikTok Shop Partner, Amazon SP-API.
+- [x] Cadastro Shopee Open Platform enviado (29/10) — perfil em análise.
+- [ ] Abrir cadastro de desenvolvedor: TikTok Shop Partner, Amazon SP-API.
 
 ## Próximas etapas (ordem)
 1. **Etapa 4 (resto)**: colunas personalizáveis; levar a identidade marinho/ouro às outras telas (tokens em globals.css).

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { runAutoSyncInterno } from '@/actions/ml'
+import { runAutoSyncShopeeInterno } from '@/actions/shopee'
 
 // Chamado pelo Vercel Cron (vercel.json). No Vercel o scheduler com setTimeout do
 // instrumentation.ts não roda (funções serverless encerram após cada requisição),
@@ -16,6 +17,7 @@ export async function GET(request: NextRequest) {
   const inicio = Date.now()
   try {
     await runAutoSyncInterno()
+    await runAutoSyncShopeeInterno()
     return NextResponse.json({ ok: true, ms: Date.now() - inicio })
   } catch (err) {
     console.error('[cron ml-sync] falhou:', err)

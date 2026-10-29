@@ -525,6 +525,8 @@ export type MLPedidoRow = {
   logistica_tipo: string | null
   liquidacao_status: string | null
   liquidacao_data: Date | null
+  canal?: 'ml' | 'shopee'   // ausente = ml
+  outros_canal?: number     // custos do extrato do canal que entram em "Outros" (ex.: afiliados Shopee)
 }
 
 export async function getMLPedidos(filtros?: {
