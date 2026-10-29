@@ -1,6 +1,6 @@
 # Roadmap — módulo Vendas (Marketplaces)
 
-Nota de continuidade. Última atualização: 29/10/2026 (tarde).
+Nota de continuidade. Última atualização: 29/10/2026 (fim da tarde).
 Objetivo: levar o ImportOS ao nível funcional do Metrizap (referência, não cópia) e superá-lo
 nos diferenciais de importador. Regras de cálculo por canal: `docs/regras-calculo-marketplaces.md`.
 
@@ -28,6 +28,8 @@ nos diferenciais de importador. Regras de cálculo por canal: `docs/regras-calcu
 | 4 | Calculadora por venda (lucro, preço ideal/mínimo, ACOS máx., ROAS mín.) + ranking filtra a tabela | 814b77a |
 | 1 | Repasse via Mercado Pago (`/v1/payments/{id}` aceita o token ML): card A receber, selo por venda, atrasados | 3e818d9 |
 | 4 | Fonte do app corrigida (Times → Inter) + identidade marinho/ouro na tela de Vendas + calculadora no celular | add9b9f |
+| 6 | Painel CMV por lote (PEPS) em /faturamento/cmv: lotes = rateios aplicados com vigência; calibração pelo estoque de hoje; alerta de rateio duplicado; "Aplicar" grava custo nos pedidos ML e recalcula o CMV do mês | dee2855 |
+| 4 | Dashboard e Faturamento com hero marinho/ouro e KPIs vivos | 8515529 |
 
 Banco (29/10): colunas `ml_pedido.devolucao_status, claim_id, ml_tags`; tarifa de 176 pedidos
 antigos com qtd > 1 corrigida (backup em `_bkp_ml_pedido_tarifa_20261029`, RLS ligado).
@@ -41,14 +43,24 @@ Diferenças restantes são de regra/cadastro: imposto (Simples efetivo 7,9% vs 8
 unitário de BTS-1, INV070-5, INV070, DTS-1 (os dois sistemas têm valores diferentes).
 Ads ML 30 dias: R$ 145,50 vs R$ 145,44 (arredondamento diário); receita atribuída R$ 1.632,90 idêntica.
 
+## CMV por lote — achados (29/10)
+- Rateios "4ª Importação — DI 26/0631049-6 (retroativo)" (não aplicado) e "BL UTSHASSZ2603118 – KOTA EBONY"
+  (aplicado, vigência 29/03) têm os mesmos SKUs e quantidades quase iguais: provável mesmo embarque. Confirmar com o Fábio.
+- Vendas acima do estoque registrado: INV070-5 (774 vendidas × 300 no lote), DTS-1 (539 × 500), INV072 (84 × 50)
+  → faltam lotes anteriores cadastrados. O botão Aplicar fica bloqueado nesses SKUs até cadastrar o lote.
+- PEPS × custo gravado (ML, desde jun): CMV R$ 32.598,98 → R$ 32.735,11 (lucro R$ 136,13 menor).
+- Custos dos 4 SKUs: Fábio decidiu manter os do ImportOS (rateio); ele corrige o Metrizap.
+- Falta: vendas da Shopee no PEPS (após merge da branch feat/shopee-api); DRE por caixa; conciliação Tiny.
+
 ## Pendências do Fábio
 - [ ] Criar `CRON_SECRET` (Production) no Vercel e fazer redeploy — sem ela o cron recebe 401.
-- [ ] Tornar o repositório privado.
-- [ ] Definir o custo correto de BTS-1, INV070-5, INV070, DTS-1.
+- [ ] Tornar o repositório privado (o proxy do GitHub desta sessão não permite mudar configurações).
+- [x] Custo de BTS-1, INV070-5, INV070, DTS-1: manter o do ImportOS.
+- [ ] Confirmar se "4ª Importação" e "KOTA EBONY" são o mesmo embarque; cadastrar os lotes antigos que faltam.
 - [ ] Abrir cadastro de desenvolvedor: Shopee Open Platform, TikTok Shop Partner, Amazon SP-API.
 
 ## Próximas etapas (ordem)
-1. **Etapa 4 (resto)**: colunas personalizáveis; levar a identidade marinho/ouro às outras telas (tokens em globals.css).
+1. **Etapa 4 (resto)**: colunas personalizáveis; visual nas demais telas (Produtos, DRE, Mês).
 2. **Etapa 3 — Shopee via API** (pedidos + escrow detail + Ads). Hoje é import de CSV.
 3. **Etapa 4 — Tela de Vendas multicanal**: chips por conta, rankings que filtram a tabela,
    dividir por marketplace, colunas personalizáveis, calculadora por venda, visual azul-marinho/dourado.
